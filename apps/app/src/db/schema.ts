@@ -18,7 +18,10 @@ export const subscriberStatuses = [
   "complained",
 ] as const;
 
-export const subscriberSources = ["import", "form", "mcp"] as const;
+export const subscriberSources = ["api", "import", "form", "mcp"] as const;
+
+/** What an API key may do. Add scopes as endpoints are added. */
+export const apiScopes = ["subscribers:write"] as const;
 
 export const issueStatuses = ["draft", "sending", "sent", "cancelled"] as const;
 
@@ -151,3 +154,18 @@ export const settings = sqliteTable(
   },
   (table) => [check("settings_single_row", sql`${table.id} = 1`)]
 );
+
+export const apiKeys = sqliteTable("api_keys", {
+  createdAt: createdAt(),
+  /** SHA-256 of the full key. Keys are random, so a fast hash is enough. */
+  hash: text("hash").notNull().unique(),
+  id: text("id").primaryKey(),
+  lastUsedAt: integer("last_used_at", { mode: "timestamp_ms" }),
+  name: text("name").notNull(),
+  /** The first characters of the key, so people can tell keys apart. */
+  prefix: text("prefix").notNull(),
+  revokedAt: integer("revoked_at", { mode: "timestamp_ms" }),
+  scopes: text("scopes", { mode: "json" })
+    .notNull()
+    .$type<(typeof apiScopes)[number][]>(),
+});

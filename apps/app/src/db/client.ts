@@ -1,8 +1,15 @@
 import { drizzle } from "drizzle-orm/d1";
 
-import { events, issues, sends, settings, subscribers } from "./schema";
+import {
+  apiKeys,
+  events,
+  issues,
+  sends,
+  settings,
+  subscribers,
+} from "./schema";
 
-const schema = { events, issues, sends, settings, subscribers };
+const schema = { apiKeys, events, issues, sends, settings, subscribers };
 
 export const createDb = (binding: D1Database) => drizzle(binding, { schema });
 

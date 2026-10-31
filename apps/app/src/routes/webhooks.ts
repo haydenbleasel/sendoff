@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import type { z } from "zod";
 
 import { getConfig } from "../config";
 import { createDb } from "../db/client";
+import { parseJsonWith } from "../json";
 import { handleSesEvent, sesEventSchema } from "../ses-events";
 import { isSnsUrl, snsMessageSchema, verifySnsMessage } from "../sns";
 
@@ -10,14 +10,6 @@ const HTTP_BAD_REQUEST = 400;
 const HTTP_FORBIDDEN = 403;
 const HTTP_BAD_GATEWAY = 502;
 const HTTP_UNAVAILABLE = 503;
-
-const parseJsonWith = <T>(schema: z.ZodType<T>, text: string) => {
-  try {
-    return schema.safeParse(JSON.parse(text));
-  } catch {
-    return schema.safeParse(null);
-  }
-};
 
 export const webhookRoutes = new Hono<{ Bindings: Env }>();
 

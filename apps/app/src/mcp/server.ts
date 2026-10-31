@@ -5,6 +5,7 @@ import type { Database } from "../db/client";
 import type { SendQueue } from "../sending";
 import { registerDraftTools } from "./draft-tools";
 import { INSTRUCTIONS } from "./instructions";
+import { registerKeyTools } from "./key-tools";
 import { registerSendTools } from "./send-tools";
 import { registerSettingsTools } from "./settings-tools";
 import { registerSubscriberTools } from "./subscriber-tools";
@@ -23,6 +24,7 @@ export const createMcpServer = (deps: {
   registerDraftTools(server, deps);
   registerSubscriberTools(server, deps);
   registerSendTools(server, deps);
+  registerKeyTools(server, deps);
 
   return server;
 };

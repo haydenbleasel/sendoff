@@ -12,7 +12,7 @@ A self-hosted, newsletter-only email tool that you drive from an agent. You depl
 | Plan | Workers Paid ($5/mo) is required. Cold React Email renders take ~30 ms of CPU, about 3× the free plan's 10 ms limit. Total cost is about $62/yr (Workers $60 + SES $2.40 at 6K × 4 sends). |
 | Email rendering | React Email, with one fixed, well-designed layout that looks good with no design work. Users fill in the middle. |
 | Content | Markdown plus two directives (`::button`, `:::callout`). The agent never writes TSX. |
-| Interface | A remote MCP server (Streamable HTTP) on the same Worker. There's no admin UI beyond preview and public pages. |
+| Interface | A remote MCP server (Streamable HTTP) on the same Worker, plus a small REST API for servers (e.g. a website's signup form). There's no admin UI beyond preview and public pages. |
 | Scope | One newsletter, one list. No transactional email, segments, automations, A/B tests, visual editor, teams or dedicated IPs. |
 
 ## Deployment and settings
@@ -58,6 +58,8 @@ One Worker serves everything:
 | `POST /webhooks/ses` | SNS endpoint for SES events. Verifies the SNS signature and handles `SubscriptionConfirmation`. |
 | `GET /preview/:token` | Live preview (`:token` is a signed issue id, so the URL is the only access check). Email/text, desktop/mobile and light/dark toggles; polls `/state` every 1.5 s and fetches `/render` when the draft or settings change. Shows Markdown problems, keeping the last good render dimmed. |
 | `/mcp` | MCP server (official SDK v2, `createMcpHandler`, stateless, JSON responses), behind a bearer token. |
+| `POST /api/v1/subscribers` | REST: subscribe an address (double opt-in). Needs an API key with `subscribers:write`. See [REST API](#rest-api). |
+| `GET /api/v1/openapi.json` | OpenAPI 3.1 description of the REST API, generated from the handlers' zod schemas. Public. |
 | `/issues/:slug` | Hosted "view in browser" page and archive (later milestone). |
 | Queue consumer (`sendoff-send`) | One message = one chunk of up to 50 recipients. Batch size 1, concurrency 1. |
 | Cron (`*/5 * * * *`) | Restarts sends with no worker activity for 5 minutes (a lost queue message), and finishes sends with nothing left to do. |
@@ -97,6 +99,9 @@ events       id PK, message_id, issue_id, subscriber_id, type, detail JSON, at
              type: bounce | complaint | reject | click | unsubscribe
 
 settings     id = 1 PK, data JSON (validated with a schema), updated_at
+
+api_keys     id PK, name, prefix (first 14 chars, for display), hash UNIQUE (SHA-256),
+             scopes JSON, created_at, last_used_at, revoked_at
 ```
 
 Unsubscribe and confirm tokens are `subscriberId.base64url(HMAC-SHA256(TOKEN_SECRET, purpose:subscriberId))`, truncated to 128 bits and compared in constant time. They're stateless and never expire, because unsubscribe links must keep working for years. Rotating `TOKEN_SECRET` invalidates every link in past emails, so don't.
@@ -121,6 +126,7 @@ Unsubscribe and confirm tokens are `subscriberId.base64url(HMAC-SHA256(TOKEN_SEC
 | Drafts | `create_draft`, `get_draft`, `edit_draft`, `set_draft_meta`, `list_issues`, `preview_draft`, `delete_draft` | `edit_draft` applies exact find/replace edits all-or-nothing (or replaces the body), takes an optional `expectedVersion`, and bumps `version`. Drafts are stored even with Markdown problems; results list them by line. `preview_draft` returns the URL plus the plain-text version so the agent can proofread. Issues are addressed by id or slug. |
 | Sending | `send_test`, `prepare_send`, `confirm_send`, `send_status`, `cancel_send`, `resume_send` | See [Send pipeline](#send-pipeline). `confirm_send` and `cancel_send` are annotated `destructiveHint: true`, and the instructions tell the agent to confirm only after the person explicitly says to send. |
 | Subscribers | `add_subscriber`, `import_subscribers`, `import_from_resend`, `search_subscribers`, `unsubscribe_subscriber` (`prune` in M6) | `add_subscriber` sends a confirmation email unless `skipConfirmation` (only when the person asked to be added). Imports support `dryRun`. | Imports can suppress an existing subscriber but never reactivate one. Resend's API exposes `unsubscribed` only, not bounces, so bounced addresses need a separate import (e.g. a dashboard export). |
+| API keys | `create_api_key`, `list_api_keys`, `revoke_api_key` | Keys are shown once (to the agent, which hands them to the person) and stored hashed. Revoke by id or prefix. |
 | Stats | `issue_stats`, `growth` | Clicks and unsubscribes are the trustworthy signals. Opens are unreliable because of Apple Mail Privacy Protection and aren't tracked by default. |
 
 Auth:
@@ -130,6 +136,40 @@ Auth:
   claude mcp add --transport http sendoff https://<your-worker>/mcp --header "Authorization: Bearer $MCP_TOKEN"
   ```
 - claude.ai and Claude Desktop connectors need OAuth. That comes in M5 via `workers-oauth-provider`, with login by a magic link emailed to the owner through SES.
+
+## REST API
+
+A small API under `/api/v1` for servers. MCP tools don't go through it: both are thin layers over the same functions (`subscribers.ts`, `issues.ts`, `sending.ts`), which keeps them in sync without an extra HTTP hop. More endpoints (issues, sending, settings) get added when something needs them, each with its own scope.
+
+- **Auth:** `Authorization: Bearer sendoff_…`. Keys are random (32 bytes), stored as SHA-256 hashes, scoped, and revocable. There are no CORS headers, so browsers can't call the API: keys belong in server-side secrets.
+- **`POST /api/v1/subscribers`** (`subscribers:write`) takes `{ "email": "…", "name"?: "…" }` and starts double opt-in. Responses:
+  - `202 { "status": "accepted" }` for new, pending and existing subscribers alike, so it can't reveal who's on the list.
+  - `400 invalid_request`, `401 invalid_api_key`, `403 insufficient_scope`, `503 not_configured`.
+  - `502 confirmation_failed` if SES couldn't send the confirmation; safe to retry.
+- **Errors** are always `{ "error": { "code", "message" } }`.
+- **Signing up from a website's server**, e.g. a Next.js server action replacing a Resend contacts call:
+  ```ts
+  "use server";
+
+  export const subscribe = async (email: string) => {
+    const response = await fetch(
+      "https://news.example.com/api/v1/subscribers",
+      {
+        body: JSON.stringify({ email }),
+        headers: {
+          Authorization: `Bearer ${process.env.SENDOFF_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Couldn't subscribe. Please try again.");
+    }
+  };
+  ```
+- **Not a fit for email-sdk.dev:** its adapter contract is `send(message)` for arbitrary emails, and Sendoff deliberately has no general-purpose send endpoint.
 
 ## Send pipeline
 

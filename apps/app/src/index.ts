@@ -5,6 +5,7 @@ import { getConfig } from "./config";
 import { createDb } from "./db/client";
 import { renderIssue } from "./email/render";
 import { sampleIssue, sampleSettings } from "./email/sample";
+import { apiRoutes } from "./routes/api";
 import { mcpRoutes } from "./routes/mcp";
 import { previewRoutes } from "./routes/preview";
 import { publicRoutes } from "./routes/public";
@@ -41,6 +42,8 @@ app.get("/preview/sample", async (c) => {
 app.route("/", webhookRoutes);
 
 app.route("/", mcpRoutes);
+
+app.route("/", apiRoutes);
 
 // Pages people visit: lock down framing and referrers (URLs carry tokens),
 // and don't cache anything personal.

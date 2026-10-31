@@ -79,6 +79,7 @@ describe("tools", () => {
       "add_subscriber",
       "cancel_send",
       "confirm_send",
+      "create_api_key",
       "create_draft",
       "delete_draft",
       "doctor",
@@ -87,10 +88,12 @@ describe("tools", () => {
       "get_settings",
       "import_from_resend",
       "import_subscribers",
+      "list_api_keys",
       "list_issues",
       "prepare_send",
       "preview_draft",
       "resume_send",
+      "revoke_api_key",
       "search_subscribers",
       "send_status",
       "send_test",
@@ -248,5 +251,36 @@ describe("tools", () => {
     const search = await call("search_subscribers", { query: "csv-" });
     expect(dataOf(search.text).subscribers).toHaveLength(2);
     expect(dataOf(search.text).counts).toMatchObject({ active: 2, pending: 1 });
+  });
+
+  it("creates API keys that work with the REST API until revoked", async () => {
+    const created = await call("create_api_key", {
+      name: "haydenbleasel.com signup form",
+    });
+
+    const key = /sendoff_[\w-]{43}/u.exec(created.text)?.[0] ?? "";
+    const { prefix } = dataOf(created.text);
+
+    const post = () =>
+      workerFetch(`${BASE_URL}/api/v1/subscribers`, {
+        body: JSON.stringify({ email: "from-site@example.com" }),
+        headers: {
+          authorization: `Bearer ${key}`,
+          "content-type": "application/json",
+        },
+        method: "POST",
+      });
+
+    const accepted = await post();
+    expect(accepted.status).toBe(202);
+
+    const listed = await call("list_api_keys");
+    expect(listed.text).toContain("haydenbleasel.com signup form");
+    expect(listed.text).not.toContain(key);
+
+    await call("revoke_api_key", { key: prefix });
+    const rejected = await post();
+
+    expect(rejected.status).toBe(401);
   });
 });
