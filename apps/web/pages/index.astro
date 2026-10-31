@@ -1,0 +1,290 @@
+---
+import PageLayout from "blume/components/layout/PageLayout.astro";
+import data from "blume:data";
+
+import Arrow from "./_home/arrow.astro";
+import Flaps from "./_home/flaps.astro";
+import Mark from "./_home/mark.astro";
+
+const { config } = data;
+
+const DOCS = "/docs";
+
+const chat = [
+  { text: "Draft issue 24 from my last three posts.", who: "You" },
+  {
+    text: "“Shipping in public” is drafted, 612 words. The preview is ready.",
+    tool: "create_draft · preview_draft",
+    who: "Sendoff",
+  },
+  { text: "Send me a test, then send it.", who: "You" },
+  {
+    text: "Test sent to hello@example.com. Preflight passed.",
+    tool: "send_test · prepare_send",
+    who: "Sendoff",
+  },
+];
+
+// Placeholder issues for the status table; swap in real ones before launch.
+const issues = [
+  { live: true, number: 24, time: "09:00", title: "Shipping in public", to: "6,042 inboxes" },
+  { number: 23, time: "Q3", title: "What I learned building Blume", to: "5,918 inboxes" },
+  { number: 22, time: "Q2", title: "Notes on open source", to: "5,701 inboxes" },
+  { number: 21, time: "Q1", title: "A year of building", to: "5,466 inboxes" },
+];
+
+const steps = [
+  {
+    body: "Clone the repo and run setup. It creates the database, queue and SES identity, writes your DNS records and asks AWS for production access.",
+    link: "Setup guide",
+    number: "1",
+    title: "Deploy",
+  },
+  {
+    body: "Add the MCP server to Claude Code, Codex or Claude Desktop. One URL, one token.",
+    link: "Connect your agent",
+    number: "2",
+    title: "Connect",
+  },
+  {
+    body: "Draft, preview and test from the chat. Nothing leaves until the test matches the draft and you confirm.",
+    link: "How sending works",
+    number: "3",
+    title: "Send",
+  },
+];
+
+const facts = [
+  {
+    body: "For 6,000 subscribers and four issues, paid straight to AWS at ten cents per thousand emails. Workers, D1 and Queues are designed to fit Cloudflare’s free tier.",
+    flaps: { label: "$2.40 a year", text: "$2.40/YR" },
+    title: "At cost",
+  },
+  {
+    body: "DKIM, a custom MAIL FROM, DMARC, one-click unsubscribe and double opt-in are set up for you, and none of them can be switched off.",
+    title: "Deliverability, handled",
+  },
+  {
+    body: "Your domain, your AWS account, your list. The reputation you build stays with you.",
+    title: "Yours",
+  },
+];
+
+// Shared class lists for repeated elements.
+const autoFit = "grid gap-12 [grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr))]";
+
+const primaryButton =
+  "inline-flex min-h-[52px] items-center gap-2.5 rounded-full bg-foreground px-6 text-base font-medium text-background no-underline transition-opacity hover:opacity-85";
+
+const textLink =
+  "inline-flex items-center gap-2 font-medium text-foreground no-underline transition-colors hover:text-muted-foreground";
+
+const sectionHeading =
+  "m-0 font-medium text-[clamp(34px,4vw,52px)] leading-[1.05] tracking-[-0.04em] text-balance";
+---
+
+<PageLayout
+  site={{ description: config.description, title: config.title }}
+  logo={config.logo}
+  banner={config.banner}
+  analytics={config.analytics}
+  navigation={data.navigation}
+  favicon={config.favicon}
+  appleIcon={config.appleIcon}
+  fontCssVars={data.fontCssVars}
+  themeMode={config.theme.mode}
+  searchEnabled={config.search.enabled}
+  siteUrl={config.site}
+  ogEnabled={config.og.enabled}
+  structuredDataEnabled={config.structuredData}
+  page={{
+    description: config.description,
+    route: "/",
+    title: "Sendoff — Say “send it.” Sendoff handles the rest.",
+  }}
+>
+  <div class="mx-auto max-w-[1200px] px-5 text-foreground sm:px-8 lg:px-12">
+    <section
+      class="flex flex-col items-center gap-[30px] pt-20 pb-16 text-center md:pt-[176px] md:pb-28"
+    >
+      <div class="flex flex-wrap items-center justify-center gap-3">
+        <Flaps text="09:00" />
+        <Flaps text="NO.24" label="Issue 24" />
+        <Flaps text="BOARDING" label="Boarding" live />
+      </div>
+      <h1
+        class="m-0 max-w-[1000px] font-medium text-[clamp(44px,6.4vw,88px)] leading-[1.02] tracking-[-0.048em] text-balance"
+      >
+        Say <span class="sendoff-highlight">“send it.”</span> Sendoff handles the rest.
+      </h1>
+      <p
+        class="m-0 max-w-[660px] text-[19px] leading-[1.55] text-pretty text-muted-foreground"
+      >
+        A newsletter tool you deploy to your own Cloudflare and AWS accounts and run from Claude or
+        Codex. DNS, deliverability, bounces and unsubscribes are set up for you, and sending costs
+        about $2.40 a year.
+      </p>
+      <div class="flex flex-wrap items-center justify-center gap-x-7 gap-y-3">
+        <a href={DOCS} class={primaryButton}>Deploy your own <Arrow /></a>
+        <a href={DOCS} class:list={[textLink, "min-h-11 text-base"]}>Read the docs <Arrow /></a>
+      </div>
+    </section>
+
+    <section
+      class="flex justify-center rounded-[32px] bg-muted px-4 py-6 sm:px-12 sm:py-[88px]"
+      aria-label="Example conversation"
+    >
+      <div
+        class="flex w-full max-w-[720px] flex-col gap-[22px] rounded-[22px] bg-background p-5 shadow-[0_1px_2px_rgb(13_13_13/0.04),0_20px_48px_rgb(13_13_13/0.06)] sm:p-9"
+      >
+        <div class="flex items-center justify-between text-[13px] text-muted-foreground">
+          <span>Claude Code</span>
+          <span class="font-mono text-xs">sendoff · connected</span>
+        </div>
+        {
+          chat.map((message) => (
+            <div class="grid grid-cols-[76px_minmax(0,1fr)] items-baseline gap-3.5">
+              <span
+                class:list={[
+                  "text-[13px] font-semibold",
+                  message.who === "You" ? "text-foreground" : "text-muted-foreground",
+                ]}
+              >
+                {message.who}
+              </span>
+              <span class="flex flex-col gap-1.5 text-left">
+                <span class="text-base leading-normal">{message.text}</span>
+                {message.tool && (
+                  <span class="self-start rounded-md bg-muted px-2 py-[3px] font-mono text-xs text-muted-foreground">
+                    {message.tool}
+                  </span>
+                )}
+              </span>
+            </div>
+          ))
+        }
+        <div
+          class="flex flex-wrap items-center justify-between gap-4 border-t border-border pt-[22px]"
+        >
+          <span class="flex flex-wrap items-center gap-3">
+            <Flaps text="BOARDING" label="Boarding" live size="sm" />
+            <span class="text-sm text-muted-foreground">6,042 recipients · preflight passed</span>
+          </span>
+          <span
+            class="inline-flex min-h-11 items-center gap-2 rounded-full bg-foreground px-[18px] text-[15px] font-medium text-background"
+          >
+            Confirm send <Arrow size={14} />
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <section class="flex flex-col gap-10 pt-24 md:pt-[176px]">
+      <div class="flex flex-wrap items-end justify-between gap-6">
+        <h2 class:list={[sectionHeading, "max-w-[560px]"]}>Ask for the status of any send.</h2>
+        <p class="m-0 max-w-[400px] text-[17px] leading-[1.55] text-muted-foreground">
+          One newsletter, one list, sent when you say. Your agent can tell you what went out, what
+          bounced and what’s still queued.
+        </p>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[640px] border-collapse text-base">
+          <thead>
+            <tr class="text-left font-mono text-xs tracking-[0.06em] text-muted-foreground">
+              <th class="border-b border-foreground pb-3.5 font-normal">TIME</th>
+              <th class="border-b border-foreground pb-3.5 font-normal">ISSUE</th>
+              <th class="border-b border-foreground pb-3.5 font-normal">RECIPIENTS</th>
+              <th class="border-b border-foreground pb-3.5 text-right font-normal">STATUS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {
+              issues.map((issue) => (
+                <tr>
+                  <td class="w-[14%] border-b border-border py-[22px] font-mono text-sm text-muted-foreground">
+                    {issue.time}
+                  </td>
+                  <td class="border-b border-border py-[22px] font-medium">
+                    {issue.title}{" "}
+                    <span class="font-normal text-muted-foreground">· No. {issue.number}</span>
+                  </td>
+                  <td class="border-b border-border py-[22px]">{issue.to}</td>
+                  <td class="border-b border-border py-[22px] text-right">
+                    {issue.live ? (
+                      <Flaps text="BOARDING" label="Boarding" live size="sm" />
+                    ) : (
+                      <span class="text-muted-foreground">Departed</span>
+                    )}
+                  </td>
+                </tr>
+              ))
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="how" class="flex scroll-mt-24 flex-col gap-14 pt-24 md:pt-[176px]">
+      <h2 class:list={[sectionHeading, "max-w-[640px]"]}>Three steps, then it’s just talking.</h2>
+      <div class={autoFit}>
+        {
+          steps.map((step) => (
+            <div class="flex flex-col items-start gap-4">
+              <Flaps text={step.number} label={`Step ${step.number}`} size="lg" />
+              <h3 class="m-0 text-[21px] font-semibold tracking-[-0.02em]">{step.title}</h3>
+              <p class="m-0 text-base leading-[1.6] text-pretty text-muted-foreground">
+                {step.body}
+              </p>
+              <a href={DOCS} class:list={[textLink, "min-h-8 text-[15px]"]}>
+                {step.link} <Arrow size={14} />
+              </a>
+            </div>
+          ))
+        }
+      </div>
+    </section>
+
+    <section class:list={[autoFit, "pt-24 md:pt-[176px]"]}>
+      {
+        facts.map((fact) => (
+          <div class="flex flex-col gap-4 border-t border-foreground pt-6">
+            <h2 class="m-0 text-[40px] leading-none font-medium tracking-[-0.045em]">
+              {fact.title}
+            </h2>
+            {fact.flaps && <Flaps text={fact.flaps.text} label={fact.flaps.label} />}
+            <p class="m-0 text-base leading-[1.6] text-muted-foreground">{fact.body}</p>
+          </div>
+        ))
+      }
+    </section>
+
+    <section
+      class="flex flex-col items-center gap-7 pt-[120px] pb-24 text-center md:pt-[200px] md:pb-40"
+    >
+      <Mark size={56} />
+      <h2
+        class="m-0 max-w-[900px] font-medium text-[clamp(44px,6vw,80px)] leading-[1.02] tracking-[-0.048em] text-balance"
+      >
+        Stop paying rent on <span class="sendoff-highlight">your list.</span>
+      </h2>
+      <p class="m-0 max-w-[520px] text-lg leading-[1.55] text-muted-foreground">
+        Import from Resend with unsubscribes and bounces kept as suppressions, keep your From
+        domain, and send the next issue from your own accounts.
+      </p>
+      <a href={DOCS} class={primaryButton}>Deploy your own <Arrow /></a>
+    </section>
+  </div>
+
+  <footer slot="footer" class="mx-auto max-w-[1200px] px-5 sm:px-8 lg:px-12">
+    <div
+      class="flex flex-wrap items-center justify-between gap-4 border-t border-border pt-6 pb-10 text-sm text-muted-foreground"
+    >
+      <span class="flex flex-wrap items-center gap-2">
+        <Mark size={18} />
+        <span class="font-semibold tracking-[-0.02em] text-foreground">Sendoff</span>
+        <span>Runs on Cloudflare Workers and Amazon SES</span>
+      </span>
+      <a href={DOCS} class="text-muted-foreground no-underline hover:text-foreground">Docs</a>
+    </div>
+  </footer>
+</PageLayout>

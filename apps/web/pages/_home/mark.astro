@@ -1,0 +1,23 @@
+---
+// The departure tile: an ink flap with a yellow arrow and a hairline split.
+interface Props {
+  size?: number;
+}
+
+const { size = 24 } = Astro.props;
+
+// Smaller marks get a heavier arrow so it holds up at favicon sizes.
+const LARGE_MARK = 48;
+const strokeWidth = size >= LARGE_MARK ? 6.5 : 8;
+---
+
+<svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" class="shrink-0">
+  <rect width="64" height="64" rx="15" style="fill: var(--sendoff-mark-tile)"></rect>
+  <path
+    d="M19 45 44 20M25 20h19v19"
+    fill="none"
+    style="stroke: var(--sendoff-signal)"
+    stroke-width={strokeWidth}
+    stroke-linecap="square"></path>
+  <rect y="31.25" width="64" height="1.5" style="fill: var(--blume-background)"></rect>
+</svg>

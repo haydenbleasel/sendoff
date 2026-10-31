@@ -1,0 +1,24 @@
+---
+// "next" (→) goes somewhere on this site; "out" (↗) leaves it.
+interface Props {
+  direction?: "next" | "out";
+  size?: number;
+}
+
+const { direction = "next", size = 16 } = Astro.props;
+
+const paths = {
+  next: "M2.5 8H13M9 4l4 4-4 4",
+  out: "M4 12l7.5-7.5M5.5 4.5h6v6",
+} as const;
+---
+
+<svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true" class="shrink-0">
+  <path
+    d={paths[direction]}
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.6"
+    stroke-linecap="square"
+  ></path>
+</svg>

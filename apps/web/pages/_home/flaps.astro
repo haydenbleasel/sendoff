@@ -1,0 +1,30 @@
+---
+// A row of split-flap tiles. Flaps are for live status and numbers only,
+// never headlines; `live` flips them to signal yellow.
+interface Props {
+  text: string;
+  label?: string;
+  live?: boolean;
+  size?: "sm" | "md" | "lg";
+}
+
+const { text, label = text, live = false, size = "md" } = Astro.props;
+
+const sizes = {
+  lg: "h-10 w-[30px] rounded-[5px] text-[22px]",
+  md: "h-[30px] w-[22px] rounded-[4px] text-[17px]",
+  sm: "h-[25px] w-[18px] rounded-[3px] text-sm",
+} as const;
+
+const characters = [...text];
+---
+
+<span class="inline-flex gap-[2px]" role="img" aria-label={label}>
+  {
+    characters.map((character) => (
+      <span class:list={["sendoff-flap", sizes[size]]} data-live={live ? "" : undefined}>
+        {character}
+      </span>
+    ))
+  }
+</span>

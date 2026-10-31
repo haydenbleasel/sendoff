@@ -1,0 +1,66 @@
+/* Sendoff brand tokens ("Minimal Departures"). */
+
+:root {
+  --sendoff-signal: #ffc20e;
+  --sendoff-signal-shade: #f2b80d;
+  --sendoff-ink: #0d0d0d;
+  --sendoff-flap: #f3f3f1;
+  --sendoff-flap-shade: #ececea;
+  --sendoff-mark-tile: #0d0d0d;
+}
+
+:root[data-theme="dark"] {
+  --sendoff-flap: #1f1f1f;
+  --sendoff-flap-shade: #191919;
+  --sendoff-mark-tile: #2a2a2a;
+}
+
+/*
+ * A split-flap tile: two halves with a hairline split in the page background
+ * colour. The split is part of the background so the glyph sits on top of it
+ * instead of being struck through.
+ */
+.sendoff-flap {
+  --sendoff-flap-top: var(--sendoff-flap);
+  --sendoff-flap-bottom: var(--sendoff-flap-shade);
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--blume-foreground);
+  background: linear-gradient(
+    var(--sendoff-flap-top) 0 calc(50% - 0.5px),
+    var(--blume-background) calc(50% - 0.5px) calc(50% + 0.5px),
+    var(--sendoff-flap-bottom) calc(50% + 0.5px) 100%
+  );
+}
+
+/* Live status ("BOARDING") flips the whole flap to yellow, never the letter. */
+.sendoff-flap[data-live] {
+  --sendoff-flap-top: var(--sendoff-signal);
+  --sendoff-flap-bottom: var(--sendoff-signal-shade);
+
+  color: var(--sendoff-ink);
+}
+
+/* A low marker stroke behind two or three words, once per view. */
+.sendoff-highlight {
+  background: linear-gradient(
+    transparent 60%,
+    var(--sendoff-signal) 60%,
+    var(--sendoff-signal) 92%,
+    transparent 92%
+  );
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* On dark backgrounds a low stroke would sit under light text, so fill the word instead. */
+:root[data-theme="dark"] .sendoff-highlight {
+  padding-inline: 0.06em;
+  border-radius: 0.06em;
+  color: var(--sendoff-ink);
+  background: var(--sendoff-signal);
+}
