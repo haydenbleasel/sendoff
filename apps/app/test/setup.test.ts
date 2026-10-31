@@ -14,6 +14,7 @@ const instance = instanceSchema.parse({
   accountId: "acct",
   databaseId: "db-123",
   hostname: "news.example.com",
+  kvNamespaceId: "kv-123",
   publicUrl: "https://news.example.com",
   sesEventsTopicArn: "arn:aws:sns:us-east-1:123456789012:sendoff-events",
   sesRegion: "us-east-1",
@@ -78,6 +79,7 @@ describe("deployConfig", () => {
           migrations_dir: "../migrations",
         },
       ],
+      kv_namespaces: [{ binding: "OAUTH_KV", id: "kv-123" }],
       main: "../src/index.ts",
       routes: [{ custom_domain: true, pattern: "news.example.com" }],
       vars: {

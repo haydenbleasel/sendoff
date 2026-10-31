@@ -22,7 +22,9 @@ import {
   Client,
   StreamableHTTPClientTransport,
 } from "@modelcontextprotocol/client";
+import { z } from "zod";
 
+import { parseJsonWith } from "../src/json";
 import type { JsonObject } from "../src/json";
 import {
   IAM_POLICY,
@@ -55,6 +57,7 @@ import { wrangler, wranglerJson } from "./setup/wrangler";
 const WORKER_NAME = "sendoff";
 const DATABASE_NAME = "sendoff";
 const QUEUE_NAME = "sendoff-send";
+const KV_NAMESPACE = "sendoff-oauth";
 const CONFIGURATION_SET = "sendoff";
 const TOPIC_NAME = "sendoff-events";
 const SECRET_BYTES = 32;
@@ -418,6 +421,39 @@ const ensureDatabase = (): string => {
   return find() ?? fail("Created the D1 database but couldn't find its ID.");
 };
 
+const kvNamespacesSchema = z.array(
+  z.object({ id: z.string(), title: z.string() })
+);
+
+const ensureKvNamespace = (): string => {
+  const find = () => {
+    const listed = wrangler(["kv", "namespace", "list"]);
+
+    const parsed = parseJsonWith(
+      kvNamespacesSchema,
+      listed.output.slice(Math.max(0, listed.output.indexOf("[")))
+    );
+
+    return parsed.success
+      ? parsed.data.find((namespace) => namespace.title === KV_NAMESPACE)?.id
+      : undefined;
+  };
+
+  const existing = find();
+
+  if (existing) {
+    return existing;
+  }
+
+  const created = wrangler(["kv", "namespace", "create", KV_NAMESPACE]);
+
+  if (!created.ok) {
+    return fail(`Creating the KV namespace failed:\n${created.output}`);
+  }
+
+  return find() ?? fail("Created the KV namespace but couldn't find its ID.");
+};
+
 const ensureQueue = () => {
   const created = wrangler(["queues", "create", QUEUE_NAME]);
 
@@ -700,11 +736,17 @@ const main = async () => {
 
   const cloudflare = await cloudflareToken();
 
-  progress.start("Creating the database and queue");
+  progress.start("Creating the database, KV namespace and queue");
   const databaseId = ensureDatabase();
+  const kvNamespaceId = ensureKvNamespace();
   ensureQueue();
-  save({ databaseId, databaseName: DATABASE_NAME, queueName: QUEUE_NAME });
-  progress.stop("Database and queue ready");
+  save({
+    databaseId,
+    databaseName: DATABASE_NAME,
+    kvNamespaceId,
+    queueName: QUEUE_NAME,
+  });
+  progress.stop("Database, KV namespace and queue ready");
 
   const turnstile = await turnstileKeys(
     cloudflare,
@@ -824,9 +866,13 @@ const main = async () => {
       [
         "Connect your agent (this token is shown once; keep it somewhere safe):",
         "",
-        `claude mcp add --transport http sendoff ${publicUrl}/mcp --header "Authorization: Bearer ${mcpToken}"`,
+        "Claude Code:",
+        `  claude mcp add --transport http sendoff ${publicUrl}/mcp --header "Authorization: Bearer ${mcpToken}"`,
         "",
-        `Codex: add an MCP server with URL ${publicUrl}/mcp and bearer token ${mcpToken}`,
+        `Codex: add an MCP server with URL ${publicUrl}/mcp and this bearer token.`,
+        "",
+        "claude.ai and Claude Desktop: Settings → Connectors → Add custom connector,",
+        `  URL ${publicUrl}/mcp. When it asks you to sign in, paste this token.`,
       ].join("\n"),
       "Your MCP token"
     );

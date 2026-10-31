@@ -57,12 +57,15 @@ One Worker serves everything:
 | `POST /resubscribe/:token` | Undoes an unsubscribe from the same link. |
 | `POST /webhooks/ses` | SNS endpoint for SES events. Verifies the SNS signature and handles `SubscriptionConfirmation`. |
 | `GET /preview/:token` | Live preview (`:token` is a signed issue id, so the URL is the only access check). Email/text, desktop/mobile and light/dark toggles; polls `/state` every 1.5 s and fetches `/render` when the draft or settings change. Shows Markdown problems, keeping the last good render dimmed. |
-| `/mcp` | MCP server (official SDK v2, `createMcpHandler`, stateless, JSON responses), behind a bearer token. |
+| `/mcp` | MCP server (official SDK v2, `createMcpHandler`, stateless, JSON responses). The OAuth provider wraps the Worker and protects it: OAuth access tokens (claude.ai, Claude Desktop) or the static `MCP_TOKEN` (Claude Code, Codex). |
+| `GET/POST /authorize`, `POST /authorize/sign-in` | OAuth authorize step: the owner signs in with the admin token (a 15-minute signed `__Host-` session cookie), then sees a consent page (client name, verified domain for CIMD clients, redirect host, loopback warning) and allows or denies. |
+| `/oauth/token`, `/oauth/register`, `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource/mcp` | Served by `@cloudflare/workers-oauth-provider`: token endpoint, dynamic registration, and discovery metadata. |
 | `POST /api/v1/subscribers` | REST: subscribe an address (double opt-in). Needs an API key with `subscribers:write`. See [REST API](#rest-api). |
 | `GET /api/v1/openapi.json` | OpenAPI 3.1 description of the REST API, generated from the handlers' zod schemas. Public. |
 | `/issues/:slug` | Hosted "view in browser" page and archive (later milestone). |
 | Queue consumer (`sendoff-send`) | One message = one chunk of up to 50 recipients. Batch size 1, concurrency 1. |
 | Cron (`*/5 * * * *`) | Restarts sends with no worker activity for 5 minutes (a lost queue message), and finishes sends with nothing left to do. |
+| Cron (`0 3 * * *`) | Purges expired OAuth grants and tokens. |
 | Email Routing handler | Inbound replies and the `mailto:` unsubscribe address. Replies are forwarded to `replyTo`. |
 
 Stack: Hono (routing), Drizzle + D1, `aws4fetch` (SigV4 for SES; no AWS SDK), Cloudflare Agents SDK MCP handler, `@cloudflare/workers-oauth-provider` (later), React Email.
@@ -129,13 +132,13 @@ Unsubscribe and confirm tokens are `subscriberId.base64url(HMAC-SHA256(TOKEN_SEC
 | API keys | `create_api_key`, `list_api_keys`, `revoke_api_key` | Keys are shown once (to the agent, which hands them to the person) and stored hashed. Revoke by id or prefix. |
 | Stats | `issue_stats`, `growth` | Clicks and unsubscribes are the trustworthy signals. Opens are unreliable because of Apple Mail Privacy Protection and aren't tracked by default. |
 
-Auth:
+Auth (M5b, MCP authorization 2026-07-28 via `@cloudflare/workers-oauth-provider`):
 
-- v1 uses a static bearer token, the `MCP_TOKEN` Worker secret (at least 32 characters). Claude Code (`--header`) and Codex (`bearer_token_env_var`) support this:
-  ```sh
-  claude mcp add --transport http sendoff https://<your-worker>/mcp --header "Authorization: Bearer $MCP_TOKEN"
-  ```
-- claude.ai and Claude Desktop connectors need OAuth. That comes in M5 via `workers-oauth-provider`, with login by a magic link emailed to the owner through SES.
+- **claude.ai and Claude Desktop** add a custom connector with `https://<host>/mcp`. They discover the server through Protected Resource Metadata and authorization server metadata, register with a Client ID Metadata Document (or dynamic registration, deprecated but kept for older clients), and go through `/authorize` with PKCE (S256) and the `resource` parameter. Access tokens are bound to the `/mcp` resource, refresh tokens come with `offline_access`, and grants live hashed and encrypted in the `OAUTH_KV` namespace.
+- **The owner signs in on `/authorize` with the admin token** (`MCP_TOKEN`). There's one owner and no account system. Consent is asked every time.
+- **Claude Code and Codex** keep using `MCP_TOKEN` as a static bearer token through `resolveExternalToken`. It's this server's own credential rather than a passed-through upstream key, but strictly the MCP profile only expects tokens from the server's authorization server, so OAuth is the conformant path.
+- **Scopes:** `newsletter` (everything) and `offline_access`. The tools don't distinguish narrower scopes yet.
+- The provider needs the `global_fetch_strictly_public` compatibility flag, so fetching client metadata documents can't reach private hosts.
 
 ## REST API
 
@@ -237,7 +240,7 @@ Later optimization: SES `SendBulkEmail` (50 destinations per call) with per-dest
 2. **Newsletter details:** name, sender, reply-to, postal address. Then the hostname (default `news.<sender domain>`), which must be on a Cloudflare zone in the account. Links on your own domain also keep emails away from shared `workers.dev` URLs, which spam filters distrust. Then the SES region.
 3. **AWS access:** if the AWS CLI is logged in, setup offers to use that login (`aws configure export-credentials`, including short-lived SSO or `aws login` sessions) to provision SES and SNS. It then creates a dedicated `sendoff` IAM user with a send-only inline policy (`ses:SendEmail`, `GetAccount`, `GetEmailIdentity`, `GetConfigurationSetEventDestinations`) and an access key: the only AWS credential the Worker holds, so it can't create or change AWS resources. Re-runs reuse that key while the Worker has its secret, and only ever delete the one key setup recorded. Without the CLI, setup writes the full provisioning policy to `.sendoff/iam-policy.json` and asks for keys, which then serve both purposes.
 4. **Optional Cloudflare API token** (Zone DNS Edit, Zone Read, Account Turnstile Edit). It's used during setup and not stored. With it, setup writes the DNS records and creates the Turnstile widget. Without it, setup prints the records and asks for Turnstile keys made in the dashboard.
-5. **Resources:** the D1 database `sendoff` and the queue `sendoff-send` through Wrangler, and a Turnstile widget for the hostname.
+5. **Resources:** the D1 database `sendoff`, the KV namespace `sendoff-oauth` and the queue `sendoff-send` through Wrangler, and a Turnstile widget for the hostname.
 6. **SES and SNS:**
    - the domain identity with Easy DKIM, and the custom MAIL FROM `bounce.<domain>`
    - the configuration set `sendoff`
@@ -271,7 +274,7 @@ The app stays self-contained (no internal workspace packages) so a Deploy to Clo
 | M3 | Drafting | MCP draft, settings and subscriber tools, and the live preview, verified with the official MCP client over HTTP against `wrangler dev`. ✅ |
 | M4 | Sending | Test send, prepare/confirm, queue fan-out, status/cancel/resume, `doctor`, stalled-send cron. Built and tested against a stubbed SES. ✅ **First real issue still to go out** (needs the SES account from M0). |
 | M5a | Setup | `bun run setup` and `bun run deploy`, with your instance's ids kept out of the repo. Built; the pure parts are tested, the real run is yours. |
-| M5b | OAuth | OAuth for claude.ai and Claude Desktop connectors. |
+| M5b | OAuth | OAuth 2.1 for claude.ai and Claude Desktop connectors, with the static token kept for Claude Code and Codex. Full flow tested end to end. ✅ |
 | M5c | Docs and deploy button | Docs site content, Deploy to Cloudflare button. |
 | M6 | Extras | Stats, prune and re-engagement, web archive and RSS, R2 image uploads. |
 

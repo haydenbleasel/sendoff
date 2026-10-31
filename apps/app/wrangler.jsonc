@@ -3,7 +3,9 @@
   "name": "sendoff",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
-  "compatibility_flags": ["nodejs_compat"],
+  // global_fetch_strictly_public: OAuth client metadata documents are
+  // fetched from URLs clients supply, so keep those fetches off private hosts.
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "observability": { "enabled": true },
   "d1_databases": [
     {
@@ -21,6 +23,8 @@
       "TURNSTILE_SECRET_KEY",
     ],
   },
+  // OAuth grants and tokens for claude.ai and Claude Desktop connectors.
+  "kv_namespaces": [{ "binding": "OAUTH_KV" }],
   "queues": {
     "producers": [{ "binding": "SEND_QUEUE", "queue": "sendoff-send" }],
     "consumers": [
@@ -32,8 +36,9 @@
       },
     ],
   },
-  // Restarts sends whose queue chain stalled.
-  "triggers": { "crons": ["*/5 * * * *"] },
+  // Every 5 minutes: restart sends whose queue chain stalled.
+  // Daily: purge expired OAuth grants and tokens.
+  "triggers": { "crons": ["*/5 * * * *", "0 3 * * *"] },
   // `bun run setup` fills these in. Override them locally in .dev.vars.
   "vars": {
     "PUBLIC_URL": "",

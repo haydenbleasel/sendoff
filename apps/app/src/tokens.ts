@@ -2,7 +2,12 @@
 // `<subscriberId>.<base64url(HMAC-SHA256(purpose:subscriberId))>`.
 // They never expire, because unsubscribe links must keep working for years.
 
-export type TokenPurpose = "confirm" | "preview" | "send" | "unsubscribe";
+export type TokenPurpose =
+  | "confirm"
+  | "preview"
+  | "send"
+  | "session"
+  | "unsubscribe";
 
 const SIGNATURE_BYTES = 16;
 const BASE64_PLUS = /\+/gu;

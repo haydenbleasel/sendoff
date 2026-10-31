@@ -14,6 +14,8 @@ export const instanceSchema = z.object({
   databaseName: z.string().default("sendoff"),
   /** Custom domain (e.g. news.example.com). Without one, the Worker uses workers.dev. */
   hostname: z.string().optional(),
+  /** KV namespace for OAuth grants and tokens (claude.ai and Claude Desktop connectors). */
+  kvNamespaceId: z.string(),
   publicUrl: z.url(),
   queueName: z.string().default("sendoff-send"),
   sesConfigurationSet: z.string().default("sendoff"),
@@ -44,6 +46,7 @@ export const deployConfig = (
         migrations_dir: "../migrations",
       },
     ],
+    kv_namespaces: [{ binding: "OAUTH_KV", id: instance.kvNamespaceId }],
     main: "../src/index.ts",
     name: instance.workerName,
     queues: {
