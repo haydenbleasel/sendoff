@@ -11,15 +11,15 @@ interface Props {
 const { text, label = text, live = false, size = "md" } = Astro.props;
 
 const sizes = {
-  lg: "h-10 w-[30px] rounded-[5px] text-[22px]",
-  md: "h-[30px] w-[22px] rounded-[4px] text-[17px]",
-  sm: "h-[25px] w-[18px] rounded-[3px] text-sm",
+  lg: "h-10 w-7.5 rounded-[5px] text-[1.375rem]",
+  md: "h-7.5 w-5.5 rounded-sm text-[1.0625rem]",
+  sm: "h-6.25 w-4.5 rounded-[3px] text-sm",
 } as const;
 
 const characters = [...text];
 ---
 
-<span class="inline-flex gap-[2px]" role="img" aria-label={label}>
+<span class="inline-flex gap-0.5" role="img" aria-label={label}>
   {
     characters.map((character) => (
       <span class:list={["sendoff-flap", sizes[size]]} data-live={live ? "" : undefined}>

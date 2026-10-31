@@ -1,0 +1,78 @@
+---
+import Arrow from "./arrow.astro";
+
+// A conversation as message bubbles: you on the right, your agent on the left.
+// A turn's messages stack as one group, with the tail on the last bubble.
+interface Message {
+  text: string;
+  // Styles the text as a URL with an outbound arrow.
+  link?: boolean;
+}
+
+interface Turn {
+  from: "you" | "agent";
+  messages: readonly Message[];
+}
+
+interface Props {
+  turns: readonly Turn[];
+  // The bubbles sit on a card (the page background) rather than a muted panel.
+  onCard?: boolean;
+  // Smaller text from `sm` up; phones keep 16px.
+  small?: boolean;
+}
+
+const { onCard = false, small = false, turns } = Astro.props;
+
+const agentBubble = onCard ? "bg-muted dark:bg-white/10" : "bg-background dark:bg-white/10";
+
+const bubbleSize = small
+  ? "px-4 py-2.5 text-base sm:px-3.5 sm:py-2 sm:text-sm/6"
+  : "px-4.5 py-3 text-base";
+---
+
+<ol role="list" class="flex w-full flex-col gap-3">
+  {
+    turns.map((turn) => (
+      <li
+        class:list={[
+          "flex max-w-[85%] flex-col gap-1",
+          turn.from === "you" ? "items-end self-end" : "items-start self-start",
+        ]}
+      >
+        <span class="sr-only">{turn.from === "you" ? "You:" : "Claude:"}</span>
+        {turn.messages.map((message) => (
+          <p
+            class:list={[
+              "rounded-3xl text-pretty tabular-nums",
+              bubbleSize,
+              turn.from === "you"
+                ? "bg-foreground text-background last:rounded-br-md"
+                : [agentBubble, "last:rounded-bl-md"],
+              message.link &&
+                "flex items-center gap-1.5 underline decoration-foreground/30 underline-offset-4",
+            ]}
+          >
+            {message.link ? (
+              // Let a narrow bubble wrap the URL before a slash, not mid-word.
+              <span class="wrap-anywhere">
+                {message.text.split("/").map((part, index) =>
+                  index === 0 ? (
+                    part
+                  ) : (
+                    <>
+                      <wbr />/{part}
+                    </>
+                  ),
+                )}
+              </span>
+            ) : (
+              message.text
+            )}
+            {message.link && <Arrow direction="out" size={14} />}
+          </p>
+        ))}
+      </li>
+    ))
+  }
+</ol>

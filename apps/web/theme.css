@@ -1,5 +1,14 @@
 /* Sendoff brand tokens ("Minimal Departures"). */
 
+/*
+ * The landing page's display headings: 44px on phones (48px is a few pixels
+ * too wide for "Sendoff handles" at 375px) up to 88px on wide screens.
+ */
+@theme {
+  --text-display: clamp(2.75rem, 6.4vw, 5.5rem);
+  --text-display--line-height: 1.02;
+}
+
 :root {
   --sendoff-signal: #ffc20e;
   --sendoff-signal-shade: #f2b80d;
