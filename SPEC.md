@@ -59,7 +59,8 @@ One Worker serves everything:
 | `GET /preview/:token` | Live preview (`:token` is a signed issue id, so the URL is the only access check). Email/text, desktop/mobile and light/dark toggles; polls `/state` every 1.5 s and fetches `/render` when the draft or settings change. Shows Markdown problems, keeping the last good render dimmed. |
 | `/mcp` | MCP server (official SDK v2, `createMcpHandler`, stateless, JSON responses), behind a bearer token. |
 | `/issues/:slug` | Hosted "view in browser" page and archive (later milestone). |
-| Queue consumer | Sends one chunk of recipients per message. |
+| Queue consumer (`sendoff-send`) | One message = one chunk of up to 50 recipients. Batch size 1, concurrency 1. |
+| Cron (`*/5 * * * *`) | Restarts sends with no worker activity for 5 minutes (a lost queue message), and finishes sends with nothing left to do. |
 | Email Routing handler | Inbound replies and the `mailto:` unsubscribe address. Replies are forwarded to `replyTo`. |
 
 Stack: Hono (routing), Drizzle + D1, `aws4fetch` (SigV4 for SES; no AWS SDK), Cloudflare Agents SDK MCP handler, `@cloudflare/workers-oauth-provider` (later), React Email.
@@ -81,8 +82,10 @@ subscribers  id (UUIDv7) PK, email UNIQUE (lowercased), name, status, source,
              status: pending | active | unsubscribed | bounced | complained
              source: import | form | mcp
 
-issues       id PK, slug UNIQUE, subject, preheader, body_md, version INT,
-             status, content_hash, test_sent_hash, rendered_html, rendered_text,
+issues       id PK, slug UNIQUE, subject, preheader, body, version INT,
+             status, content_hash, test_sent_hash, test_sent_at,
+             rendered_html, rendered_text, sender JSON, recipient_count,
+             send_started_at, send_heartbeat_at, send_error,
              created_at, updated_at, sent_at, cancelled_at
              status: draft | sending | sent | cancelled
 
@@ -114,9 +117,9 @@ Unsubscribe and confirm tokens are `subscriberId.base64url(HMAC-SHA256(TOKEN_SEC
 | Group | Tools | Notes |
 | --- | --- | --- |
 | Settings | `get_settings`, `update_settings` | `update_settings` merges a partial update (`null` clears optional fields). It warns, rather than blocks, when the sender's domain isn't verified in SES; sending is blocked until it is. |
-| Setup | `doctor` | Checks SES identity verified, DKIM `SUCCESS`, MAIL FROM status, DMARC record present, production access (not sandbox), sending enabled, quota versus active subscribers, SNS subscription confirmed, account suppression list on. |
+| Setup | `doctor` | Fails (blocks sending): no settings, no active subscribers, SES unreachable, sandbox, sending disabled, account shut down, quota below the list size, sender domain not verified, no DMARC record (looked up over DNS-over-HTTPS, falling back to the parent domain), configuration set missing. Warns: probation, no custom MAIL FROM, bounce/complaint events not wired to Sendoff's SNS topic, account suppression list off. |
 | Drafts | `create_draft`, `get_draft`, `edit_draft`, `set_draft_meta`, `list_issues`, `preview_draft`, `delete_draft` | `edit_draft` applies exact find/replace edits all-or-nothing (or replaces the body), takes an optional `expectedVersion`, and bumps `version`. Drafts are stored even with Markdown problems; results list them by line. `preview_draft` returns the URL plus the plain-text version so the agent can proofread. Issues are addressed by id or slug. |
-| Sending | `send_test`, `prepare_send`, `confirm_send`, `send_status`, `cancel_send` | See [Send pipeline](#send-pipeline). `confirm_send` is annotated `destructiveHint: true`. |
+| Sending | `send_test`, `prepare_send`, `confirm_send`, `send_status`, `cancel_send`, `resume_send` | See [Send pipeline](#send-pipeline). `confirm_send` and `cancel_send` are annotated `destructiveHint: true`, and the instructions tell the agent to confirm only after the person explicitly says to send. |
 | Subscribers | `add_subscriber`, `import_subscribers`, `import_from_resend`, `search_subscribers`, `unsubscribe_subscriber` (`prune` in M6) | `add_subscriber` sends a confirmation email unless `skipConfirmation` (only when the person asked to be added). Imports support `dryRun`. | Imports can suppress an existing subscriber but never reactivate one. Resend's API exposes `unsubscribed` only, not bounces, so bounced addresses need a separate import (e.g. a dashboard export). |
 | Stats | `issue_stats`, `growth` | Clicks and unsubscribes are the trustworthy signals. Opens are unreliable because of Apple Mail Privacy Protection and aren't tracked by default. |
 
@@ -130,17 +133,36 @@ Auth:
 
 ## Send pipeline
 
-1. **`send_test`** renders the current version and sends it to the owner, or to supplied addresses. It records `test_sent_hash = content_hash`.
-2. **`prepare_send`** runs `doctor` and refuses unless all of these hold: it passes, `test_sent_hash == content_hash`, and status is `draft`. It returns a summary (subject, active recipient count, preflight results, estimated duration at the SES max send rate) plus a short-lived confirmation token bound to `content_hash`.
-3. **`confirm_send(token)`** validates the token, renders once, and stores `rendered_html`/`rendered_text` with a `{{unsubscribe_url}}` placeholder. It snapshots recipients with `INSERT INTO sends … SELECT … FROM subscribers WHERE status = 'active'`, sets the issue to `sending`, and enqueues chunk messages.
-4. **The queue consumer** handles each chunk:
-   - Claims rows with `UPDATE sends SET status = 'sending' WHERE status = 'queued' … RETURNING`.
-   - Rechecks each subscriber's status and skips anyone who unsubscribed mid-send.
-   - Calls SES `SendEmail` with the configuration set, the `List-Unsubscribe` and `List-Unsubscribe-Post` headers, and an `X-Sendoff-Issue` tag. Calls are paced to the account's max send rate.
-   - Writes `message_id` and `sent`.
-   - Exits early if the issue was cancelled.
-5. **Delivery semantics are at-most-once per recipient.** A row stuck in `sending` after a crash is reported, not retried automatically. A missed email is better than a duplicate to thousands of people.
-6. **Completion:** when no `queued` or `sending` rows remain, the issue becomes `sent`.
+Implemented in `src/sending.ts`.
+
+1. **Fingerprint.** `sha256(content_hash, settings)`: the issue's subject, preheader and body plus every setting that shapes the email. Changing either after a test means testing again.
+2. **`send_test`** renders the current version and sends it, with `[Test]` in the subject, to the reply-to address (or the sender, or up to 5 given addresses). The unsubscribe link in a test is a placeholder. It records `test_sent_hash` (the fingerprint) and `test_sent_at`.
+3. **`prepare_send`** checks, without sending anything:
+   - the issue is a draft that renders
+   - the last test matches the current fingerprint
+   - `doctor` has no failures
+
+   It returns a summary (recipients, sender, estimated time at the SES max send rate, warnings) and a confirmation token: `expiresAt.HMAC(TOKEN_SECRET, "send:" + issueId + fingerprint + expiresAt)`, valid for 15 minutes.
+
+4. **`confirm_send(token)`** recomputes the fingerprint and verifies the token, so any change since preparing invalidates it. Then:
+   - It renders once and stores `rendered_html`/`rendered_text` with an unsubscribe placeholder, and stores `sender` (from and reply-to) so settings changes mid-send don't apply.
+   - In one D1 transaction, it moves the issue from `draft` to `sending` (guarded on status and version), snapshots active subscribers into `sends` with an `INSERT … SELECT`, and records `recipient_count`.
+   - It queues the first chunk message `{ issueId, maxSendRate }`. If queueing fails, the cron picks it up.
+5. **The queue consumer** (`processSendChunk`) handles each message:
+   - Exits if the issue isn't `sending` (cancelled, finished, or stopped on an error).
+   - Marks queued rows `skipped` for anyone no longer active, then claims up to 50 queued rows in one `UPDATE … RETURNING`. Rows already in `sending` are never reclaimed.
+   - Sends in groups of up to 6 (the Workers connection limit), paced to SES's max send rate. Each email gets its own unsubscribe link (`/unsubscribe/<token>?issue=<id>`), the `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` headers, the configuration set, and an `issue` tag.
+   - Outcomes:
+     - Success: `sent` with the message ID.
+     - Throttled (429): back to `queued`, with a pause.
+     - Account-level error (paused, suspended, quota exhausted, bad credentials, missing configuration set): the rest of the chunk goes back to `queued`, the issue records `send_error`, and the chain stops until `resume_send`.
+     - Any other SES error: `failed` with the reason.
+     - Network error with an unknown outcome: `failed`, never retried.
+   - Records each group before sending the next, updates `send_heartbeat_at`, and queues the next chunk while queued rows remain.
+6. **Delivery is at-most-once per recipient.** When no queued rows remain, the issue becomes `sent`. Any rows still in `sending` were claimed by a crashed worker, so they're marked `failed` ("unknown outcome") rather than resent. A missed email is better than a duplicate to thousands of people.
+7. **`send_status`** shows counts by state, bounces, complaints, unsubscribes and clicks for the issue, the first few failures, `send_error`, and whether the send has stalled. **`cancel_send`** marks the issue `cancelled` and skips everything still queued. **`resume_send`** reruns `doctor`, clears `send_error` and restarts the chain.
+
+At 14 emails per second (a typical new SES limit), 6,000 recipients take about 7 minutes across 120 chunks.
 
 Later optimization: SES `SendBulkEmail` (50 destinations per call) with per-destination replacement data. First verify that it supports per-recipient `List-Unsubscribe` headers.
 
@@ -199,7 +221,7 @@ The app stays self-contained (no internal workspace packages) so a Deploy to Clo
 | M1 | Foundation | Worker skeleton, D1 schema and migrations, SES client, email layout and renderer. Render CPU measured; Workers Paid chosen. ✅ |
 | M2 | Subscribers | Subscribe/confirm/unsubscribe (including one-click), SNS webhook, Resend import (core; the MCP tool lands in M3). ✅ |
 | M3 | Drafting | MCP draft, settings and subscriber tools, and the live preview, verified with the official MCP client over HTTP against `wrangler dev`. ✅ |
-| M4 | Sending | Test send, prepare/confirm, queue fan-out, status/cancel, `doctor`. **First real issue goes out.** |
+| M4 | Sending | Test send, prepare/confirm, queue fan-out, status/cancel/resume, `doctor`, stalled-send cron. Built and tested against a stubbed SES. ✅ **First real issue still to go out** (needs the SES account from M0). |
 | M5 | Distribution | `bun run setup`, Deploy to Cloudflare button, OAuth for claude.ai and Desktop, docs. |
 | M6 | Extras | Stats, prune and re-engagement, web archive and RSS, R2 image uploads. |
 

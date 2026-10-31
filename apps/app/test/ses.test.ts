@@ -167,6 +167,7 @@ describe("createSesClient", () => {
       productionAccessEnabled: true,
       sendingEnabled: true,
       sentLast24Hours: 12,
+      suppressedReasons: [],
     });
   });
 });

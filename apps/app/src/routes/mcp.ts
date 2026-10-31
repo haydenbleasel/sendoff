@@ -36,10 +36,13 @@ mcpRoutes.all("/mcp", async (c) => {
 
   const db = createDb(c.env.DB);
 
-  const handler = createMcpHandler(() => createMcpServer({ config, db }), {
-    onerror: (error) => console.error("MCP error", error),
-    responseMode: "json",
-  });
+  const handler = createMcpHandler(
+    () => createMcpServer({ config, db, queue: c.env.SEND_QUEUE }),
+    {
+      onerror: (error) => console.error("MCP error", error),
+      responseMode: "json",
+    }
+  );
 
   return await handler.fetch(c.req.raw);
 });

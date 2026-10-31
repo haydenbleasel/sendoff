@@ -65,6 +65,11 @@ export const subscribers = sqliteTable(
   (table) => [index("subscribers_status_idx").on(table.status)]
 );
 
+export interface IssueSender {
+  from: { email: string; name: string };
+  replyTo?: string | undefined;
+}
+
 export const issues = sqliteTable("issues", {
   body: text("body").notNull().default(""),
   cancelledAt: integer("cancelled_at", { mode: "timestamp_ms" }),
@@ -72,12 +77,23 @@ export const issues = sqliteTable("issues", {
   createdAt: createdAt(),
   id: text("id").primaryKey(),
   preheader: text("preheader"),
+  /** Active subscribers snapshotted when the send was confirmed. */
+  recipientCount: integer("recipient_count"),
   renderedHtml: text("rendered_html"),
   renderedText: text("rendered_text"),
+  /** Why sending stopped (e.g. SES paused the account); cleared on resume. */
+  sendError: text("send_error"),
+  /** Last time a send worker touched this issue; the cron restarts stalled sends. */
+  sendHeartbeatAt: integer("send_heartbeat_at", { mode: "timestamp_ms" }),
+  sendStartedAt: integer("send_started_at", { mode: "timestamp_ms" }),
+  /** Sender snapshotted at confirm time, so settings changes mid-send don't apply. */
+  sender: text("sender", { mode: "json" }).$type<IssueSender>(),
   sentAt: integer("sent_at", { mode: "timestamp_ms" }),
   slug: text("slug").notNull().unique(),
   status: text("status", { enum: issueStatuses }).notNull().default("draft"),
   subject: text("subject").notNull().default(""),
+  testSentAt: integer("test_sent_at", { mode: "timestamp_ms" }),
+  /** Fingerprint (content + settings) of the last test send. */
   testSentHash: text("test_sent_hash"),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   version: integer("version").notNull().default(1),

@@ -17,7 +17,8 @@ Workflow:
 1. Call get_settings first. If the newsletter isn't set up, ask for its name, the sender name and email, and a postal address, then call update_settings.
 2. Call create_draft with a subject, optional preheader and body. Share the preview URL from the result; it updates on its own as you edit.
 3. Make changes with edit_draft using exact find/replace edits copied from get_draft. Use body only to rewrite everything.
-4. Sending isn't available in this version yet. Don't claim an issue was sent.
+4. To send: send_test, and ask the person to check the test in their inbox. Then prepare_send, show them its summary, and only call confirm_send after they explicitly say to send it now. Never send on your own initiative; it emails real people and can't be undone.
+5. Follow a send with send_status. If it stopped on an error, fix the cause and call resume_send. doctor explains what's blocking a send.
 
 ${MARKDOWN_GUIDE}
 

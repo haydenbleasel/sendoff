@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { vi } from "vitest";
 
 import { createDb } from "../src/db/client";
+import type { JsonObject } from "../src/json";
 import { saveSettings } from "../src/settings";
 import { stringToSign } from "../src/sns";
 import type { SnsMessage } from "../src/sns";
@@ -34,6 +35,7 @@ export const setupSettings = async () => {
 };
 
 export interface SentEmail {
+  headers: Record<string, string>;
   html: string;
   subject: string;
   text: string;
@@ -45,6 +47,7 @@ const sesEmailFrom = async (request: Request): Promise<SentEmail> => {
     Content: {
       Simple: {
         Body: { Html: { Data: string }; Text: { Data: string } };
+        Headers?: { Name: string; Value: string }[];
         Subject: { Data: string };
       };
     };
@@ -52,6 +55,12 @@ const sesEmailFrom = async (request: Request): Promise<SentEmail> => {
   }>();
 
   return {
+    headers: Object.fromEntries(
+      (body.Content.Simple.Headers ?? []).map((header) => [
+        header.Name,
+        header.Value,
+      ])
+    ),
     html: body.Content.Simple.Body.Html.Data,
     subject: body.Content.Simple.Subject.Data,
     text: body.Content.Simple.Body.Text.Data,
@@ -59,11 +68,82 @@ const sesEmailFrom = async (request: Request): Promise<SentEmail> => {
   };
 };
 
+export const sesError = (code: string, status: number, message = code) =>
+  Response.json({ message }, { headers: { "x-amzn-ErrorType": code }, status });
+
+export interface NetworkOptions {
+  /** Overrides for SES GetAccount. Defaults to a healthy production account. */
+  account?: JsonObject;
+  /** DMARC TXT record returned for every _dmarc lookup, or null for none. */
+  dmarc?: string | null;
+  /** DMARC TXT records by queried name; takes precedence over dmarc. */
+  dmarcByName?: Record<string, string>;
+  /** SES event destinations for the configuration set, or null if it's missing. */
+  eventDestinations?: JsonObject[] | null;
+  /** Whether the sender's domain is a verified SES identity (default: not set up). */
+  identity?: "missing" | "pending" | "verified";
+  /** Return a response to fail a specific send; undefined sends normally. */
+  onSend?: (email: SentEmail) => Response | undefined;
+}
+
+export const HEALTHY_SES: NetworkOptions = {
+  dmarc: "v=DMARC1; p=none",
+  identity: "verified",
+};
+
+const accountResponse = (overrides: JsonObject = {}) =>
+  Response.json({
+    EnforcementStatus: "HEALTHY",
+    ProductionAccessEnabled: true,
+    SendQuota: { Max24HourSend: 50_000, MaxSendRate: 1000, SentLast24Hours: 0 },
+    SendingEnabled: true,
+    SuppressionAttributes: { SuppressedReasons: ["BOUNCE", "COMPLAINT"] },
+    ...overrides,
+  });
+
+const identityResponse = (identity: NetworkOptions["identity"]) => {
+  if (identity === undefined || identity === "missing") {
+    return sesError("NotFoundException", 404, "Identity not found");
+  }
+
+  return Response.json({
+    DkimAttributes: { Status: identity === "verified" ? "SUCCESS" : "PENDING" },
+    MailFromAttributes: {
+      MailFromDomain: "bounce.example.com",
+      MailFromDomainStatus: "SUCCESS",
+    },
+    VerifiedForSendingStatus: identity === "verified",
+  });
+};
+
+const resendContacts = () =>
+  Response.json({
+    data: [
+      {
+        email: "resend-a@example.com",
+        first_name: "Ada",
+        id: "1",
+        last_name: null,
+        unsubscribed: false,
+      },
+      {
+        email: "resend-b@example.com",
+        first_name: null,
+        id: "2",
+        last_name: null,
+        unsubscribed: true,
+      },
+    ],
+    has_more: false,
+    object: "list",
+  });
+
 /**
  * Stub outbound fetches: Turnstile passes unless the token is "fail", SES
- * accepts and records every email, SNS serves the test certificate.
+ * accepts and records every email (unless onSend fails it), SNS serves the
+ * test certificate, DNS answers DMARC lookups.
  */
-export const mockNetwork = () => {
+export const mockNetwork = (options: NetworkOptions = {}) => {
   const sent: SentEmail[] = [];
   const fetched: string[] = [];
 
@@ -71,6 +151,7 @@ export const mockNetwork = () => {
     .spyOn(globalThis, "fetch")
     .mockImplementation(async (input, init) => {
       const request = new Request(input, init);
+      const { pathname } = new URL(request.url);
       fetched.push(request.url);
 
       if (request.url.startsWith("https://challenges.cloudflare.com/")) {
@@ -79,40 +160,62 @@ export const mockNetwork = () => {
         return Response.json({ success: form.get("response") !== "fail" });
       }
 
-      if (request.url.includes(".amazonaws.com/v2/email/outbound-emails")) {
-        sent.push(await sesEmailFrom(request));
+      if (pathname === "/v2/email/outbound-emails") {
+        const email = await sesEmailFrom(request);
+        const failed = options.onSend?.(email);
+
+        if (failed) {
+          return failed;
+        }
+
+        sent.push(email);
 
         return Response.json({ MessageId: `msg-${sent.length}` });
       }
 
-      if (request.url.includes(".amazonaws.com/v2/email/identities/")) {
-        return Response.json(
-          { message: "Identity not found" },
-          { headers: { "x-amzn-ErrorType": "NotFoundException" }, status: 404 }
-        );
+      if (pathname === "/v2/email/account") {
+        return accountResponse(options.account);
+      }
+
+      if (pathname.startsWith("/v2/email/identities/")) {
+        return identityResponse(options.identity);
+      }
+
+      if (pathname.endsWith("/event-destinations")) {
+        return options.eventDestinations === null
+          ? sesError("NotFoundException", 404)
+          : Response.json({
+              EventDestinations: options.eventDestinations ?? [
+                {
+                  Enabled: true,
+                  MatchingEventTypes: [
+                    "BOUNCE",
+                    "COMPLAINT",
+                    "REJECT",
+                    "CLICK",
+                  ],
+                  Name: "sendoff",
+                  SnsDestination: { TopicArn: TOPIC_ARN },
+                },
+              ],
+            });
+      }
+
+      if (request.url.startsWith("https://cloudflare-dns.com/dns-query")) {
+        const name = new URL(request.url).searchParams.get("name") ?? "";
+
+        const record = options.dmarcByName
+          ? (options.dmarcByName[name] ?? null)
+          : options.dmarc;
+
+        return Response.json({
+          Answer: record ? [{ data: `"${record}"`, type: 16 }] : undefined,
+          Status: record ? 0 : 3,
+        });
       }
 
       if (request.url.startsWith("https://api.resend.com/contacts")) {
-        return Response.json({
-          data: [
-            {
-              email: "resend-a@example.com",
-              first_name: "Ada",
-              id: "1",
-              last_name: null,
-              unsubscribed: false,
-            },
-            {
-              email: "resend-b@example.com",
-              first_name: null,
-              id: "2",
-              last_name: null,
-              unsubscribed: true,
-            },
-          ],
-          has_more: false,
-          object: "list",
-        });
+        return resendContacts();
       }
 
       if (request.url === TEST_SNS_CERT_URL) {

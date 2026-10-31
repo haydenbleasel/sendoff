@@ -2,7 +2,7 @@
 // `<subscriberId>.<base64url(HMAC-SHA256(purpose:subscriberId))>`.
 // They never expire, because unsubscribe links must keep working for years.
 
-export type TokenPurpose = "confirm" | "preview" | "unsubscribe";
+export type TokenPurpose = "confirm" | "preview" | "send" | "unsubscribe";
 
 const SIGNATURE_BYTES = 16;
 const BASE64_PLUS = /\+/gu;
@@ -60,12 +60,12 @@ const fromBase64Url = (value: string): Uint8Array | null => {
 const sign = async (
   secret: string,
   purpose: TokenPurpose,
-  subscriberId: string
+  payload: string
 ): Promise<Uint8Array> => {
   const signature = await crypto.subtle.sign(
     "HMAC",
     await keyFor(secret),
-    new TextEncoder().encode(`${purpose}:${subscriberId}`)
+    new TextEncoder().encode(`${purpose}:${payload}`)
   );
 
   return new Uint8Array(signature).slice(0, SIGNATURE_BYTES);
@@ -102,4 +102,55 @@ export const verifyToken = async (
   return crypto.subtle.timingSafeEqual(provided, expected)
     ? subscriberId
     : null;
+};
+
+export type SendConfirmationCheck = "valid" | "expired" | "invalid";
+
+const sendPayload = (issueId: string, fingerprint: string, expiresAt: number) =>
+  `${issueId}:${fingerprint}:${expiresAt}`;
+
+/**
+ * A short-lived token from prepare_send that confirm_send must present. It's
+ * bound to the exact issue content and settings (the fingerprint), so any
+ * change after preparing invalidates it.
+ */
+export const createSendConfirmation = async (
+  secret: string,
+  issueId: string,
+  fingerprint: string,
+  expiresAt: number
+): Promise<string> =>
+  `${expiresAt}.${toBase64Url(await sign(secret, "send", sendPayload(issueId, fingerprint, expiresAt)))}`;
+
+export const verifySendConfirmation = async (
+  secret: string,
+  {
+    fingerprint,
+    issueId,
+    now,
+    token,
+  }: { fingerprint: string; issueId: string; now: number; token: string }
+): Promise<SendConfirmationCheck> => {
+  const [expiresPart = "", signaturePart = ""] = token.trim().split(".");
+  const expiresAt = Number(expiresPart);
+  const provided = fromBase64Url(signaturePart);
+
+  if (
+    !Number.isSafeInteger(expiresAt) ||
+    provided?.length !== SIGNATURE_BYTES
+  ) {
+    return "invalid";
+  }
+
+  const expected = await sign(
+    secret,
+    "send",
+    sendPayload(issueId, fingerprint, expiresAt)
+  );
+
+  if (!crypto.subtle.timingSafeEqual(provided, expected)) {
+    return "invalid";
+  }
+
+  return expiresAt < now ? "expired" : "valid";
 };

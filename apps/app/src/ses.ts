@@ -33,6 +33,15 @@ export interface SesAccount {
   productionAccessEnabled: boolean;
   sendingEnabled: boolean;
   sentLast24Hours: number;
+  /** Reasons the account-level suppression list covers, e.g. BOUNCE, COMPLAINT. */
+  suppressedReasons: string[];
+}
+
+export interface SesEventDestination {
+  enabled: boolean;
+  eventTypes: string[];
+  name: string;
+  snsTopicArn: string | undefined;
 }
 
 export interface SesIdentity {
@@ -169,6 +178,7 @@ export const createSesClient = (
           SentLast24Hours?: number;
         };
         SendingEnabled?: boolean;
+        SuppressionAttributes?: { SuppressedReasons?: string[] };
       }>("/account");
 
       return {
@@ -178,6 +188,8 @@ export const createSesClient = (
         productionAccessEnabled: account.ProductionAccessEnabled ?? false,
         sendingEnabled: account.SendingEnabled ?? false,
         sentLast24Hours: account.SendQuota?.SentLast24Hours ?? 0,
+        suppressedReasons:
+          account.SuppressionAttributes?.SuppressedReasons ?? [],
       };
     },
 
@@ -199,6 +211,37 @@ export const createSesClient = (
           mailFromStatus: result.MailFromAttributes?.MailFromDomainStatus,
           verifiedForSending: result.VerifiedForSendingStatus ?? false,
         };
+      } catch (error) {
+        if (error instanceof SesError && error.status === HTTP_NOT_FOUND) {
+          return null;
+        }
+
+        throw error;
+      }
+    },
+
+    /** Event destinations for a configuration set, or null if the set doesn't exist. */
+    getEventDestinations: async (
+      configurationSet: string
+    ): Promise<SesEventDestination[] | null> => {
+      try {
+        const result = await request<{
+          EventDestinations?: {
+            Enabled?: boolean;
+            MatchingEventTypes?: string[];
+            Name: string;
+            SnsDestination?: { TopicArn?: string };
+          }[];
+        }>(
+          `/configuration-sets/${encodeURIComponent(configurationSet)}/event-destinations`
+        );
+
+        return (result.EventDestinations ?? []).map((destination) => ({
+          enabled: destination.Enabled ?? false,
+          eventTypes: destination.MatchingEventTypes ?? [],
+          name: destination.Name,
+          snsTopicArn: destination.SnsDestination?.TopicArn,
+        }));
       } catch (error) {
         if (error instanceof SesError && error.status === HTTP_NOT_FOUND) {
           return null;

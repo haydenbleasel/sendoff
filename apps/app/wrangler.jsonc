@@ -21,6 +21,19 @@
       "TURNSTILE_SECRET_KEY",
     ],
   },
+  "queues": {
+    "producers": [{ "binding": "SEND_QUEUE", "queue": "sendoff-send" }],
+    "consumers": [
+      {
+        "queue": "sendoff-send",
+        "max_batch_size": 1,
+        "max_retries": 3,
+        "max_concurrency": 1,
+      },
+    ],
+  },
+  // Restarts sends whose queue chain stalled.
+  "triggers": { "crons": ["*/5 * * * *"] },
   // `bun run setup` fills these in. Override them locally in .dev.vars.
   "vars": {
     "PUBLIC_URL": "",
