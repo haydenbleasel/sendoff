@@ -3,6 +3,8 @@ import { defineConfig } from "blume";
 export default defineConfig({
   // The landing page owns `/` (pages/index.astro), so the docs mount under /docs.
   basePath: "/docs",
+  // Workers exposes no site URL at build time, so canonicals and the sitemap need it here.
+  deployment: { site: "https://sendoff.dev" },
   description: "Self-hosted newsletters you run from Claude or Codex.",
   logo: "/logo.svg",
   theme: {

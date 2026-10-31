@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sendoff-web",
+  "compatibility_date": "2026-10-01",
+  // A static Blume build served as Workers Static Assets; no Worker script.
+  "assets": {
+    "directory": "./dist",
+    // Blume writes `<route>/index.html` and links without a trailing slash.
+    "html_handling": "drop-trailing-slash",
+    "not_found_handling": "404-page",
+  },
+  "routes": [{ "pattern": "sendoff.dev", "custom_domain": true }],
+}

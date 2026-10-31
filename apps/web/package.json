@@ -7,9 +7,13 @@
     "dev": "blume dev",
     "build": "blume build",
     "preview": "blume preview",
-    "doctor": "blume doctor"
+    "doctor": "blume doctor",
+    "deploy": "blume build && wrangler deploy"
   },
   "dependencies": {
     "blume": "^2.2.6"
+  },
+  "devDependencies": {
+    "wrangler": "^4.156.0"
   }
 }

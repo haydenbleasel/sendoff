@@ -4,3 +4,6 @@
 
 # Local secrets
 .env.local
+
+# Wrangler state
+.wrangler/
