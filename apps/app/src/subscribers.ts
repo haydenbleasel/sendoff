@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, count, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import type { Database } from "./db/client";
@@ -260,7 +260,7 @@ const dedupe = (rows: ImportRow[]) => {
 export const importSubscribers = async (
   db: Database,
   input: ImportRow[],
-  { now = new Date() }: { now?: Date } = {}
+  { dryRun = false, now = new Date() }: { dryRun?: boolean; now?: Date } = {}
 ): Promise<ImportSummary> => {
   const { invalid, rows } = dedupe(input);
 
@@ -325,7 +325,9 @@ export const importSubscribers = async (
     ),
   ];
 
-  for (let start = 0; start < statements.length; start += IMPORT_BATCH_SIZE) {
+  const batches = dryRun ? 0 : statements.length;
+
+  for (let start = 0; start < batches; start += IMPORT_BATCH_SIZE) {
     const [first, ...rest] = statements.slice(start, start + IMPORT_BATCH_SIZE);
 
     if (first) {
@@ -334,10 +336,11 @@ export const importSubscribers = async (
     }
   }
 
-  const suppressed = [...toSuppress.values()].reduce(
-    (count, ids) => count + ids.length,
-    0
-  );
+  let suppressed = 0;
+
+  for (const ids of toSuppress.values()) {
+    suppressed += ids.length;
+  }
 
   return {
     created: inserts.length,
@@ -346,5 +349,71 @@ export const importSubscribers = async (
     suppressed,
     total: input.length,
     unchanged,
+  };
+};
+
+export type StatusCounts = Record<SubscriberStatus, number> & { total: number };
+
+export const countSubscribers = async (db: Database): Promise<StatusCounts> => {
+  const rows = await db
+    .select({ count: count(), status: subscribers.status })
+    .from(subscribers)
+    .groupBy(subscribers.status);
+
+  const counts: StatusCounts = {
+    active: 0,
+    bounced: 0,
+    complained: 0,
+    pending: 0,
+    total: 0,
+    unsubscribed: 0,
+  };
+
+  for (const row of rows) {
+    counts[row.status] = row.count;
+    counts.total += row.count;
+  }
+
+  return counts;
+};
+
+const MAX_SEARCH_LENGTH = 100;
+
+/** Newest first, paginated by id (UUIDv7, so ids sort by creation time). */
+export const searchSubscribers = async (
+  db: Database,
+  {
+    cursor,
+    limit = 50,
+    query,
+    status,
+  }: {
+    cursor?: string | undefined;
+    limit?: number;
+    query?: string | undefined;
+    status?: SubscriberStatus | undefined;
+  } = {}
+): Promise<{ nextCursor: string | undefined; subscribers: Subscriber[] }> => {
+  const needle = query?.trim().toLowerCase().slice(0, MAX_SEARCH_LENGTH);
+
+  const rows = await db
+    .select()
+    .from(subscribers)
+    .where(
+      and(
+        // A plain substring match: instr() has no wildcards to escape.
+        needle ? sql`instr(${subscribers.email}, ${needle}) > 0` : undefined,
+        status ? eq(subscribers.status, status) : undefined,
+        cursor ? lt(subscribers.id, cursor) : undefined
+      )
+    )
+    .orderBy(desc(subscribers.id))
+    .limit(limit + 1);
+
+  const page = rows.slice(0, limit);
+
+  return {
+    nextCursor: rows.length > limit ? page.at(-1)?.id : undefined,
+    subscribers: page,
   };
 };

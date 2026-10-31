@@ -3,12 +3,12 @@ import { Hono } from "hono";
 import type { Context } from "hono";
 import { z } from "zod";
 
-import { createSes, getConfig } from "../config";
+import { getConfig } from "../config";
 import type { Config } from "../config";
+import { sendConfirmationEmail } from "../confirmations";
 import { createDb } from "../db/client";
 import type { Database } from "../db/client";
 import { issues } from "../db/schema";
-import { renderConfirmationEmail } from "../email/confirmation";
 import { messagePage, subscribePage } from "../pages";
 import { getSettings } from "../settings";
 import type { Settings } from "../settings";
@@ -22,7 +22,7 @@ import {
   subscribe,
   unsubscribeSubscriber,
 } from "../subscribers";
-import { createToken, verifyToken } from "../tokens";
+import { verifyToken } from "../tokens";
 import { verifyTurnstile } from "../turnstile";
 
 type AppContext = Context<{ Bindings: Env }>;
@@ -83,29 +83,6 @@ const knownIssueId = async (
   });
 
   return issue?.id;
-};
-
-const sendConfirmation = async (
-  { config, settings }: Loaded,
-  subscriber: { email: string; id: string }
-): Promise<void> => {
-  const token = await createToken(config.tokenSecret, "confirm", subscriber.id);
-
-  const email = await renderConfirmationEmail(
-    settings,
-    `${config.publicUrl}/confirm/${token}`
-  );
-
-  await createSes(config).sendEmail({
-    configurationSet: config.sesConfigurationSet,
-    from: settings.from,
-    html: email.html,
-    replyTo: settings.replyTo,
-    subject: email.subject,
-    tags: { type: "confirmation" },
-    text: email.text,
-    to: subscriber.email,
-  });
 };
 
 export const publicRoutes = new Hono<{ Bindings: Env }>();
@@ -173,7 +150,7 @@ publicRoutes.post("/subscribe", async (c) => {
 
   if (outcome === "send_confirmation") {
     try {
-      await sendConfirmation(loaded, subscriber);
+      await sendConfirmationEmail(config, settings, subscriber);
       await markConfirmationSent(db, subscriber.id);
     } catch (error) {
       console.error("Failed to send confirmation email", error);

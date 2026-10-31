@@ -56,8 +56,8 @@ One Worker serves everything:
 | `POST /unsubscribe/:token` | Unsubscribes: the page's button, and RFC 8058 one-click POSTs from mail providers. `?issue=` attributes it to an issue. |
 | `POST /resubscribe/:token` | Undoes an unsubscribe from the same link. |
 | `POST /webhooks/ses` | SNS endpoint for SES events. Verifies the SNS signature and handles `SubscriptionConfirmation`. |
-| `GET /preview/:issueId` | Live preview, with mobile/desktop and light/dark toggles. Polls a version endpoint and re-renders on change. |
-| `/mcp` | MCP server. |
+| `GET /preview/:token` | Live preview (`:token` is a signed issue id, so the URL is the only access check). Email/text, desktop/mobile and light/dark toggles; polls `/state` every 1.5 s and fetches `/render` when the draft or settings change. Shows Markdown problems, keeping the last good render dimmed. |
+| `/mcp` | MCP server (official SDK v2, `createMcpHandler`, stateless, JSON responses), behind a bearer token. |
 | `/issues/:slug` | Hosted "view in browser" page and archive (later milestone). |
 | Queue consumer | Sends one chunk of recipients per message. |
 | Email Routing handler | Inbound replies and the `mailto:` unsubscribe address. Replies are forwarded to `replyTo`. |
@@ -113,16 +113,19 @@ Unsubscribe and confirm tokens are `subscriberId.base64url(HMAC-SHA256(TOKEN_SEC
 
 | Group | Tools | Notes |
 | --- | --- | --- |
-| Settings | `get_settings`, `update_settings` | `update_settings` rejects a `from` address whose domain isn't a verified SES identity. |
+| Settings | `get_settings`, `update_settings` | `update_settings` merges a partial update (`null` clears optional fields). It warns, rather than blocks, when the sender's domain isn't verified in SES; sending is blocked until it is. |
 | Setup | `doctor` | Checks SES identity verified, DKIM `SUCCESS`, MAIL FROM status, DMARC record present, production access (not sandbox), sending enabled, quota versus active subscribers, SNS subscription confirmed, account suppression list on. |
-| Drafts | `create_draft`, `get_draft`, `edit_draft`, `set_meta`, `list_issues`, `preview_draft` | `edit_draft` uses find/replace (old/new strings) and bumps `version`. `preview_draft` returns the preview URL. |
+| Drafts | `create_draft`, `get_draft`, `edit_draft`, `set_draft_meta`, `list_issues`, `preview_draft`, `delete_draft` | `edit_draft` applies exact find/replace edits all-or-nothing (or replaces the body), takes an optional `expectedVersion`, and bumps `version`. Drafts are stored even with Markdown problems; results list them by line. `preview_draft` returns the URL plus the plain-text version so the agent can proofread. Issues are addressed by id or slug. |
 | Sending | `send_test`, `prepare_send`, `confirm_send`, `send_status`, `cancel_send` | See [Send pipeline](#send-pipeline). `confirm_send` is annotated `destructiveHint: true`. |
-| Subscribers | `add_subscriber`, `import_subscribers`, `import_from_resend`, `search_subscribers`, `unsubscribe`, `prune` | Imports can suppress an existing subscriber but never reactivate one. Resend's API exposes `unsubscribed` only, not bounces, so bounced addresses need a separate import (e.g. a dashboard export). |
+| Subscribers | `add_subscriber`, `import_subscribers`, `import_from_resend`, `search_subscribers`, `unsubscribe_subscriber` (`prune` in M6) | `add_subscriber` sends a confirmation email unless `skipConfirmation` (only when the person asked to be added). Imports support `dryRun`. | Imports can suppress an existing subscriber but never reactivate one. Resend's API exposes `unsubscribed` only, not bounces, so bounced addresses need a separate import (e.g. a dashboard export). |
 | Stats | `issue_stats`, `growth` | Clicks and unsubscribes are the trustworthy signals. Opens are unreliable because of Apple Mail Privacy Protection and aren't tracked by default. |
 
 Auth:
 
-- v1 uses a static bearer token (a Worker secret). Claude Code (`--header`) and Codex (`bearer_token_env_var`) support this.
+- v1 uses a static bearer token, the `MCP_TOKEN` Worker secret (at least 32 characters). Claude Code (`--header`) and Codex (`bearer_token_env_var`) support this:
+  ```sh
+  claude mcp add --transport http sendoff https://<your-worker>/mcp --header "Authorization: Bearer $MCP_TOKEN"
+  ```
 - claude.ai and Claude Desktop connectors need OAuth. That comes in M5 via `workers-oauth-provider`, with login by a magic link emailed to the owner through SES.
 
 ## Send pipeline
@@ -195,7 +198,7 @@ The app stays self-contained (no internal workspace packages) so a Deploy to Clo
 | M0 | AWS groundwork (manual, start now) | SES identity verified for the real domain, production access requested, Resend export taken (including unsubscribed and bounced). |
 | M1 | Foundation | Worker skeleton, D1 schema and migrations, SES client, email layout and renderer. Render CPU measured; Workers Paid chosen. ✅ |
 | M2 | Subscribers | Subscribe/confirm/unsubscribe (including one-click), SNS webhook, Resend import (core; the MCP tool lands in M3). ✅ |
-| M3 | Drafting | MCP draft tools and live preview working from Claude Code. |
+| M3 | Drafting | MCP draft, settings and subscriber tools, and the live preview, verified with the official MCP client over HTTP against `wrangler dev`. ✅ |
 | M4 | Sending | Test send, prepare/confirm, queue fan-out, status/cancel, `doctor`. **First real issue goes out.** |
 | M5 | Distribution | `bun run setup`, Deploy to Cloudflare button, OAuth for claude.ai and Desktop, docs. |
 | M6 | Extras | Stats, prune and re-engagement, web archive and RSS, R2 image uploads. |

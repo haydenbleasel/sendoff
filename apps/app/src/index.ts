@@ -4,6 +4,8 @@ import { secureHeaders } from "hono/secure-headers";
 import { createDb } from "./db/client";
 import { renderIssue } from "./email/render";
 import { sampleIssue, sampleSettings } from "./email/sample";
+import { mcpRoutes } from "./routes/mcp";
+import { previewRoutes } from "./routes/preview";
 import { publicRoutes } from "./routes/public";
 import { webhookRoutes } from "./routes/webhooks";
 import { getSettings } from "./settings";
@@ -31,6 +33,8 @@ app.get("/preview/sample", async (c) => {
 
 app.route("/", webhookRoutes);
 
+app.route("/", mcpRoutes);
+
 // Pages people visit: lock down framing and referrers (URLs carry tokens),
 // and don't cache anything personal.
 app.use("*", secureHeaders());
@@ -40,6 +44,8 @@ app.use("*", (c, next) => {
 
   return next();
 });
+
+app.route("/", previewRoutes);
 
 app.route("/", publicRoutes);
 

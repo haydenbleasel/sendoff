@@ -14,6 +14,14 @@ const required = (name: string) =>
 const configSchema = z.object({
   awsAccessKeyId: required("AWS_ACCESS_KEY_ID"),
   awsSecretAccessKey: required("AWS_SECRET_ACCESS_KEY"),
+  mcpToken: required("MCP_TOKEN").pipe(
+    z
+      .string()
+      .min(
+        MIN_SECRET_LENGTH,
+        `MCP_TOKEN must be at least ${MIN_SECRET_LENGTH} characters.`
+      )
+  ),
   publicUrl: required("PUBLIC_URL")
     .pipe(z.url({ protocol: /^https?$/u }))
     .transform((url) => url.replace(TRAILING_SLASHES, "")),
@@ -43,6 +51,7 @@ export const getConfig = (env: Env): Config =>
   configSchema.parse({
     awsAccessKeyId: env.AWS_ACCESS_KEY_ID,
     awsSecretAccessKey: env.AWS_SECRET_ACCESS_KEY,
+    mcpToken: env.MCP_TOKEN,
     publicUrl: env.PUBLIC_URL,
     sesConfigurationSet: emptyToUndefined(env.SES_CONFIGURATION_SET),
     sesEventsTopicArn: emptyToUndefined(env.SES_EVENTS_TOPIC_ARN),

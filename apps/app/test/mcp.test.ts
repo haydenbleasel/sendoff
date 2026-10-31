@@ -1,0 +1,245 @@
+import {
+  Client,
+  StreamableHTTPClientTransport,
+} from "@modelcontextprotocol/client";
+import { env, exports } from "cloudflare:workers";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "vitest";
+
+import type { JsonValue } from "../src/json";
+import { BASE_URL, mockNetwork, statusOf } from "./helpers";
+
+let client: Client;
+let network: ReturnType<typeof mockNetwork>;
+
+const workerFetch = (input: string | URL | Request, init?: RequestInit) =>
+  exports.default.fetch(new Request(input, init));
+
+beforeAll(async () => {
+  client = new Client({ name: "sendoff-tests", version: "1.0.0" });
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(`${BASE_URL}/mcp`), {
+      fetch: workerFetch,
+      requestInit: { headers: { Authorization: `Bearer ${env.MCP_TOKEN}` } },
+    })
+  );
+});
+
+afterAll(async () => {
+  await client.close();
+});
+
+beforeEach(() => {
+  network = mockNetwork();
+});
+
+afterEach(() => network.restore());
+
+const call = async (name: string, args: Record<string, JsonValue> = {}) => {
+  const response = await client.callTool({ arguments: args, name });
+  const content = Array.isArray(response.content) ? response.content : [];
+
+  const text = content
+    .flatMap((block) => (block.type === "text" ? [block.text] : []))
+    .join("\n");
+
+  return { isError: response.isError === true, text };
+};
+
+/** The JSON block tool results end with. */
+const dataOf = (text: string) =>
+  JSON.parse(text.slice(text.indexOf("\n\n{") + 2));
+
+describe("auth", () => {
+  it("rejects requests without the bearer token", async () => {
+    const response = await workerFetch(`${BASE_URL}/mcp`, {
+      body: JSON.stringify({ id: 1, jsonrpc: "2.0", method: "tools/list" }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("www-authenticate")).toContain("Bearer");
+  });
+});
+
+describe("tools", () => {
+  it("lists every tool with descriptions", async () => {
+    const { tools } = await client.listTools();
+    const names = tools.map((tool) => tool.name).toSorted();
+
+    expect(names).toStrictEqual([
+      "add_subscriber",
+      "create_draft",
+      "delete_draft",
+      "edit_draft",
+      "get_draft",
+      "get_settings",
+      "import_from_resend",
+      "import_subscribers",
+      "list_issues",
+      "preview_draft",
+      "search_subscribers",
+      "set_draft_meta",
+      "unsubscribe_subscriber",
+      "update_settings",
+    ]);
+    expect(tools.every((tool) => (tool.description ?? "").length > 20)).toBe(
+      true
+    );
+    expect(
+      tools.find((tool) => tool.name === "delete_draft")?.annotations
+        ?.destructiveHint
+    ).toBe(true);
+  });
+
+  it("sets up the newsletter, warning that the sender isn't in SES yet", async () => {
+    const empty = await call("get_settings");
+
+    expect(empty.text).toContain("isn't set up yet");
+
+    const incomplete = await call("update_settings", { name: "Only a name" });
+    expect(incomplete.isError).toBe(true);
+
+    const saved = await call("update_settings", {
+      address: "1 Test Lane, Sydney",
+      from: { email: "hello@example.com", name: "Tester" },
+      name: "Test Newsletter",
+    });
+
+    expect(saved.isError).toBe(false);
+    expect(saved.text).toContain("example.com isn't set up in SES");
+
+    const renamed = await call("update_settings", {
+      accent: "#FF0066",
+      replyTo: null,
+    });
+
+    expect(dataOf(renamed.text)).toMatchObject({
+      accent: "#ff0066",
+      name: "Test Newsletter",
+    });
+  });
+
+  it("drafts, edits and previews an issue", async () => {
+    const created = await call("create_draft", {
+      body: "# Hello\n\nFirst draft of the issue.",
+      preheader: "A short preview",
+      subject: "Issue one",
+    });
+
+    const draft = dataOf(created.text);
+
+    expect(created.text).toContain(
+      "Preview: https://news.example.com/preview/"
+    );
+    expect(draft).toMatchObject({
+      slug: "issue-one",
+      status: "draft",
+      version: 1,
+    });
+
+    const edited = await call("edit_draft", {
+      edits: [{ newText: "Second", oldText: "First" }],
+      expectedVersion: 1,
+      issue: "issue-one",
+    });
+
+    expect(dataOf(edited.text).version).toBe(2);
+
+    const fetched = await call("get_draft", { issue: draft.id });
+    expect(dataOf(fetched.text).body).toBe(
+      "# Hello\n\nSecond draft of the issue."
+    );
+
+    const preview = await call("preview_draft", { issue: "issue-one" });
+    expect(preview.text).toContain("Plain-text version:");
+    expect(preview.text).toContain("Second draft of the issue.");
+
+    const listed = await call("list_issues", { status: "draft" });
+    expect(listed.text).toContain("issue-one");
+  });
+
+  it("reports Markdown problems and failed edits as tool errors the agent can fix", async () => {
+    const created = await call("create_draft", {
+      body: "<div>raw html</div>",
+      subject: "Broken",
+    });
+
+    expect(created.isError).toBe(false);
+    expect(created.text).toContain("Line 1: Raw HTML isn't supported");
+
+    const missing = await call("edit_draft", {
+      edits: [{ newText: "x", oldText: "not in the draft" }],
+      issue: "broken",
+    });
+
+    expect(missing.isError).toBe(true);
+    expect(missing.text).toContain("isn't in the draft");
+
+    const unknown = await call("get_draft", { issue: "nope" });
+    expect(unknown).toMatchObject({ isError: true });
+
+    const deleted = await call("delete_draft", { issue: "broken" });
+
+    expect(deleted.text).toContain("Deleted");
+  });
+
+  it("imports, searches, adds and unsubscribes subscribers", async () => {
+    const dryRun = await call("import_subscribers", {
+      dryRun: true,
+      subscribers: [{ email: "csv-a@example.com" }],
+    });
+
+    expect(dryRun.text).toContain("Nothing was written");
+    expect(await statusOf("csv-a@example.com")).toBeUndefined();
+
+    await call("import_subscribers", {
+      subscribers: [
+        { email: "csv-a@example.com" },
+        { email: "csv-b@example.com", status: "unsubscribed" },
+      ],
+    });
+
+    const resend = await call("import_from_resend", { apiKey: "re_test" });
+    expect(resend.text).toContain(
+      "Fetched 2 contacts from Resend (1 unsubscribed)"
+    );
+    expect(await statusOf("resend-b@example.com")).toBe("unsubscribed");
+
+    const confirmed = await call("add_subscriber", {
+      email: "new@example.com",
+    });
+
+    expect(confirmed.text).toContain("Sent a confirmation email");
+    expect(network.sent.map((email) => email.to)).toContain("new@example.com");
+
+    const direct = await call("add_subscriber", {
+      email: "asked@example.com",
+      skipConfirmation: true,
+    });
+
+    expect(direct.text).toContain("active subscriber");
+
+    const refused = await call("add_subscriber", {
+      email: "csv-b@example.com",
+      skipConfirmation: true,
+    });
+
+    expect(refused.text).toContain("won't be re-added");
+
+    await call("unsubscribe_subscriber", { email: "CSV-A@example.com" });
+    expect(await statusOf("csv-a@example.com")).toBe("unsubscribed");
+
+    const search = await call("search_subscribers", { query: "csv-" });
+    expect(dataOf(search.text).subscribers).toHaveLength(2);
+    expect(dataOf(search.text).counts).toMatchObject({ active: 2, pending: 1 });
+  });
+});

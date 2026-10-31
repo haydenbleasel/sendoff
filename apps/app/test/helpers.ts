@@ -85,6 +85,36 @@ export const mockNetwork = () => {
         return Response.json({ MessageId: `msg-${sent.length}` });
       }
 
+      if (request.url.includes(".amazonaws.com/v2/email/identities/")) {
+        return Response.json(
+          { message: "Identity not found" },
+          { headers: { "x-amzn-ErrorType": "NotFoundException" }, status: 404 }
+        );
+      }
+
+      if (request.url.startsWith("https://api.resend.com/contacts")) {
+        return Response.json({
+          data: [
+            {
+              email: "resend-a@example.com",
+              first_name: "Ada",
+              id: "1",
+              last_name: null,
+              unsubscribed: false,
+            },
+            {
+              email: "resend-b@example.com",
+              first_name: null,
+              id: "2",
+              last_name: null,
+              unsubscribed: true,
+            },
+          ],
+          has_more: false,
+          object: "list",
+        });
+      }
+
       if (request.url === TEST_SNS_CERT_URL) {
         return new Response(TEST_SNS_CERT);
       }

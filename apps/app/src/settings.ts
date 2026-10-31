@@ -52,7 +52,19 @@ export type Settings = z.output<typeof settingsSchema>;
 
 export type SettingsInput = z.input<typeof settingsSchema>;
 
-export const getSettings = async (db: Database): Promise<Settings | null> => {
+/** Possibly incomplete settings, validated by saveSettings. */
+export type SettingsDraft = {
+  [Key in keyof SettingsInput]?: SettingsInput[Key] | undefined;
+};
+
+export interface SettingsRecord {
+  settings: Settings;
+  updatedAt: Date;
+}
+
+export const getSettingsRecord = async (
+  db: Database
+): Promise<SettingsRecord | null> => {
   const row = await db.query.settings.findFirst({
     where: eq(settingsTable.id, SETTINGS_ROW_ID),
   });
@@ -61,12 +73,18 @@ export const getSettings = async (db: Database): Promise<Settings | null> => {
     return null;
   }
 
-  return settingsSchema.parse(row.data);
+  return { settings: settingsSchema.parse(row.data), updatedAt: row.updatedAt };
+};
+
+export const getSettings = async (db: Database): Promise<Settings | null> => {
+  const record = await getSettingsRecord(db);
+
+  return record?.settings ?? null;
 };
 
 export const saveSettings = async (
   db: Database,
-  input: SettingsInput
+  input: SettingsDraft
 ): Promise<Settings> => {
   const data = settingsSchema.parse(input);
   const updatedAt = new Date();

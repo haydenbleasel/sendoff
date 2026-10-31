@@ -8,15 +8,7 @@ import {
   text,
 } from "drizzle-orm/sqlite-core";
 
-type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonValue[]
-  | { [key: string]: JsonValue };
-
-type JsonObject = Record<string, JsonValue>;
+import type { JsonObject } from "../json";
 
 export const subscriberStatuses = [
   "pending",

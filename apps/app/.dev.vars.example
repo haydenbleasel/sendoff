@@ -4,6 +4,9 @@ PUBLIC_URL=http://localhost:8787
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
 
+# Bearer token your agent sends to /mcp. Any long random string, e.g. `openssl rand -hex 32`.
+MCP_TOKEN=
+
 # Signs confirm and unsubscribe links. Any long random string, e.g. `openssl rand -hex 32`.
 TOKEN_SECRET=
 
