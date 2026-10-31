@@ -19,7 +19,7 @@ A self-hosted, newsletter-only email tool that you drive from an agent. You depl
 
 Sendoff is one Worker app (`apps/app`). There's no published framework package and no generated project.
 
-- **Deploying:** clone the repo, or use a Deploy to Cloudflare button, then run `bun run setup` (see [Setup flow](#setup-flow)) and `bun run deploy`.
+- **Deploying:** clone the repo and run `bun run setup` (see [Setup flow](#setup-flow)); later, `bun run deploy` ships updates. A Deploy to Cloudflare button comes later.
 - **Customizing doesn't touch code.** Brand and sender settings live in D1 and are edited through MCP: "make the accent color #ff0066" or "add my GitHub link". A user's copy never drifts from upstream, so updating is just pulling and redeploying.
 - **Where config lives:**
   - Secrets are Worker secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `TOKEN_SECRET` (signs links), `TURNSTILE_SECRET_KEY`, and later the MCP token.
@@ -231,18 +231,26 @@ Later optimization: SES `SendBulkEmail` (50 destinations per call) with per-dest
 
 ## Setup flow
 
-`bun run setup` walks through these steps. Each one is idempotent, so the flow can be re-run.
+`bun run setup` (in `scripts/setup.ts`) connects Sendoff to your accounts and deploys it. Every step checks what already exists, so it's safe to re-run; progress is kept in the gitignored `apps/app/.sendoff/instance.json`.
 
-1. Ask for the newsletter name, sender, reply-to and postal address. These become the initial settings row.
-2. Cloudflare: `wrangler login`, check the account is on Workers Paid (stop with a clear message if not), then create the D1 database, the queue and Turnstile keys.
-3. AWS:
-   - Print a least-privilege IAM policy, then ask for keys and store them as Worker secrets.
-   - Create the SES domain identity, the custom MAIL FROM domain, the configuration set and event destination, and the SNS topic and HTTPS subscription.
-   - Enable the account suppression list.
-4. DNS: if the zone is on Cloudflare, write the DKIM CNAMEs, MAIL FROM MX/TXT and DMARC TXT through the API. Otherwise, print the records and poll until they verify.
-5. SES production access: submit through `PutAccountDetails` (`MailType=MARKETING`, use-case text pre-filled from the settings). Warn that approval can take days and may be rejected.
-6. Deploy, confirm the SNS subscription, and run `doctor`.
-7. Print the MCP install snippets for Claude Code, Codex and Claude Desktop.
+1. **Cloudflare account:** read from `wrangler whoami` (runs `wrangler login` if needed, asks which account if there are several). It confirms the account is on Workers Paid, which can't be checked through Wrangler.
+2. **Newsletter details:** name, sender, reply-to, postal address. Then the hostname (default `news.<sender domain>`), which must be on a Cloudflare zone in the account. Links on your own domain also keep emails away from shared `workers.dev` URLs, which spam filters distrust. Then the SES region.
+3. **AWS keys:** writes a least-privilege IAM policy to `.sendoff/iam-policy.json` (SES actions, plus SNS on `sendoff-*` topics only), asks for the access key, and checks it against SES.
+4. **Optional Cloudflare API token** (Zone DNS Edit, Zone Read, Account Turnstile Edit). It's used during setup and not stored. With it, setup writes the DNS records and creates the Turnstile widget. Without it, setup prints the records and asks for Turnstile keys made in the dashboard.
+5. **Resources:** the D1 database `sendoff` and the queue `sendoff-send` through Wrangler, and a Turnstile widget for the hostname.
+6. **SES and SNS:**
+   - the domain identity with Easy DKIM, and the custom MAIL FROM `bounce.<domain>`
+   - the configuration set `sendoff`
+   - the SNS topic `sendoff-events`, with a policy letting only SES (for this configuration set) publish
+   - an event destination for bounces, complaints and rejects (no open or click tracking)
+   - the account-level suppression list
+7. **DNS:** three DKIM CNAMEs, an MX and SPF TXT for the MAIL FROM domain, and DMARC (`p=none`) only if the domain has none. Records that clash with existing ones are left alone and reported.
+8. **Deploy:** generates `.sendoff/wrangler.jsonc` from the base config plus the instance ids, applies D1 migrations, and deploys to the custom domain, uploading secrets with the version. `TOKEN_SECRET` and `MCP_TOKEN` are only generated the first time: `TOKEN_SECRET` signs every unsubscribe link ever sent, so it must never rotate.
+9. **Wire-up:** subscribes `https://<host>/webhooks/ses` to the topic and waits for the Worker to confirm it. Saves the newsletter settings through MCP, then waits for SES to verify the domain.
+10. **SES production access:** shows a pre-filled use-case description and submits it (`PutAccountDetails`, `MailType=MARKETING`) only if you confirm. Approval usually takes about a day.
+11. **Finish:** runs `doctor` and prints the MCP token once, with the `claude mcp add` command.
+
+`bun run deploy` later redeploys code changes with the same instance config, applying any new migrations first.
 
 ## Repo layout
 
@@ -262,7 +270,9 @@ The app stays self-contained (no internal workspace packages) so a Deploy to Clo
 | M2 | Subscribers | Subscribe/confirm/unsubscribe (including one-click), SNS webhook, Resend import (core; the MCP tool lands in M3). ✅ |
 | M3 | Drafting | MCP draft, settings and subscriber tools, and the live preview, verified with the official MCP client over HTTP against `wrangler dev`. ✅ |
 | M4 | Sending | Test send, prepare/confirm, queue fan-out, status/cancel/resume, `doctor`, stalled-send cron. Built and tested against a stubbed SES. ✅ **First real issue still to go out** (needs the SES account from M0). |
-| M5 | Distribution | `bun run setup`, Deploy to Cloudflare button, OAuth for claude.ai and Desktop, docs. |
+| M5a | Setup | `bun run setup` and `bun run deploy`, with your instance's ids kept out of the repo. Built; the pure parts are tested, the real run is yours. |
+| M5b | OAuth | OAuth for claude.ai and Claude Desktop connectors. |
+| M5c | Docs and deploy button | Docs site content, Deploy to Cloudflare button. |
 | M6 | Extras | Stats, prune and re-engagement, web archive and RSS, R2 image uploads. |
 
 ## Open questions

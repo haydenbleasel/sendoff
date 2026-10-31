@@ -15,7 +15,9 @@
     "check": "ultracite check",
     "fix": "ultracite fix",
     "bump-deps": "npx npm-check-updates --deep -u && bun install",
-    "prepare": "husky"
+    "prepare": "husky",
+    "setup": "cd apps/app && bun run setup",
+    "deploy": "cd apps/app && bun run deploy"
   },
   "devDependencies": {
     "@typescript/native-preview": "^7.0.0-dev.20260707.2",

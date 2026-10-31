@@ -1,0 +1,725 @@
+// `bun run setup`: connect Sendoff to your Cloudflare and AWS accounts and
+// deploy it. Every step checks what already exists, so it's safe to re-run.
+
+import { writeFileSync } from "node:fs";
+import path from "node:path";
+import { setTimeout as wait } from "node:timers/promises";
+
+import {
+  cancel,
+  confirm,
+  intro,
+  isCancel,
+  log,
+  note,
+  outro,
+  password,
+  select,
+  spinner,
+  text,
+} from "@clack/prompts";
+import {
+  Client,
+  StreamableHTTPClientTransport,
+} from "@modelcontextprotocol/client";
+
+import type { JsonObject } from "../src/json";
+import {
+  IAM_POLICY,
+  accountIdFromTopicArn,
+  createAwsSetup,
+  topicPolicy,
+} from "./setup/aws";
+import type { AwsSetup } from "./setup/aws";
+import { createCloudflareApi } from "./setup/cloudflare";
+import type { CloudflareApi } from "./setup/cloudflare";
+import { deploy } from "./setup/deploy";
+import type { Secrets } from "./setup/deploy";
+import { formatRecords, mailFromDomainFor, sesDnsRecords } from "./setup/dns";
+import {
+  INSTANCE_DIR,
+  readInstanceDraft,
+  writeInstanceDraft,
+} from "./setup/files";
+import type { InstanceDraft } from "./setup/files";
+import { wrangler, wranglerJson } from "./setup/wrangler";
+
+const WORKER_NAME = "sendoff";
+const DATABASE_NAME = "sendoff";
+const QUEUE_NAME = "sendoff-send";
+const CONFIGURATION_SET = "sendoff";
+const TOPIC_NAME = "sendoff-events";
+const SECRET_BYTES = 32;
+const HEX = 16;
+const POLL_MS = 5000;
+const POLL_ATTEMPTS = 24;
+
+const REGIONS = [
+  "us-east-1",
+  "us-east-2",
+  "us-west-2",
+  "eu-west-1",
+  "eu-central-1",
+  "ap-southeast-2",
+];
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
+const HOSTNAME = /^(?:[a-z\d](?:[a-z\d-]*[a-z\d])?\.)+[a-z]{2,}$/u;
+
+// --- Prompt helpers -------------------------------------------------------------
+
+const answer = <T>(value: T): Exclude<T, symbol> => {
+  if (isCancel(value)) {
+    cancel("Setup cancelled. Run it again any time; finished steps are kept.");
+    process.exit(0);
+  }
+
+  // SAFETY: isCancel is true for the only symbol a clack prompt returns.
+  return value as Exclude<T, symbol>;
+};
+
+const ask = async (
+  message: string,
+  options: {
+    initial?: string | undefined;
+    placeholder?: string;
+    validate?: (value: string) => string | undefined;
+  } = {}
+) =>
+  answer(
+    await text({
+      initialValue: options.initial ?? "",
+      message,
+      placeholder: options.placeholder ?? "",
+      validate: (value) => options.validate?.(value ?? ""),
+    })
+  ).trim();
+
+const required = (label: string) => (value: string) =>
+  value.trim() ? undefined : `${label} is required.`;
+
+const validEmail = (value: string) =>
+  EMAIL.test(value.trim()) ? undefined : "Enter a valid email address.";
+
+const randomSecret = () =>
+  [...crypto.getRandomValues(new Uint8Array(SECRET_BYTES))]
+    .map((byte) => byte.toString(HEX).padStart(2, "0"))
+    .join("");
+
+const fail = (message: string): never => {
+  log.error(message);
+  process.exit(1);
+};
+
+// --- Steps --------------------------------------------------------------------------
+
+interface Newsletter {
+  address: string;
+  description?: string | undefined;
+  fromEmail: string;
+  fromName: string;
+  name: string;
+  replyTo?: string | undefined;
+}
+
+const cloudflareAccount = async (draft: InstanceDraft) => {
+  let whoami = wranglerJson<{
+    accounts?: { id: string; name: string }[];
+    email?: string;
+  }>(["whoami"]);
+
+  if (!whoami) {
+    log.step("Log in to Cloudflare in the browser window that opens.");
+    wrangler(["login"], { interactive: true });
+    whoami = wranglerJson(["whoami"]);
+  }
+
+  const accounts = whoami?.accounts ?? [];
+
+  if (accounts.length === 0) {
+    return fail(
+      "Couldn't find a Cloudflare account. Run `bunx wrangler login` and try again."
+    );
+  }
+
+  const accountId =
+    accounts.length === 1
+      ? (accounts[0]?.id ?? "")
+      : answer(
+          await select<string>({
+            initialValue: draft.accountId ?? accounts[0]?.id ?? "",
+            message: "Which Cloudflare account?",
+            options: accounts.map((account) => ({
+              label: account.name,
+              value: account.id,
+            })),
+          })
+        );
+
+  const paid = answer(
+    await confirm({
+      message:
+        "Sendoff needs the Workers Paid plan ($5/month): rendering an email can take more CPU than the free plan allows. Is this account on it?",
+    })
+  );
+
+  if (!paid) {
+    fail(
+      "Upgrade at https://dash.cloudflare.com/?to=/:account/workers/plans, then run setup again."
+    );
+  }
+
+  return accountId;
+};
+
+const newsletterDetails = async (): Promise<Newsletter> => {
+  note(
+    "These go in every email's header and footer. Change them later by asking your agent.",
+    "Your newsletter"
+  );
+
+  const name = await ask("Newsletter name", {
+    placeholder: "The Weekly Thing",
+    validate: required("A name"),
+  });
+
+  const fromName = await ask("Sender name", {
+    placeholder: "Jane Doe",
+    validate: required("A sender name"),
+  });
+
+  const senderEmail = await ask("Sender email (its domain must be yours)", {
+    placeholder: "hello@example.com",
+    validate: validEmail,
+  });
+
+  const fromEmail = senderEmail.toLowerCase();
+
+  const replyTo = await ask("Reply-to address (optional)", {
+    placeholder: "Leave empty to use the sender",
+    validate: (value) => (value.trim() === "" ? undefined : validEmail(value)),
+  });
+
+  const address = await ask(
+    "Postal address for the footer (required by anti-spam law)",
+    {
+      placeholder: "1 Example St, Sydney NSW 2000, Australia",
+      validate: required("A postal address"),
+    }
+  );
+
+  return { address, fromEmail, fromName, name, replyTo: replyTo || undefined };
+};
+
+const awsCredentials = async (region: string) => {
+  const policyFile = path.join(INSTANCE_DIR, "iam-policy.json");
+
+  writeFileSync(policyFile, `${JSON.stringify(IAM_POLICY, null, 2)}\n`);
+  note(
+    [
+      "Create an IAM user for Sendoff in the AWS console, attach this policy, and create an access key:",
+      policyFile,
+      "",
+      "It allows SES and Sendoff's own SNS topics, nothing else. The keys are stored as Worker secrets.",
+    ].join("\n"),
+    "AWS access"
+  );
+
+  const accessKeyId = await ask("AWS access key ID", {
+    validate: required("The access key ID"),
+  });
+
+  const secretAccessKey = answer(
+    await password({
+      message: "AWS secret access key",
+      validate: (value) => required("The secret")(value ?? ""),
+    })
+  ).trim();
+
+  return { accessKeyId, region, secretAccessKey };
+};
+
+const cloudflareToken = async (): Promise<CloudflareApi | null> => {
+  note(
+    [
+      "With an API token, setup adds your DNS records and creates the Turnstile widget for the signup page.",
+      "Create one at https://dash.cloudflare.com/profile/api-tokens with:",
+      "  Zone > DNS > Edit, Zone > Zone > Read (for your domain)",
+      "  Account > Turnstile > Edit",
+      "It's only used now and isn't stored. Leave it empty to do those steps by hand.",
+    ].join("\n"),
+    "Cloudflare API token (optional)"
+  );
+
+  const token = answer(
+    await password({ message: "Cloudflare API token" })
+  ).trim();
+
+  if (!token) {
+    return null;
+  }
+
+  const api = createCloudflareApi(token);
+
+  try {
+    await api.verifyToken();
+
+    return api;
+  } catch (error) {
+    log.warn(
+      `That token didn't work (${error instanceof Error ? error.message : String(error)}). Continuing without it.`
+    );
+
+    return null;
+  }
+};
+
+const ensureDatabase = (): string => {
+  const find = () =>
+    wranglerJson<{ name: string; uuid: string }[]>(["d1", "list"])?.find(
+      (database) => database.name === DATABASE_NAME
+    )?.uuid;
+
+  const existing = find();
+
+  if (existing) {
+    return existing;
+  }
+
+  const created = wrangler(["d1", "create", DATABASE_NAME]);
+
+  if (!created.ok) {
+    return fail(`Creating the D1 database failed:\n${created.output}`);
+  }
+
+  return find() ?? fail("Created the D1 database but couldn't find its ID.");
+};
+
+const ensureQueue = () => {
+  const created = wrangler(["queues", "create", QUEUE_NAME]);
+
+  if (!created.ok && !created.output.toLowerCase().includes("already")) {
+    fail(`Creating the queue failed:\n${created.output}`);
+  }
+};
+
+const turnstileKeys = async (
+  cloudflare: CloudflareApi | null,
+  accountId: string,
+  hostname: string,
+  existingSiteKey: string | undefined
+) => {
+  if (cloudflare) {
+    const widget = existingSiteKey
+      ? await cloudflare
+          .getTurnstileWidget(accountId, existingSiteKey)
+          .catch(() => null)
+      : null;
+
+    return (
+      widget ??
+      (await cloudflare.createTurnstileWidget(accountId, "Sendoff signup", [
+        hostname,
+      ]))
+    );
+  }
+
+  note(
+    `Create a Turnstile widget for ${hostname} at https://dash.cloudflare.com/?to=/:account/turnstile and paste its keys.`,
+    "Turnstile (protects the signup page from bots)"
+  );
+
+  const sitekey = await ask("Turnstile site key", {
+    initial: existingSiteKey,
+    validate: required("The site key"),
+  });
+
+  const secret = answer(
+    await password({
+      message: "Turnstile secret key",
+      validate: (value) => required("The secret")(value ?? ""),
+    })
+  ).trim();
+
+  return { secret, sitekey };
+};
+
+const configureSes = async (aws: AwsSetup, domain: string, region: string) => {
+  const identity = await aws.ensureDomainIdentity(domain);
+  const mailFromDomain = mailFromDomainFor(domain);
+
+  if (identity.mailFromDomain !== mailFromDomain) {
+    await aws.setMailFromDomain(domain, mailFromDomain);
+  }
+
+  await aws.ensureConfigurationSet(CONFIGURATION_SET);
+  const topicArn = await aws.ensureTopic(TOPIC_NAME);
+
+  await aws.setTopicPolicy(
+    topicArn,
+    topicPolicy({
+      accountId: accountIdFromTopicArn(topicArn),
+      configurationSet: CONFIGURATION_SET,
+      region,
+      topicArn,
+    })
+  );
+  await aws.ensureEventDestination(CONFIGURATION_SET, topicArn);
+  await aws.enableSuppressionList();
+
+  return { identity, mailFromDomain, topicArn };
+};
+
+const hasDmarc = async (domain: string): Promise<boolean> => {
+  const response = await fetch(
+    `https://cloudflare-dns.com/dns-query?name=_dmarc.${domain}&type=TXT`,
+    {
+      headers: { accept: "application/dns-json" },
+    }
+  );
+
+  const body = await response.text();
+
+  return body.toLowerCase().includes("v=dmarc1");
+};
+
+const configureDns = async (
+  cloudflare: CloudflareApi | null,
+  records: ReturnType<typeof sesDnsRecords>,
+  domain: string
+) => {
+  const zone = cloudflare
+    ? await cloudflare.findZone(domain).catch(() => null)
+    : null;
+
+  if (!(cloudflare && zone)) {
+    note(formatRecords(records), `Add these DNS records for ${domain}`);
+    answer(
+      await confirm({
+        message: "Added them? (Setup checks they've verified at the end.)",
+      })
+    );
+
+    return;
+  }
+
+  const outcomes = [];
+
+  for (const record of records) {
+    // oxlint-disable-next-line no-await-in-loop -- a handful of records, in order
+    const outcome = await cloudflare.ensureDnsRecord(zone.id, record);
+
+    outcomes.push({ outcome, record });
+  }
+
+  const conflicts = outcomes.flatMap((item) =>
+    item.outcome === "conflict" ? [item.record] : []
+  );
+
+  log.success(
+    `DNS: ${outcomes.filter((item) => item.outcome === "created").length} records added, ${outcomes.filter((item) => item.outcome === "exists").length} already there.`
+  );
+
+  if (conflicts.length > 0) {
+    note(
+      formatRecords(conflicts),
+      "These clash with existing records. Fix them by hand"
+    );
+  }
+};
+
+const waitFor = async (
+  label: string,
+  check: () => Promise<boolean>
+): Promise<boolean> => {
+  const progress = spinner();
+
+  progress.start(label);
+
+  for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt += 1) {
+    // oxlint-disable-next-line no-await-in-loop -- polling
+    if (await check().catch(() => false)) {
+      progress.stop(`${label}: done`);
+
+      return true;
+    }
+
+    // oxlint-disable-next-line no-await-in-loop -- polling
+    await wait(POLL_MS);
+  }
+
+  progress.stop(
+    `${label}: not yet (it can take a while; run setup again later)`
+  );
+
+  return false;
+};
+
+const mcpClient = async (publicUrl: string, token: string) => {
+  const client = new Client({ name: "sendoff-setup", version: "1.0.0" });
+
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(`${publicUrl}/mcp`), {
+      requestInit: { headers: { Authorization: `Bearer ${token}` } },
+    })
+  );
+
+  return client;
+};
+
+const toolText = (result: Awaited<ReturnType<Client["callTool"]>>): string =>
+  (Array.isArray(result.content) ? result.content : [])
+    .flatMap((block) => (block.type === "text" ? [block.text] : []))
+    .join("\n");
+
+const requestProductionAccess = async (
+  aws: AwsSetup,
+  newsletter: Newsletter,
+  publicUrl: string
+) => {
+  const account = await aws.getAccount();
+
+  if (account.productionAccessEnabled) {
+    log.success("SES production access: approved.");
+
+    return;
+  }
+
+  if (account.reviewStatus === "PENDING") {
+    log.info("SES production access: AWS is still reviewing the request.");
+
+    return;
+  }
+
+  const useCase = [
+    `${newsletter.name} is an opt-in email newsletter sent a few times a year by ${newsletter.fromName}.`,
+    "People subscribe through a double opt-in form, or were imported from a previous provider with unsubscribes preserved.",
+    "Every email has a one-click unsubscribe (List-Unsubscribe and List-Unsubscribe-Post headers) and a visible unsubscribe link, honored immediately.",
+    "Bounces and complaints are received through SES event publishing to SNS and suppressed automatically, and the account-level suppression list is enabled.",
+    `Signup page: ${publicUrl}`,
+  ].join(" ");
+
+  note(useCase, "Request SES production access with this description");
+
+  const go = answer(
+    await confirm({
+      message:
+        "Submit it to AWS? Approval usually takes a day or so, and AWS may ask follow-up questions by email.",
+    })
+  );
+
+  if (go) {
+    await aws.requestProductionAccess({
+      contactEmail: newsletter.replyTo ?? newsletter.fromEmail,
+      useCase,
+      websiteUrl: publicUrl,
+    });
+    log.success("Requested SES production access.");
+  }
+};
+
+// --- Main ---------------------------------------------------------------------------
+
+const main = async () => {
+  const draft = readInstanceDraft();
+
+  const save = (changes: InstanceDraft) => {
+    Object.assign(draft, changes);
+    writeInstanceDraft(draft);
+  };
+
+  intro("Sendoff setup");
+
+  const accountId = await cloudflareAccount(draft);
+  save({ accountId });
+
+  const newsletter = await newsletterDetails();
+  const domain = newsletter.fromEmail.split("@")[1] ?? "";
+
+  const hostnameAnswer = await ask(
+    "Where should Sendoff live? (A subdomain on Cloudflare, used for signup and unsubscribe links)",
+    {
+      initial: draft.hostname ?? `news.${domain}`,
+      validate: (value) =>
+        HOSTNAME.test(value.trim().toLowerCase())
+          ? undefined
+          : "Enter a hostname like news.example.com.",
+    }
+  );
+
+  const hostname = hostnameAnswer.toLowerCase();
+
+  const publicUrl = `https://${hostname}`;
+  save({ hostname, publicUrl, workerName: WORKER_NAME });
+
+  const region = answer(
+    await select({
+      initialValue: draft.sesRegion ?? "us-east-1",
+      message: "AWS region for SES",
+      options: REGIONS.map((value) => ({ label: value, value })),
+    })
+  );
+
+  const credentials = await awsCredentials(region);
+  const aws = createAwsSetup(credentials);
+  const progress = spinner();
+
+  progress.start("Checking the AWS keys");
+  await aws
+    .getAccount()
+    .catch((error: Error) =>
+      fail(`Those AWS keys didn't work: ${error.message}`)
+    );
+  progress.stop("AWS keys work");
+
+  const cloudflare = await cloudflareToken();
+
+  progress.start("Creating the database and queue");
+  const databaseId = ensureDatabase();
+  ensureQueue();
+  save({ databaseId, databaseName: DATABASE_NAME, queueName: QUEUE_NAME });
+  progress.stop("Database and queue ready");
+
+  const turnstile = await turnstileKeys(
+    cloudflare,
+    accountId,
+    hostname,
+    draft.turnstileSiteKey
+  );
+
+  save({ turnstileSiteKey: turnstile.sitekey });
+
+  progress.start("Setting up SES and SNS");
+  const ses = await configureSes(aws, domain, region);
+  save({
+    sesConfigurationSet: CONFIGURATION_SET,
+    sesEventsTopicArn: ses.topicArn,
+    sesRegion: region,
+  });
+  progress.stop("SES identity, configuration set and event topic ready");
+
+  const records = sesDnsRecords({
+    dkimTokens: ses.identity.dkimTokens,
+    dmarc: !(await hasDmarc(domain).catch(() => false)),
+    domain,
+    mailFromDomain: ses.mailFromDomain,
+    region,
+  });
+
+  await configureDns(cloudflare, records, domain);
+
+  const existingSecrets = new Set(
+    (
+      wranglerJson<{ name: string }[]>([
+        "secret",
+        "list",
+        "--name",
+        WORKER_NAME,
+        "--format",
+        "json",
+      ]) ?? []
+    ).map((secret) => secret.name)
+  );
+
+  const mcpToken = existingSecrets.has("MCP_TOKEN")
+    ? undefined
+    : randomSecret();
+
+  const secrets: Secrets = {
+    AWS_ACCESS_KEY_ID: credentials.accessKeyId,
+    AWS_SECRET_ACCESS_KEY: credentials.secretAccessKey,
+    TURNSTILE_SECRET_KEY: turnstile.secret,
+  };
+
+  // Never rotate: it signs the unsubscribe links in every email already sent.
+  if (!existingSecrets.has("TOKEN_SECRET")) {
+    secrets.TOKEN_SECRET = randomSecret();
+  }
+
+  if (mcpToken) {
+    secrets.MCP_TOKEN = mcpToken;
+  }
+
+  progress.start(`Deploying to ${publicUrl}`);
+
+  try {
+    deploy(secrets);
+  } catch (error) {
+    progress.stop("Deploy failed");
+    fail(error instanceof Error ? error.message : String(error));
+  }
+
+  progress.stop(`Deployed to ${publicUrl}`);
+
+  const webhook = `${publicUrl}/webhooks/ses`;
+
+  if ((await aws.subscriptionState(ses.topicArn, webhook)) !== "confirmed") {
+    await aws.subscribeHttps(ses.topicArn, webhook);
+  }
+
+  await waitFor(
+    "Confirming the SNS subscription",
+    async () =>
+      (await aws.subscriptionState(ses.topicArn, webhook)) === "confirmed"
+  );
+
+  const token =
+    mcpToken ??
+    answer(
+      await password({
+        message:
+          "Your existing MCP token (to save the newsletter settings), or leave empty to skip",
+      })
+    ).trim();
+
+  if (token) {
+    const client = await mcpClient(publicUrl, token).catch((error: Error) =>
+      fail(`Couldn't reach ${publicUrl}/mcp: ${error.message}`)
+    );
+
+    const settings: JsonObject = {
+      address: newsletter.address,
+      from: { email: newsletter.fromEmail, name: newsletter.fromName },
+      name: newsletter.name,
+    };
+
+    if (newsletter.replyTo) {
+      settings.replyTo = newsletter.replyTo;
+    }
+
+    await client.callTool({ arguments: settings, name: "update_settings" });
+    log.success("Saved the newsletter settings.");
+
+    await waitFor("Waiting for SES to verify your domain", async () => {
+      const identity = await aws.ensureDomainIdentity(domain);
+
+      return identity.verified;
+    });
+    await requestProductionAccess(aws, newsletter, publicUrl);
+
+    note(
+      toolText(await client.callTool({ arguments: {}, name: "doctor" })),
+      "Preflight checks"
+    );
+    await client.close();
+  }
+
+  if (mcpToken) {
+    note(
+      [
+        "Connect your agent (this token is shown once; keep it somewhere safe):",
+        "",
+        `claude mcp add --transport http sendoff ${publicUrl}/mcp --header "Authorization: Bearer ${mcpToken}"`,
+        "",
+        `Codex: add an MCP server with URL ${publicUrl}/mcp and bearer token ${mcpToken}`,
+      ].join("\n"),
+      "Your MCP token"
+    );
+  }
+
+  outro(
+    `Sendoff is live at ${publicUrl}. Ask your agent to draft your first issue.`
+  );
+};
+
+await main();
