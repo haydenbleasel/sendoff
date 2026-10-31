@@ -1,8 +1,11 @@
 import { Hono } from "hono";
+import { secureHeaders } from "hono/secure-headers";
 
 import { createDb } from "./db/client";
 import { renderIssue } from "./email/render";
 import { sampleIssue, sampleSettings } from "./email/sample";
+import { publicRoutes } from "./routes/public";
+import { webhookRoutes } from "./routes/webhooks";
 import { getSettings } from "./settings";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -25,6 +28,20 @@ app.get("/preview/sample", async (c) => {
 
   return c.html(result.html);
 });
+
+app.route("/", webhookRoutes);
+
+// Pages people visit: lock down framing and referrers (URLs carry tokens),
+// and don't cache anything personal.
+app.use("*", secureHeaders());
+
+app.use("*", (c, next) => {
+  c.header("Cache-Control", "no-store");
+
+  return next();
+});
+
+app.route("/", publicRoutes);
 
 export default {
   fetch: app.fetch,

@@ -1,0 +1,1 @@
+ALTER TABLE `subscribers` ADD `confirmation_sent_at` integer;

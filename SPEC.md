@@ -22,14 +22,16 @@ Sendoff is one Worker app (`apps/app`). There's no published framework package a
 - **Deploying:** clone the repo, or use a Deploy to Cloudflare button, then run `bun run setup` (see [Setup flow](#setup-flow)) and `bun run deploy`.
 - **Customizing doesn't touch code.** Brand and sender settings live in D1 and are edited through MCP: "make the accent color #ff0066" or "add my GitHub link". A user's copy never drifts from upstream, so updating is just pulling and redeploying.
 - **Where config lives:**
-  - Secrets (AWS keys, MCP token, signing secret) are Worker secrets.
-  - Infrastructure IDs (D1, queue, SES region, configuration set) go in `wrangler.jsonc`, written by `setup`.
+  - Secrets are Worker secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `TOKEN_SECRET` (signs links), `TURNSTILE_SECRET_KEY`, and later the MCP token.
+  - Vars and infrastructure IDs go in `wrangler.jsonc`, written by `setup`: `PUBLIC_URL`, `SES_REGION`, `SES_CONFIGURATION_SET`, `SES_EVENTS_TOPIC_ARN`, `TURNSTILE_SITE_KEY`, plus the D1 and queue bindings.
+  - Locally, `.dev.vars` overrides them (`.dev.vars.example` uses Turnstile's always-pass test keys). `getConfig()` validates everything and names whatever is missing.
 
 Settings (one row in D1):
 
 ```ts
 {
   name: "Hayden's Newsletter",
+  description: "A quarterly letter about…", // optional, shown on the subscribe page
   from: { name: "Hayden Bleasel", email: "hello@example.com" }, // must match a verified SES identity
   replyTo: "hello@example.com",
   address: "123 Example St, Sydney NSW 2000", // CAN-SPAM postal address
@@ -47,11 +49,12 @@ One Worker serves everything:
 
 | Route / handler | Purpose |
 | --- | --- |
-| `GET /` | Subscribe page (Turnstile-protected). |
-| `POST /subscribe` | Creates a `pending` subscriber and sends a confirmation email (double opt-in). |
-| `GET /confirm/:token` | Marks the subscriber `active`. |
-| `GET /unsubscribe/:token` | Unsubscribe page with a resubscribe option. |
-| `POST /unsubscribe/:token` | RFC 8058 one-click endpoint targeted by `List-Unsubscribe-Post`. |
+| `GET /` | Subscribe page (Turnstile plus a honeypot field). |
+| `POST /subscribe` | Creates a `pending` subscriber and sends a confirmation email (double opt-in), at most once per 10 minutes per address. Always redirects to `/check-inbox`, whatever the outcome, so the form can't reveal who's subscribed. |
+| `GET /confirm/:token` | Marks a `pending` subscriber `active`. An old link can't undo an unsubscribe. |
+| `GET /unsubscribe/:token` | Asks for confirmation only. Link scanners load URLs in emails, so a GET must never unsubscribe. |
+| `POST /unsubscribe/:token` | Unsubscribes: the page's button, and RFC 8058 one-click POSTs from mail providers. `?issue=` attributes it to an issue. |
+| `POST /resubscribe/:token` | Undoes an unsubscribe from the same link. |
 | `POST /webhooks/ses` | SNS endpoint for SES events. Verifies the SNS signature and handles `SubscriptionConfirmation`. |
 | `GET /preview/:issueId` | Live preview, with mobile/desktop and light/dark toggles. Polls a version endpoint and re-renders on change. |
 | `/mcp` | MCP server. |
@@ -72,8 +75,9 @@ Workers Paid gives 30 s CPU per request (15 min per queue consumer run) and 10,0
 ## Data model (D1)
 
 ```
-subscribers  id (ulid) PK, email UNIQUE (lowercased), name, status, source,
-             created_at, confirmed_at, unsubscribed_at, last_engaged_at, metadata JSON
+subscribers  id (UUIDv7) PK, email UNIQUE (lowercased), name, status, source,
+             created_at, confirmed_at, confirmation_sent_at, unsubscribed_at,
+             last_engaged_at, metadata JSON
              status: pending | active | unsubscribed | bounced | complained
              source: import | form | mcp
 
@@ -92,7 +96,7 @@ events       id PK, message_id, issue_id, subscriber_id, type, detail JSON, at
 settings     id = 1 PK, data JSON (validated with a schema), updated_at
 ```
 
-Unsubscribe and confirm tokens are `subscriberId.hmac(secret, subscriberId + purpose)`. They're stateless and never expire, because unsubscribe links must keep working for years.
+Unsubscribe and confirm tokens are `subscriberId.base64url(HMAC-SHA256(TOKEN_SECRET, purpose:subscriberId))`, truncated to 128 bits and compared in constant time. They're stateless and never expire, because unsubscribe links must keep working for years. Rotating `TOKEN_SECRET` invalidates every link in past emails, so don't.
 
 ## Content and template
 
@@ -113,7 +117,7 @@ Unsubscribe and confirm tokens are `subscriberId.hmac(secret, subscriberId + pur
 | Setup | `doctor` | Checks SES identity verified, DKIM `SUCCESS`, MAIL FROM status, DMARC record present, production access (not sandbox), sending enabled, quota versus active subscribers, SNS subscription confirmed, account suppression list on. |
 | Drafts | `create_draft`, `get_draft`, `edit_draft`, `set_meta`, `list_issues`, `preview_draft` | `edit_draft` uses find/replace (old/new strings) and bumps `version`. `preview_draft` returns the preview URL. |
 | Sending | `send_test`, `prepare_send`, `confirm_send`, `send_status`, `cancel_send` | See [Send pipeline](#send-pipeline). `confirm_send` is annotated `destructiveHint: true`. |
-| Subscribers | `add_subscriber`, `import_subscribers`, `import_from_resend`, `search_subscribers`, `unsubscribe`, `prune` | Imports keep unsubscribed and bounced status as suppressions. |
+| Subscribers | `add_subscriber`, `import_subscribers`, `import_from_resend`, `search_subscribers`, `unsubscribe`, `prune` | Imports can suppress an existing subscriber but never reactivate one. Resend's API exposes `unsubscribed` only, not bounces, so bounced addresses need a separate import (e.g. a dashboard export). |
 | Stats | `issue_stats`, `growth` | Clicks and unsubscribes are the trustworthy signals. Opens are unreliable because of Apple Mail Privacy Protection and aren't tracked by default. |
 
 Auth:
@@ -190,7 +194,7 @@ The app stays self-contained (no internal workspace packages) so a Deploy to Clo
 | --- | --- | --- |
 | M0 | AWS groundwork (manual, start now) | SES identity verified for the real domain, production access requested, Resend export taken (including unsubscribed and bounced). |
 | M1 | Foundation | Worker skeleton, D1 schema and migrations, SES client, email layout and renderer. Render CPU measured; Workers Paid chosen. ✅ |
-| M2 | Subscribers | Subscribe/confirm/unsubscribe (including one-click), SNS webhook, Resend import. |
+| M2 | Subscribers | Subscribe/confirm/unsubscribe (including one-click), SNS webhook, Resend import (core; the MCP tool lands in M3). ✅ |
 | M3 | Drafting | MCP draft tools and live preview working from Claude Code. |
 | M4 | Sending | Test send, prepare/confirm, queue fan-out, status/cancel, `doctor`. **First real issue goes out.** |
 | M5 | Distribution | `bun run setup`, Deploy to Cloudflare button, OAuth for claude.ai and Desktop, docs. |

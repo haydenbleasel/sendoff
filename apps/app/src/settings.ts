@@ -20,6 +20,8 @@ export const settingsSchema = z.object({
     .default("#2563eb"),
   /** Postal address shown in the footer (required by CAN-SPAM). */
   address: z.string().trim().min(1).max(300),
+  /** One or two sentences for the subscribe page. */
+  description: z.string().trim().min(1).max(280).optional(),
   from: z.object({
     email: z.email(),
     name: z.string().trim().min(1).max(100),

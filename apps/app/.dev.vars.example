@@ -1,3 +1,12 @@
-# Copy to .dev.vars for local development. `bun run setup` writes the real values.
+# Copy to .dev.vars for local development. `bun run setup` writes real values.
+PUBLIC_URL=http://localhost:8787
+
 AWS_ACCESS_KEY_ID=
 AWS_SECRET_ACCESS_KEY=
+
+# Signs confirm and unsubscribe links. Any long random string, e.g. `openssl rand -hex 32`.
+TOKEN_SECRET=
+
+# Cloudflare's Turnstile test keys: the widget always passes.
+TURNSTILE_SITE_KEY=1x00000000000000000000AA
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA

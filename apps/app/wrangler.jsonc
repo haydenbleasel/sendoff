@@ -13,10 +13,19 @@
     },
   ],
   "secrets": {
-    "required": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+    "required": [
+      "AWS_ACCESS_KEY_ID",
+      "AWS_SECRET_ACCESS_KEY",
+      "TOKEN_SECRET",
+      "TURNSTILE_SECRET_KEY",
+    ],
   },
+  // `bun run setup` fills these in. Override them locally in .dev.vars.
   "vars": {
+    "PUBLIC_URL": "",
     "SES_REGION": "us-east-1",
     "SES_CONFIGURATION_SET": "sendoff",
+    "SES_EVENTS_TOPIC_ARN": "",
+    "TURNSTILE_SITE_KEY": "",
   },
 }

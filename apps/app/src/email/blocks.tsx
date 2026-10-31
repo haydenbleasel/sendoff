@@ -82,7 +82,7 @@ const spacing = (
   marginTop: first ? 0 : top,
 });
 
-const textStyle: CSSProperties = {
+export const textStyle: CSSProperties = {
   color: light.text,
   fontSize: BODY_FONT_SIZE,
   lineHeight: BODY_LINE_HEIGHT,
@@ -331,26 +331,25 @@ const renderCode = (node: Code, placement: Placement) => (
   </pre>
 );
 
+export const buttonStyle = (theme: Theme): CSSProperties => ({
+  backgroundColor: theme.accent,
+  borderRadius: RADIUS,
+  color: theme.onAccent,
+  display: "inline-block",
+  fontSize: 15,
+  fontWeight: 600,
+  lineHeight: "20px",
+  padding: "12px 20px",
+  textDecoration: "none",
+});
+
 const renderButton = (
   node: LeafDirective,
   theme: Theme,
   placement: Placement
 ) => (
   <Section key={keyOf(node)} style={spacing(placement, 8, 28)}>
-    <Button
-      href={node.attributes?.href ?? ""}
-      style={{
-        backgroundColor: theme.accent,
-        borderRadius: RADIUS,
-        color: theme.onAccent,
-        display: "inline-block",
-        fontSize: 15,
-        fontWeight: 600,
-        lineHeight: "20px",
-        padding: "12px 20px",
-        textDecoration: "none",
-      }}
-    >
+    <Button href={node.attributes?.href ?? ""} style={buttonStyle(theme)}>
       {toText(node)}
     </Button>
   </Section>

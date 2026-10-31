@@ -80,7 +80,24 @@ const Masthead = ({ settings }: { settings: Settings }) => {
   );
 };
 
-const Footer = ({
+const FooterRule = () => (
+  <Hr
+    className={darkClass.border}
+    style={{
+      border: "none",
+      borderTop: `1px solid ${light.border}`,
+      margin: "0 0 24px",
+    }}
+  />
+);
+
+const Address = ({ settings }: { settings: Settings }) => (
+  <Text className={darkClass.muted} style={{ ...footerText, margin: 0 }}>
+    {settings.address}
+  </Text>
+);
+
+const IssueFooter = ({
   settings,
   unsubscribeUrl,
 }: {
@@ -88,14 +105,7 @@ const Footer = ({
   unsubscribeUrl: string;
 }) => (
   <Section style={{ marginTop: 48 }}>
-    <Hr
-      className={darkClass.border}
-      style={{
-        border: "none",
-        borderTop: `1px solid ${light.border}`,
-        margin: "0 0 24px",
-      }}
-    />
+    <FooterRule />
     <Text className={darkClass.muted} style={footerText}>
       You're receiving this because you subscribed to {settings.name}.{" "}
       <Link
@@ -122,20 +132,44 @@ const Footer = ({
         ))}
       </Text>
     ) : null}
-    <Text className={darkClass.muted} style={{ ...footerText, margin: 0 }}>
-      {settings.address}
-    </Text>
+    <Address settings={settings} />
   </Section>
 );
 
-export const IssueEmail = ({
+export const NoticeFooter = ({
   children,
+  settings,
+}: {
+  children: ReactNode;
+  settings: Settings;
+}) => (
+  <Section style={{ marginTop: 40 }}>
+    <FooterRule />
+    <Text className={darkClass.muted} style={footerText}>
+      {children}
+    </Text>
+    <Address settings={settings} />
+  </Section>
+);
+
+export interface EmailShellProps {
+  children: ReactNode;
+  footer: ReactNode;
+  preheader?: string | undefined;
+  settings: Settings;
+  subject: string;
+  theme: Theme;
+}
+
+/** Document, masthead and dark-mode styles shared by every email. */
+export const EmailShell = ({
+  children,
+  footer,
   preheader,
   settings,
   subject,
   theme,
-  unsubscribeUrl,
-}: IssueEmailProps) => (
+}: EmailShellProps) => (
   <Html dir="ltr" lang="en">
     <Head>
       <meta content="light dark" name="color-scheme" />
@@ -168,8 +202,27 @@ export const IssueEmail = ({
           <Masthead settings={settings} />
         </Section>
         <Section>{children}</Section>
-        <Footer settings={settings} unsubscribeUrl={unsubscribeUrl} />
+        {footer}
       </Container>
     </Body>
   </Html>
+);
+
+export const IssueEmail = ({
+  children,
+  preheader,
+  settings,
+  subject,
+  theme,
+  unsubscribeUrl,
+}: IssueEmailProps) => (
+  <EmailShell
+    footer={<IssueFooter settings={settings} unsubscribeUrl={unsubscribeUrl} />}
+    preheader={preheader}
+    settings={settings}
+    subject={subject}
+    theme={theme}
+  >
+    {children}
+  </EmailShell>
 );

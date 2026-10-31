@@ -54,6 +54,10 @@ const createdAt = () =>
 export const subscribers = sqliteTable(
   "subscribers",
   {
+    // When the last double opt-in email went out, to rate-limit resends.
+    confirmationSentAt: integer("confirmation_sent_at", {
+      mode: "timestamp_ms",
+    }),
     confirmedAt: integer("confirmed_at", { mode: "timestamp_ms" }),
     createdAt: createdAt(),
     // Stored lowercased and trimmed; uniqueness is on the normalized value.
