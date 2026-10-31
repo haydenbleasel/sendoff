@@ -8,6 +8,8 @@ import type { JsonObject } from "../../src/json";
 
 export const instanceSchema = z.object({
   accountId: z.string(),
+  /** The Worker's AWS access key ID (not secret), when setup created it, so re-runs can reuse it. */
+  awsAccessKeyId: z.string().optional(),
   databaseId: z.string(),
   databaseName: z.string().default("sendoff"),
   /** Custom domain (e.g. news.example.com). Without one, the Worker uses workers.dev. */

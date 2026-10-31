@@ -30,7 +30,15 @@ import {
   createAwsSetup,
   topicPolicy,
 } from "./setup/aws";
-import type { AwsSetup } from "./setup/aws";
+import type { AwsCredentials, AwsSetup } from "./setup/aws";
+import {
+  cliCredentials,
+  cliIdentity,
+  createRuntimeKey,
+  deleteRuntimeKey,
+  ensureRuntimeUser,
+  runtimeKeyIds,
+} from "./setup/aws-cli";
 import { createCloudflareApi } from "./setup/cloudflare";
 import type { CloudflareApi } from "./setup/cloudflare";
 import { deploy } from "./setup/deploy";
@@ -115,11 +123,21 @@ const fail = (message: string): never => {
 
 interface Newsletter {
   address: string;
-  description?: string | undefined;
   fromEmail: string;
   fromName: string;
   name: string;
   replyTo?: string | undefined;
+  /** Where people sign up today; shown to AWS when requesting production access. */
+  website: string;
+}
+
+interface AwsAccess {
+  /** Signs setup's own SES and SNS calls. */
+  provisioning: AwsCredentials;
+  /** A new key for the Worker to upload; undefined keeps the one it already has. */
+  runtime?: { accessKeyId: string; secretAccessKey: string } | undefined;
+  /** The Worker key's ID when setup created it, so re-runs can reuse it. */
+  runtimeKeyId?: string | undefined;
 }
 
 const cloudflareAccount = async (draft: InstanceDraft) => {
@@ -208,10 +226,25 @@ const newsletterDetails = async (): Promise<Newsletter> => {
     }
   );
 
-  return { address, fromEmail, fromName, name, replyTo: replyTo || undefined };
+  const website = await ask("Your website (where people sign up today)", {
+    initial: `https://${fromEmail.split("@")[1] ?? ""}`,
+    validate: (value) =>
+      URL.canParse(value.trim())
+        ? undefined
+        : "Enter a URL like https://example.com.",
+  });
+
+  return {
+    address,
+    fromEmail,
+    fromName,
+    name,
+    replyTo: replyTo || undefined,
+    website,
+  };
 };
 
-const awsCredentials = async (region: string) => {
+const manualAwsKeys = async (region: string): Promise<AwsCredentials> => {
   const policyFile = path.join(INSTANCE_DIR, "iam-policy.json");
 
   writeFileSync(policyFile, `${JSON.stringify(IAM_POLICY, null, 2)}\n`);
@@ -238,6 +271,96 @@ const awsCredentials = async (region: string) => {
 
   return { accessKeyId, region, secretAccessKey };
 };
+
+/**
+ * Prefer the AWS CLI's login: setup provisions with it, and the Worker gets a
+ * send-only key for a dedicated IAM user. Otherwise ask for keys by hand.
+ */
+const awsAccess = async (
+  region: string,
+  draft: InstanceDraft,
+  workerSecrets: Set<string>
+): Promise<AwsAccess> => {
+  const identity = cliIdentity();
+  const credentials = identity ? cliCredentials(region) : null;
+
+  if (identity && credentials) {
+    const useCli = answer(
+      await confirm({
+        message: `Use your AWS CLI login (${identity.Arn}) for setup, and create a send-only IAM user "sendoff" for the Worker?`,
+      })
+    );
+
+    if (useCli) {
+      if (identity.Arn.endsWith(":root")) {
+        log.warn(
+          "The AWS CLI is logged in as the root user. That works for setup, but AWS recommends an IAM Identity Center user for everyday use."
+        );
+      }
+
+      try {
+        ensureRuntimeUser();
+        const keys = runtimeKeyIds();
+
+        const known =
+          draft.awsAccessKeyId !== undefined &&
+          keys.includes(draft.awsAccessKeyId);
+
+        const workerHasKey =
+          workerSecrets.has("AWS_ACCESS_KEY_ID") &&
+          workerSecrets.has("AWS_SECRET_ACCESS_KEY");
+
+        if (known && workerHasKey) {
+          return {
+            provisioning: credentials,
+            runtimeKeyId: draft.awsAccessKeyId,
+          };
+        }
+
+        // A key from an earlier run whose secret never reached the Worker can't be recovered.
+        if (known && draft.awsAccessKeyId) {
+          deleteRuntimeKey(draft.awsAccessKeyId);
+        }
+
+        const runtime = createRuntimeKey();
+
+        return {
+          provisioning: credentials,
+          runtime,
+          runtimeKeyId: runtime.accessKeyId,
+        };
+      } catch (error) {
+        return fail(
+          `Setting up the sendoff IAM user failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    }
+  }
+
+  const manual = await manualAwsKeys(region);
+
+  return {
+    provisioning: manual,
+    runtime: {
+      accessKeyId: manual.accessKeyId,
+      secretAccessKey: manual.secretAccessKey,
+    },
+  };
+};
+
+const workerSecretNames = (): Set<string> =>
+  new Set(
+    (
+      wranglerJson<{ name: string }[]>([
+        "secret",
+        "list",
+        "--name",
+        WORKER_NAME,
+        "--format",
+        "json",
+      ]) ?? []
+    ).map((secret) => secret.name)
+  );
 
 const cloudflareToken = async (): Promise<CloudflareApi | null> => {
   note(
@@ -474,8 +597,7 @@ const toolText = (result: Awaited<ReturnType<Client["callTool"]>>): string =>
 
 const requestProductionAccess = async (
   aws: AwsSetup,
-  newsletter: Newsletter,
-  publicUrl: string
+  newsletter: Newsletter
 ) => {
   const account = await aws.getAccount();
 
@@ -496,7 +618,7 @@ const requestProductionAccess = async (
     "People subscribe through a double opt-in form, or were imported from a previous provider with unsubscribes preserved.",
     "Every email has a one-click unsubscribe (List-Unsubscribe and List-Unsubscribe-Post headers) and a visible unsubscribe link, honored immediately.",
     "Bounces and complaints are received through SES event publishing to SNS and suppressed automatically, and the account-level suppression list is enabled.",
-    `Signup page: ${publicUrl}`,
+    `People sign up at ${newsletter.website}.`,
   ].join(" ");
 
   note(useCase, "Request SES production access with this description");
@@ -512,7 +634,7 @@ const requestProductionAccess = async (
     await aws.requestProductionAccess({
       contactEmail: newsletter.replyTo ?? newsletter.fromEmail,
       useCase,
-      websiteUrl: publicUrl,
+      websiteUrl: newsletter.website,
     });
     log.success("Requested SES production access.");
   }
@@ -560,17 +682,21 @@ const main = async () => {
     })
   );
 
-  const credentials = await awsCredentials(region);
-  const aws = createAwsSetup(credentials);
+  const existingSecrets = workerSecretNames();
+  const access = await awsAccess(region, draft, existingSecrets);
+
+  if (access.runtimeKeyId) {
+    save({ awsAccessKeyId: access.runtimeKeyId });
+  }
+
+  const aws = createAwsSetup(access.provisioning);
   const progress = spinner();
 
-  progress.start("Checking the AWS keys");
+  progress.start("Checking AWS access");
   await aws
     .getAccount()
-    .catch((error: Error) =>
-      fail(`Those AWS keys didn't work: ${error.message}`)
-    );
-  progress.stop("AWS keys work");
+    .catch((error: Error) => fail(`AWS access didn't work: ${error.message}`));
+  progress.stop("AWS access works");
 
   const cloudflare = await cloudflareToken();
 
@@ -608,28 +734,16 @@ const main = async () => {
 
   await configureDns(cloudflare, records, domain);
 
-  const existingSecrets = new Set(
-    (
-      wranglerJson<{ name: string }[]>([
-        "secret",
-        "list",
-        "--name",
-        WORKER_NAME,
-        "--format",
-        "json",
-      ]) ?? []
-    ).map((secret) => secret.name)
-  );
-
   const mcpToken = existingSecrets.has("MCP_TOKEN")
     ? undefined
     : randomSecret();
 
-  const secrets: Secrets = {
-    AWS_ACCESS_KEY_ID: credentials.accessKeyId,
-    AWS_SECRET_ACCESS_KEY: credentials.secretAccessKey,
-    TURNSTILE_SECRET_KEY: turnstile.secret,
-  };
+  const secrets: Secrets = { TURNSTILE_SECRET_KEY: turnstile.secret };
+
+  if (access.runtime) {
+    secrets.AWS_ACCESS_KEY_ID = access.runtime.accessKeyId;
+    secrets.AWS_SECRET_ACCESS_KEY = access.runtime.secretAccessKey;
+  }
 
   // Never rotate: it signs the unsubscribe links in every email already sent.
   if (!existingSecrets.has("TOKEN_SECRET")) {
@@ -680,6 +794,7 @@ const main = async () => {
     const settings: JsonObject = {
       address: newsletter.address,
       from: { email: newsletter.fromEmail, name: newsletter.fromName },
+      links: [{ label: "Website", url: newsletter.website }],
       name: newsletter.name,
     };
 
@@ -695,7 +810,7 @@ const main = async () => {
 
       return identity.verified;
     });
-    await requestProductionAccess(aws, newsletter, publicUrl);
+    await requestProductionAccess(aws, newsletter);
 
     note(
       toolText(await client.callTool({ arguments: {}, name: "doctor" })),

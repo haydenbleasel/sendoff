@@ -235,7 +235,7 @@ Later optimization: SES `SendBulkEmail` (50 destinations per call) with per-dest
 
 1. **Cloudflare account:** read from `wrangler whoami` (runs `wrangler login` if needed, asks which account if there are several). It confirms the account is on Workers Paid, which can't be checked through Wrangler.
 2. **Newsletter details:** name, sender, reply-to, postal address. Then the hostname (default `news.<sender domain>`), which must be on a Cloudflare zone in the account. Links on your own domain also keep emails away from shared `workers.dev` URLs, which spam filters distrust. Then the SES region.
-3. **AWS keys:** writes a least-privilege IAM policy to `.sendoff/iam-policy.json` (SES actions, plus SNS on `sendoff-*` topics only), asks for the access key, and checks it against SES.
+3. **AWS access:** if the AWS CLI is logged in, setup offers to use that login (`aws configure export-credentials`, including short-lived SSO or `aws login` sessions) to provision SES and SNS. It then creates a dedicated `sendoff` IAM user with a send-only inline policy (`ses:SendEmail`, `GetAccount`, `GetEmailIdentity`, `GetConfigurationSetEventDestinations`) and an access key: the only AWS credential the Worker holds, so it can't create or change AWS resources. Re-runs reuse that key while the Worker has its secret, and only ever delete the one key setup recorded. Without the CLI, setup writes the full provisioning policy to `.sendoff/iam-policy.json` and asks for keys, which then serve both purposes.
 4. **Optional Cloudflare API token** (Zone DNS Edit, Zone Read, Account Turnstile Edit). It's used during setup and not stored. With it, setup writes the DNS records and creates the Turnstile widget. Without it, setup prints the records and asks for Turnstile keys made in the dashboard.
 5. **Resources:** the D1 database `sendoff` and the queue `sendoff-send` through Wrangler, and a Turnstile widget for the hostname.
 6. **SES and SNS:**
@@ -247,7 +247,7 @@ Later optimization: SES `SendBulkEmail` (50 destinations per call) with per-dest
 7. **DNS:** three DKIM CNAMEs, an MX and SPF TXT for the MAIL FROM domain, and DMARC (`p=none`) only if the domain has none. Records that clash with existing ones are left alone and reported.
 8. **Deploy:** generates `.sendoff/wrangler.jsonc` from the base config plus the instance ids, applies D1 migrations, and deploys to the custom domain, uploading secrets with the version. `TOKEN_SECRET` and `MCP_TOKEN` are only generated the first time: `TOKEN_SECRET` signs every unsubscribe link ever sent, so it must never rotate.
 9. **Wire-up:** subscribes `https://<host>/webhooks/ses` to the topic and waits for the Worker to confirm it. Saves the newsletter settings through MCP, then waits for SES to verify the domain.
-10. **SES production access:** shows a pre-filled use-case description and submits it (`PutAccountDetails`, `MailType=MARKETING`) only if you confirm. Approval usually takes about a day.
+10. **SES production access:** shows a pre-filled use-case description (naming your existing website, which AWS reviewers look at) and submits it (`PutAccountDetails`, `MailType=MARKETING`) only if you confirm. Approval usually takes about a day.
 11. **Finish:** runs `doctor` and prints the MCP token once, with the `claude mcp add` command.
 
 `bun run deploy` later redeploys code changes with the same instance config, applying any new migrations first.

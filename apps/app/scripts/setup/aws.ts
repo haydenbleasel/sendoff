@@ -9,6 +9,8 @@ export interface AwsCredentials {
   accessKeyId: string;
   region: string;
   secretAccessKey: string;
+  /** Present for temporary credentials, e.g. from an SSO or `aws login` session. */
+  sessionToken?: string | undefined;
 }
 
 export class AwsError extends Error {
@@ -90,7 +92,7 @@ export const topicPolicy = ({
 
 export type TopicPolicy = ReturnType<typeof topicPolicy>;
 
-/** The IAM policy setup prints for the keys Sendoff uses. */
+/** The IAM policy for keys entered by hand, which setup uses to provision and the Worker uses to send. */
 export const IAM_POLICY = {
   Statement: [
     {
@@ -148,8 +150,19 @@ export const createAwsSetup = (
   fetcher: typeof fetch = fetch
 ) => {
   const { region } = credentials;
-  const ses = new AwsClient({ ...credentials, service: "ses" });
-  const sns = new AwsClient({ ...credentials, service: "sns" });
+
+  const signing: ConstructorParameters<typeof AwsClient>[0] = {
+    accessKeyId: credentials.accessKeyId,
+    region,
+    secretAccessKey: credentials.secretAccessKey,
+  };
+
+  if (credentials.sessionToken) {
+    signing.sessionToken = credentials.sessionToken;
+  }
+
+  const ses = new AwsClient({ ...signing, service: "ses" });
+  const sns = new AwsClient({ ...signing, service: "sns" });
   const sesBase = `https://email.${region}.amazonaws.com/v2/email`;
   const snsBase = `https://sns.${region}.amazonaws.com/`;
 
