@@ -5,7 +5,12 @@ import type { Config } from "../config";
 import { sendConfirmationEmail } from "../confirmations";
 import type { Database } from "../db/client";
 import { subscriberStatuses } from "../db/schema";
-import { fetchResendContacts } from "../importers/resend";
+import {
+  MAX_CSV_BYTES,
+  describeCsvImport,
+  importCsv,
+  suppressedStatuses,
+} from "../importers/csv";
 import { getSettings } from "../settings";
 import {
   confirmSubscriber,
@@ -156,7 +161,7 @@ export const registerSubscriberTools = (
   server.registerTool(
     "import_subscribers",
     {
-      description: `Import up to ${MAX_IMPORT_ROWS} subscribers at a time, e.g. from a CSV the person shared. Use status to carry over unsubscribes, bounces and complaints from the old provider. Imported active subscribers are treated as already confirmed. Existing subscribers can be suppressed by an import but are never reactivated. Try dryRun first.`,
+      description: `Import up to ${MAX_IMPORT_ROWS} subscribers given as a list, e.g. a few addresses the person pasted. For a CSV export, use import_csv. Use status to carry over unsubscribes, bounces and complaints from the old provider. Imported active subscribers are treated as already confirmed. Existing subscribers can be suppressed by an import but are never reactivated. Try dryRun first.`,
       inputSchema: z.object({
         dryRun: z.boolean().optional(),
         subscribers: z
@@ -189,33 +194,30 @@ export const registerSubscriberTools = (
   );
 
   server.registerTool(
-    "import_from_resend",
+    "import_csv",
     {
-      description:
-        "Import contacts from Resend, keeping unsubscribes. Needs a full-access Resend API key (sending-only keys can't read contacts); suggest the person creates a temporary key and deletes it afterwards. The key is used once and not stored. Resend's API doesn't expose bounces, so import those separately with import_subscribers if the person has them. Try dryRun first.",
+      description: `Import subscribers from a CSV export from any provider. It needs a header row with an email column; name columns, a status column and unsubscribed/bounced/complained columns are detected. Suppressed rows are imported as suppressed; unconfirmed rows and statuses Sendoff doesn't recognize are skipped and reported, never imported as active. If the export leaves out unsubscribes or bounces, ask the person to export those too and import them with status. Always run dryRun first and show the person which columns were used and what was skipped. Pass the file's contents as csv for up to about 1,000 rows. For a bigger file, don't paste it: if you can run commands, create_api_key with scope subscribers:import, run \`curl --data-binary @file.csv -H "Authorization: Bearer <key>" -H "Content-Type: text/csv" "${config.publicUrl}/api/v1/subscribers/import?dryRun=true"\` (drop dryRun=true to import), then revoke_api_key. Otherwise import it in parts, or give the person that command to run.`,
       inputSchema: z.object({
-        apiKey: z.string().min(1),
-        dryRun: z.boolean().optional(),
-        segmentId: z
+        csv: z
           .string()
+          .min(1)
+          .max(MAX_CSV_BYTES)
+          .describe("The file's contents, header row first."),
+        dryRun: z.boolean().optional(),
+        status: z
+          .enum(suppressedStatuses)
           .optional()
-          .describe("Only import this Resend segment."),
+          .describe(
+            "Mark every row as this, for a file that only lists unsubscribes, bounces or complaints."
+          ),
       }),
-      title: "Import from Resend",
+      title: "Import a CSV",
     },
-    async ({ apiKey, dryRun = false, segmentId }) =>
+    async ({ csv, dryRun = false, status }) =>
       await run(async () => {
-        const rows = await fetchResendContacts({ apiKey, segmentId });
-        const summary = await importSubscribers(db, rows, { dryRun });
+        const report = await importCsv(db, csv, { dryRun, status });
 
-        const unsubscribed = rows.filter(
-          (row) => row.status === "unsubscribed"
-        ).length;
-
-        return result(
-          `Fetched ${rows.length} contacts from Resend (${unsubscribed} unsubscribed). ${describeImport(summary, dryRun)}`,
-          { ...summary }
-        );
+        return result(describeCsvImport(report), { ...report });
       })
   );
 

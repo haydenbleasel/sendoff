@@ -116,28 +116,6 @@ const identityResponse = (identity: NetworkOptions["identity"]) => {
   });
 };
 
-const resendContacts = () =>
-  Response.json({
-    data: [
-      {
-        email: "resend-a@example.com",
-        first_name: "Ada",
-        id: "1",
-        last_name: null,
-        unsubscribed: false,
-      },
-      {
-        email: "resend-b@example.com",
-        first_name: null,
-        id: "2",
-        last_name: null,
-        unsubscribed: true,
-      },
-    ],
-    has_more: false,
-    object: "list",
-  });
-
 /**
  * Stub outbound fetches: Turnstile passes unless the token is "fail", SES
  * accepts and records every email (unless onSend fails it), SNS serves the
@@ -212,10 +190,6 @@ export const mockNetwork = (options: NetworkOptions = {}) => {
           Answer: record ? [{ data: `"${record}"`, type: 16 }] : undefined,
           Status: record ? 0 : 3,
         });
-      }
-
-      if (request.url.startsWith("https://api.resend.com/contacts")) {
-        return resendContacts();
       }
 
       if (request.url === TEST_SNS_CERT_URL) {

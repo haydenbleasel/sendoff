@@ -65,6 +65,57 @@ export const openApiDocument = (publicUrl: string) => ({
         "x-scopes": ["subscribers:write"],
       },
     },
+    "/subscribers/import": {
+      post: {
+        description:
+          'Import subscribers from a CSV export, e.g. `curl --data-binary @export.csv -H "Content-Type: text/csv"`. It needs a header row with an email column; name, status and unsubscribed/bounced/complained columns are detected. Imported active subscribers count as confirmed and get no email. Suppressed rows are imported as suppressed, existing subscribers are never reactivated, and unconfirmed rows or unrecognized statuses are skipped and reported. Run with dryRun=true first.',
+        operationId: "importSubscribers",
+        parameters: [
+          {
+            description: "Report what would happen without writing anything.",
+            in: "query",
+            name: "dryRun",
+            schema: { enum: ["true", "false"], type: "string" },
+          },
+          {
+            description:
+              "Mark every row as this, for a file that only lists unsubscribes, bounces or complaints.",
+            in: "query",
+            name: "status",
+            schema: {
+              enum: ["unsubscribed", "bounced", "complained"],
+              type: "string",
+            },
+          },
+        ],
+        requestBody: {
+          content: {
+            "multipart/form-data": {
+              schema: {
+                properties: { file: { format: "binary", type: "string" } },
+                required: ["file"],
+                type: "object",
+              },
+            },
+            "text/csv": { schema: { type: "string" } },
+          },
+          required: true,
+        },
+        responses: {
+          200: {
+            content: json("CsvImport"),
+            description: "The import report.",
+          },
+          400: error("No email column, too many rows, or an invalid query."),
+          401: error("Missing, invalid or revoked API key."),
+          403: error("The API key doesn't have the subscribers:import scope."),
+          413: error("The file is over 10 MB."),
+        },
+        summary: "Import subscribers from a CSV",
+        tags: ["Subscribers"],
+        "x-scopes": ["subscribers:import"],
+      },
+    },
   },
   security: [{ apiKey: [] }],
   servers: [{ url: `${publicUrl}/api/v1` }],

@@ -86,7 +86,7 @@ describe("tools", () => {
       "edit_draft",
       "get_draft",
       "get_settings",
-      "import_from_resend",
+      "import_csv",
       "import_subscribers",
       "list_api_keys",
       "list_issues",
@@ -218,11 +218,21 @@ describe("tools", () => {
       ],
     });
 
-    const resend = await call("import_from_resend", { apiKey: "re_test" });
-    expect(resend.text).toContain(
-      "Fetched 2 contacts from Resend (1 unsubscribed)"
-    );
-    expect(await statusOf("resend-b@example.com")).toBe("unsubscribed");
+    const csv =
+      "email,unsubscribed\nfile-c@example.com,false\nfile-d@example.com,true\n";
+
+    const preview = await call("import_csv", { csv, dryRun: true });
+
+    expect(preview.text).toContain('Read 2 rows (emails from "email"');
+    expect(preview.text).toContain("Would import: 2 new");
+    expect(await statusOf("file-c@example.com")).toBeUndefined();
+
+    await call("import_csv", { csv });
+    expect(await statusOf("file-d@example.com")).toBe("unsubscribed");
+
+    const noEmail = await call("import_csv", { csv: "name\nAda" });
+    expect(noEmail).toMatchObject({ isError: true });
+    expect(noEmail.text).toContain("Couldn't find an email column");
 
     const confirmed = await call("add_subscriber", {
       email: "new@example.com",

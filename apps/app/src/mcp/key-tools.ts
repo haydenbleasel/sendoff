@@ -28,7 +28,7 @@ export const registerKeyTools = (
   server.registerTool(
     "create_api_key",
     {
-      description: `Create a key for the REST API (${config.publicUrl}/api/v1, described at /api/v1/openapi.json). The key is shown once; tell the person to store it as a server-side secret (e.g. an environment variable), never in browser code. Scope subscribers:write lets a website's signup form call POST /api/v1/subscribers.`,
+      description: `Create a key for the REST API (${config.publicUrl}/api/v1, described at /api/v1/openapi.json). The key is shown once; tell the person to store it as a server-side secret (e.g. an environment variable), never in browser code. Scope subscribers:write lets a website's signup form call POST /api/v1/subscribers. Scope subscribers:import allows POST /api/v1/subscribers/import, which adds people without confirmation emails: create it only for a one-off import, on its own, and revoke it afterwards.`,
       inputSchema: z.object({
         name: z
           .string()

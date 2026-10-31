@@ -21,7 +21,7 @@ export const subscriberStatuses = [
 export const subscriberSources = ["api", "import", "form", "mcp"] as const;
 
 /** What an API key may do. Add scopes as endpoints are added. */
-export const apiScopes = ["subscribers:write"] as const;
+export const apiScopes = ["subscribers:write", "subscribers:import"] as const;
 
 export const issueStatuses = ["draft", "sending", "sent", "cancelled"] as const;
 

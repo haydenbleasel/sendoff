@@ -128,7 +128,7 @@ Unsubscribe and confirm tokens are `subscriberId.base64url(HMAC-SHA256(TOKEN_SEC
 | Setup | `doctor` | Fails (blocks sending): no settings, no active subscribers, SES unreachable, sandbox, sending disabled, account shut down, quota below the list size, sender domain not verified, no DMARC record (looked up over DNS-over-HTTPS, falling back to the parent domain), configuration set missing. Warns: probation, no custom MAIL FROM, bounce/complaint events not wired to Sendoff's SNS topic, account suppression list off. |
 | Drafts | `create_draft`, `get_draft`, `edit_draft`, `set_draft_meta`, `list_issues`, `preview_draft`, `delete_draft` | `edit_draft` applies exact find/replace edits all-or-nothing (or replaces the body), takes an optional `expectedVersion`, and bumps `version`. Drafts are stored even with Markdown problems; results list them by line. `preview_draft` returns the URL plus the plain-text version so the agent can proofread. Issues are addressed by id or slug. |
 | Sending | `send_test`, `prepare_send`, `confirm_send`, `send_status`, `cancel_send`, `resume_send` | See [Send pipeline](#send-pipeline). `confirm_send` and `cancel_send` are annotated `destructiveHint: true`, and the instructions tell the agent to confirm only after the person explicitly says to send. |
-| Subscribers | `add_subscriber`, `import_subscribers`, `import_from_resend`, `search_subscribers`, `unsubscribe_subscriber` (`prune` in M6) | `add_subscriber` sends a confirmation email unless `skipConfirmation` (only when the person asked to be added). Imports support `dryRun`. | Imports can suppress an existing subscriber but never reactivate one. Resend's API exposes `unsubscribed` only, not bounces, so bounced addresses need a separate import (e.g. a dashboard export). |
+| Subscribers | `add_subscriber`, `import_csv`, `import_subscribers`, `search_subscribers`, `unsubscribe_subscriber` (`prune` in M6) | `add_subscriber` sends a confirmation email unless `skipConfirmation` (only when the person asked to be added). Imports support `dryRun`, can suppress an existing subscriber but never reactivate one, and treat imported active subscribers as confirmed. `import_csv` reads any provider's CSV export (see [Importing](#importing)); `import_subscribers` takes a short list of addresses. |
 | API keys | `create_api_key`, `list_api_keys`, `revoke_api_key` | Keys are shown once (to the agent, which hands them to the person) and stored hashed. Revoke by id or prefix. |
 | Stats | `issue_stats`, `growth` | Clicks and unsubscribes are the trustworthy signals. Opens are unreliable because of Apple Mail Privacy Protection and aren't tracked by default. |
 
@@ -140,6 +140,17 @@ Auth (M5b, MCP authorization 2026-07-28 via `@cloudflare/workers-oauth-provider`
 - **Scopes:** `newsletter` (everything) and `offline_access`. The tools don't distinguish narrower scopes yet.
 - The provider needs the `global_fetch_strictly_public` compatibility flag, so fetching client metadata documents can't reach private hosts.
 
+## Importing
+
+Every provider exports contacts as CSV, so Sendoff reads CSV rather than talking to each provider's API. `src/importers/csv.ts` parses RFC 4180 (quoted fields, `""` escapes, newlines in quotes, any line ending, a byte order mark, and comma, semicolon or tab delimiters picked from the header) and finds columns by normalized header (lowercase letters and digits only):
+
+- **Email:** `email`, `email_address`, `Email Address` and similar, else the first header containing "email" that isn't a flag. A file whose first row has an address is read as a headerless list.
+- **Name:** `name`/`full_name`, or `first_name` plus `last_name`.
+- **Status column** (`status`, `state`, `subscriber_type`…): values such as active/subscribed/confirmed, unsubscribed/cancelled/removed, bounced/cleaned/invalid, complained/spam. Pending, unconfirmed and inactive rows are skipped.
+- **Flag columns:** `unsubscribed`, `bounced`, `complained`, `email_disabled`, `do_not_email`, and timestamps like Mailchimp's `UNSUB_TIME` and `CLEAN_TIME` mark a row when set to anything but false or empty; `subscribed`, `opted_in` and `accepts_marketing` mark it unsubscribed when false.
+
+A row with several signals takes the most severe (complained, bounced, unsubscribed, active), and a `status` option marks a whole file of suppressions. Anything unclear is skipped and reported (unrecognized status values with counts, rows without an email) rather than imported as active, because emailing someone who unsubscribed is the mistake an import must not make. Small files go through `import_csv` directly; bigger ones go to the REST endpoint with `curl`, so the agent doesn't copy thousands of addresses into a tool call.
+
 ## REST API
 
 A small API under `/api/v1` for servers. MCP tools don't go through it: both are thin layers over the same functions (`subscribers.ts`, `issues.ts`, `sending.ts`), which keeps them in sync without an extra HTTP hop. More endpoints (issues, sending, settings) get added when something needs them, each with its own scope.
@@ -150,7 +161,8 @@ A small API under `/api/v1` for servers. MCP tools don't go through it: both are
   - `400 invalid_request`, `401 invalid_api_key`, `403 insufficient_scope`, `503 not_configured`.
   - `502 confirmation_failed` if SES couldn't send the confirmation; safe to retry.
 - **Errors** are always `{ "error": { "code", "message" } }`.
-- **Signing up from a website's server**, e.g. a Next.js server action replacing a Resend contacts call:
+- **`POST /api/v1/subscribers/import`** (`subscribers:import`) takes a CSV as the raw body (`curl --data-binary @export.csv -H "Content-Type: text/csv"`) or a multipart `file` field, up to 10 MB and 25,000 rows, with `?dryRun=true` and an optional `?status=unsubscribed|bounced|complained`. It returns the import report (columns used, counts by status, skipped rows, new/suppressed/unchanged), or `400 invalid_request` (no email column, too many rows) and `413 too_large`. Its own scope because it adds people without confirmation emails: agents create a key for one import and revoke it afterwards.
+- **Signing up from a website's server**, e.g. a Next.js server action replacing another provider's contacts call:
   ```ts
   "use server";
 
@@ -268,9 +280,9 @@ The app stays self-contained (no internal workspace packages) so a Deploy to Clo
 
 |  | Milestone | Done when |
 | --- | --- | --- |
-| M0 | AWS groundwork (manual, start now) | SES identity verified for the real domain, production access requested, Resend export taken (including unsubscribed and bounced). |
+| M0 | AWS groundwork (manual, start now) | SES identity verified for the real domain, production access requested, contacts exported from the old provider (including unsubscribed and bounced). |
 | M1 | Foundation | Worker skeleton, D1 schema and migrations, SES client, email layout and renderer. Render CPU measured; Workers Paid chosen. ✅ |
-| M2 | Subscribers | Subscribe/confirm/unsubscribe (including one-click), SNS webhook, Resend import (core; the MCP tool lands in M3). ✅ |
+| M2 | Subscribers | Subscribe/confirm/unsubscribe (including one-click), SNS webhook, import core (the MCP tools land in M3). ✅ |
 | M3 | Drafting | MCP draft, settings and subscriber tools, and the live preview, verified with the official MCP client over HTTP against `wrangler dev`. ✅ |
 | M4 | Sending | Test send, prepare/confirm, queue fan-out, status/cancel/resume, `doctor`, stalled-send cron. Built and tested against a stubbed SES. ✅ **First real issue still to go out** (needs the SES account from M0). |
 | M5a | Setup | `bun run setup` and `bun run deploy`, with your instance's ids kept out of the repo. Built; the pure parts are tested, the real run is yours. |

@@ -6,11 +6,13 @@ import { z } from "zod";
 import { findApiKey, touchApiKey } from "../api-keys";
 import type { ApiKey, ApiScope } from "../api-keys";
 import { openApiDocument } from "../api/openapi";
-import { createSubscriberBody } from "../api/schemas";
+import { createSubscriberBody, csvImportQuery } from "../api/schemas";
 import type { ErrorCode } from "../api/schemas";
 import { getConfig } from "../config";
 import { sendConfirmationEmail } from "../confirmations";
 import { createDb } from "../db/client";
+import { MAX_CSV_BYTES, importCsv } from "../importers/csv";
+import { IssueError } from "../issues";
 import { parseJsonWith } from "../json";
 import { getSettings } from "../settings";
 import { markConfirmationSent, subscribe } from "../subscribers";
@@ -28,6 +30,7 @@ const HTTP_BAD_REQUEST = 400;
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const HTTP_NOT_FOUND = 404;
+const HTTP_TOO_LARGE = 413;
 const HTTP_BAD_GATEWAY = 502;
 const HTTP_UNAVAILABLE = 503;
 const BEARER = /^Bearer\s+(?<token>.+)$/iu;
@@ -37,6 +40,7 @@ type ErrorStatus =
   | typeof HTTP_UNAUTHORIZED
   | typeof HTTP_FORBIDDEN
   | typeof HTTP_NOT_FOUND
+  | typeof HTTP_TOO_LARGE
   | typeof HTTP_BAD_GATEWAY
   | typeof HTTP_UNAVAILABLE;
 
@@ -144,6 +148,74 @@ apiRoutes.post(
     }
 
     return c.json({ status: "accepted" as const }, HTTP_ACCEPTED);
+  }
+);
+
+const MULTIPART = "multipart/form-data";
+
+/** The CSV as the raw body, or as a multipart field named `file`. */
+const csvText = async (request: Request): Promise<string | null> => {
+  if (!(request.headers.get("content-type") ?? "").startsWith(MULTIPART)) {
+    return await request.text();
+  }
+
+  const form = await request.formData();
+  const file = form.get("file");
+
+  return file instanceof File ? await file.text() : file;
+};
+
+apiRoutes.post(
+  "/api/v1/subscribers/import",
+  requireScope("subscribers:import"),
+  async (c) => {
+    const tooLarge = () =>
+      apiError(
+        c,
+        HTTP_TOO_LARGE,
+        "too_large",
+        `Import at most ${MAX_CSV_BYTES / 1024 / 1024} MB at a time: split the file and import each part.`
+      );
+
+    if (Number(c.req.header("content-length") ?? 0) > MAX_CSV_BYTES) {
+      return tooLarge();
+    }
+
+    const query = csvImportQuery.safeParse(c.req.query());
+
+    if (!query.success) {
+      return apiError(
+        c,
+        HTTP_BAD_REQUEST,
+        "invalid_request",
+        z.prettifyError(query.error)
+      );
+    }
+
+    const text = await csvText(c.req.raw);
+
+    if (text === null) {
+      return apiError(
+        c,
+        HTTP_BAD_REQUEST,
+        "invalid_request",
+        "Send the CSV as the request body (Content-Type: text/csv), or as a multipart field named file."
+      );
+    }
+
+    if (text.length > MAX_CSV_BYTES) {
+      return tooLarge();
+    }
+
+    try {
+      return c.json(await importCsv(createDb(c.env.DB), text, query.data));
+    } catch (error) {
+      if (error instanceof IssueError) {
+        return apiError(c, HTTP_BAD_REQUEST, "invalid_request", error.message);
+      }
+
+      throw error;
+    }
   }
 );
 

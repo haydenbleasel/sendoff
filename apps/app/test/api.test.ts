@@ -8,11 +8,19 @@ import {
   listApiKeys,
   revokeApiKey,
 } from "../src/api-keys";
+import { csvImportResponse } from "../src/api/schemas";
 import { apiKeys } from "../src/db/schema";
 import { createId } from "../src/id";
 import { saveSettings } from "../src/settings";
 import { findSubscriberByEmail, importSubscribers } from "../src/subscribers";
-import { BASE_URL, db, mockNetwork, sesError, testSettings } from "./helpers";
+import {
+  BASE_URL,
+  db,
+  mockNetwork,
+  sesError,
+  statusOf,
+  testSettings,
+} from "./helpers";
 
 let network: ReturnType<typeof mockNetwork>;
 
@@ -103,6 +111,9 @@ describe("before setup", () => {
     expect(spec.servers[0]?.url).toBe("https://news.example.com/api/v1");
     expect(spec.paths["/subscribers"]?.post["x-scopes"]).toStrictEqual([
       "subscribers:write",
+    ]);
+    expect(spec.paths["/subscribers/import"]?.post["x-scopes"]).toStrictEqual([
+      "subscribers:import",
     ]);
     expect(
       spec.components.schemas.CreateSubscriber.properties.email.format
@@ -249,5 +260,79 @@ describe("POST /api/v1/subscribers", () => {
 
     expect(response.status).toBe(404);
     expect(await errorCode(response)).toBe("not_found");
+  });
+});
+
+const IMPORT_CSV =
+  "email,status\nimport-a@example.com,active\nimport-b@example.com,unsubscribed\n";
+
+// A string body goes as text/plain and a FormData one as multipart: the
+// endpoint reads the CSV either way.
+const postImport = (body: string | FormData, key: string, query = "") =>
+  exports.default.fetch(
+    new Request(`${BASE_URL}/api/v1/subscribers/import${query}`, {
+      body,
+      headers: { authorization: `Bearer ${key}` },
+      method: "POST",
+    })
+  );
+
+const importKey = async () => {
+  const { key } = await createApiKey(db(), {
+    name: "Import",
+    scopes: ["subscribers:import"],
+  });
+
+  return key;
+};
+
+describe("POST /api/v1/subscribers/import", () => {
+  it("needs the subscribers:import scope, not just subscribers:write", async () => {
+    const response = await postImport(IMPORT_CSV, await newKey());
+
+    expect(response.status).toBe(403);
+    expect(await errorCode(response)).toBe("insufficient_scope");
+  });
+
+  it("dry-runs a raw CSV body, then imports a multipart upload", async () => {
+    const key = await importKey();
+    const dryRun = await postImport(IMPORT_CSV, key, "?dryRun=true");
+    const report = csvImportResponse.parse(await dryRun.json());
+
+    expect(dryRun.status).toBe(200);
+    expect(report).toMatchObject({
+      columns: { email: "email", status: ["status"] },
+      counts: { active: 1, unsubscribed: 1 },
+      created: 2,
+      dryRun: true,
+    });
+    expect(await statusOf("import-a@example.com")).toBeUndefined();
+
+    const form = new FormData();
+
+    form.set(
+      "file",
+      new File([IMPORT_CSV], "export.csv", { type: "text/csv" })
+    );
+
+    const imported = await postImport(form, key);
+
+    expect(csvImportResponse.parse(await imported.json())).toMatchObject({
+      created: 2,
+      dryRun: false,
+    });
+    expect(await statusOf("import-a@example.com")).toBe("active");
+    expect(await statusOf("import-b@example.com")).toBe("unsubscribed");
+    expect(network.sent).toHaveLength(0);
+  });
+
+  it("rejects files it can't read, and bad query values", async () => {
+    const key = await importKey();
+    const noEmail = await postImport("name\nAda\n", key);
+    const badStatus = await postImport(IMPORT_CSV, key, "?status=active");
+
+    expect(noEmail.status).toBe(400);
+    expect(await errorCode(noEmail)).toBe("invalid_request");
+    expect(badStatus.status).toBe(400);
   });
 });
