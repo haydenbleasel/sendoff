@@ -7,6 +7,8 @@ export default defineConfig({
   deployment: { site: "https://sendoff.dev" },
   description: "Self-hosted newsletters you run from Claude or Codex.",
   logo: "/logo.svg",
+  // No docs to search yet; turn this back on when the docs land.
+  search: false,
   theme: {
     // Signal yellow is never text on a light background, so the light-mode accent is ink.
     accent: { dark: "#ffc20e", light: "#0d0d0d" },

@@ -14,6 +14,11 @@ const { config } = data;
 
 const DOCS = "/docs";
 
+// Until launch, the deploy and docs calls to action show a COMING SOON board
+// instead, and the steps and footer drop their docs links. Flip this to bring
+// them back.
+const launched = false;
+
 // The hero conversation, from first draft to send.
 const chat = [
   { from: "you", messages: [{ text: "Draft issue 24 from my last three posts." }] },
@@ -242,18 +247,33 @@ const inlineLink =
 >
   <div class="mx-auto max-w-300 px-5 text-foreground sm:px-8 lg:px-12">
     <section class="flex flex-col items-center gap-7.5 pt-20 pb-16 text-center md:pt-44 md:pb-28">
-      <Flaps text="09:00 NO.24" label="09:00, issue 24" />
-      <h1 class={displayHeading}>
+      <Flaps text="09:00 NO.24" label="09:00, issue 24" class="sendoff-enter" />
+      <h1 class:list={[displayHeading, "sendoff-enter [--i:1]"]}>
         Say <span class="sendoff-highlight text-nowrap">“send it.”</span> Sendoff handles the rest.
       </h1>
-      <p class="max-w-[40ch] text-xl/8 text-pretty text-muted-foreground">
+      <p class="sendoff-enter max-w-[40ch] text-xl/8 text-pretty text-muted-foreground [--i:2]">
         A newsletter tool you deploy to your own Cloudflare and AWS accounts and run from Claude or
         Codex.
       </p>
-      <div class="flex flex-wrap items-center justify-center gap-x-7 gap-y-3">
-        <a href={DOCS} class={primaryButton}>Deploy your own <Arrow /></a>
-        <a href={DOCS} class:list={[textLink, "min-h-11 text-base"]}>Read the docs <Arrow /></a>
-      </div>
+      {
+        launched ? (
+          <div class="sendoff-enter flex flex-wrap items-center justify-center gap-x-7 gap-y-3 [--i:3]">
+            <a href={DOCS} class={primaryButton}>
+              Deploy your own <Arrow />
+            </a>
+            <a href={DOCS} class:list={[textLink, "min-h-11 text-base"]}>
+              Read the docs <Arrow />
+            </a>
+          </div>
+        ) : (
+          <Flaps
+            text="COMING SOON"
+            label="Coming soon"
+            class="sendoff-enter [--i:3]"
+            delay={300}
+          />
+        )
+      }
     </section>
 
     <section
@@ -261,12 +281,12 @@ const inlineLink =
       aria-label="Example conversation"
     >
       <div class="w-full max-w-160">
-        <Chat turns={chat} />
+        <Chat turns={chat} entrance="load" />
       </div>
     </section>
 
     <section class="flex flex-col gap-10 pt-24 md:pt-44">
-      <div>
+      <div data-reveal>
         <h2 class={sectionHeading}>Your agent writes it. React&nbsp;Email makes it look good.</h2>
         <p class:list={[lead, "mt-6"]}>
           Connect Sendoff to Claude or Codex and describe the issue you want. Your agent writes and
@@ -283,7 +303,7 @@ const inlineLink =
         <div
           class="flex flex-col justify-end rounded-2xl bg-background p-4 ring-1 ring-black/5 sm:p-6 dark:bg-white/5 dark:ring-white/10"
         >
-          <Chat turns={emailChat} onCard small />
+          <Chat turns={emailChat} onCard small entrance="view" />
         </div>
         <div class="flex items-center justify-center text-muted-foreground">
           <div class="rotate-90 lg:rotate-0"><Arrow /></div>
@@ -295,7 +315,7 @@ const inlineLink =
     </section>
 
     <section class="grid items-center gap-12 pt-24 md:pt-44 lg:grid-cols-[2fr_3fr]">
-      <div>
+      <div data-reveal>
         <h2 class={sectionHeading}>Your agent sends a link when it’s ready.</h2>
         <p class:list={[lead, "mt-6"]}>
           Open it on your phone or laptop and see the issue the way subscribers will, before anything
@@ -316,9 +336,10 @@ const inlineLink =
         </dl>
       </div>
       <figure
-        class="rounded-4xl bg-muted p-3 sm:p-6"
+        class="rounded-4xl bg-muted p-3 sm:p-6 [--reveal-delay:120ms]"
         role="img"
         aria-label="The live preview of issue 24 at desktop width in light mode"
+        data-reveal
       >
         <div
           class="overflow-hidden rounded-2xl bg-background ring-1 ring-black/5 dark:bg-white/5 dark:ring-white/10"
@@ -380,18 +401,20 @@ const inlineLink =
     </section>
 
     <section id="pricing" class="flex scroll-mt-24 flex-col gap-12 pt-24 md:pt-44">
-      <div>
+      <div data-reveal>
         <h2 class={sectionHeading}>Host it yourself. Skip the subscription.</h2>
         <p class:list={[lead, "mt-6"]}>
           Sendoff runs in your own Cloudflare account and sends through your own Amazon SES, so you
           pay them directly and nobody else. Move the sliders to see how that compares with Resend.
         </p>
       </div>
-      <Calculator />
+      <div class="[--reveal-delay:120ms]" data-reveal>
+        <Calculator />
+      </div>
     </section>
 
     <section class="grid gap-12 pt-24 md:pt-44 lg:grid-cols-[2fr_3fr]">
-      <div>
+      <div data-reveal>
         <h2 class={sectionHeading}>Nothing leaves until preflight passes.</h2>
         <p class:list={[lead, "mt-6"]}>
           Before every send, Sendoff checks your domain, your SES account and your latest test, and
@@ -415,6 +438,7 @@ const inlineLink =
         class="flex flex-col rounded-4xl bg-muted p-3 sm:p-6"
         role="img"
         aria-label="Preflight for issue 24, with every check passed"
+        data-reveal="contents"
       >
         <div
           class="flex flex-1 flex-col overflow-hidden rounded-2xl bg-background ring-1 ring-black/5 dark:bg-white/5 dark:ring-white/10"
@@ -428,13 +452,15 @@ const inlineLink =
           {/* On desktop the card takes the copy's height and the checks share it evenly. */}
           <ul role="list" class="flex flex-1 flex-col divide-y divide-border px-5 sm:px-6">
             {
-              preflightChecks.map((check) => (
+              preflightChecks.map((check, index) => (
                 <li class="flex flex-1 items-center gap-3 py-3.5">
-                  <Icon
-                    name="circle-check"
-                    size={20}
-                    class="shrink-0 text-emerald-600 dark:text-emerald-400"
-                  />
+                  <span class="sendoff-check grid shrink-0" style={`--i: ${index}`}>
+                    <Icon
+                      name="circle-check"
+                      size={20}
+                      class="text-emerald-600 dark:text-emerald-400"
+                    />
+                  </span>
                   <p class="flex-1 text-base font-medium">{check.label}</p>
                   <p class="text-right font-mono text-sm text-muted-foreground">{check.detail}</p>
                 </li>
@@ -446,14 +472,17 @@ const inlineLink =
     </section>
 
     <section class="flex flex-col gap-10 pt-24 md:pt-44">
-      <div class="grid gap-6 lg:grid-cols-2 lg:items-end">
+      <div class="grid gap-6 lg:grid-cols-2 lg:items-end" data-reveal>
         <h2 class={sectionHeading}>Ask for the status of any send.</h2>
         <p class="max-w-[48ch] text-lg/7 text-pretty text-muted-foreground lg:justify-self-end">
           Your agent can tell you how far a send has got, what bounced and who unsubscribed. Bounces
           and complaints come off the list on their own.
         </p>
       </div>
-      <div class="-mx-5 -my-2 overflow-x-auto whitespace-nowrap sm:-mx-8 lg:-mx-12">
+      <div
+        class="-mx-5 -my-2 overflow-x-auto whitespace-nowrap [--reveal-delay:120ms] sm:-mx-8 lg:-mx-12"
+        data-reveal
+      >
         <div class="inline-block min-w-full px-5 py-2 align-middle sm:px-8 lg:px-12">
           <table class="w-full border-collapse text-base">
             <thead>
@@ -501,9 +530,9 @@ const inlineLink =
                     </td>
                     <td class="border-b border-border py-5.5 text-right">
                       {issue.live ? (
-                        <Flaps text="SENDING" label="Sending" live size="sm" />
+                        <Flaps text="SENDING" label="Sending" live size="sm" delay={400} />
                       ) : (
-                        <span class="text-muted-foreground">Departed</span>
+                        <span class="text-muted-foreground">Sent</span>
                       )}
                     </td>
                   </tr>
@@ -516,18 +545,30 @@ const inlineLink =
     </section>
 
     <section id="how" class="flex scroll-mt-24 flex-col gap-14 pt-24 md:pt-44">
-      <h2 class={sectionHeading}>Three steps, then it’s just talking.</h2>
-      <ol role="list" class={autoFit}>
+      <h2 class={sectionHeading} data-reveal>Three steps, then it’s just talking.</h2>
+      <ol role="list" class:list={[autoFit, "[--reveal-delay:120ms]"]} data-reveal>
         {
-          steps.map((step) => (
-            <li class="row-span-5 grid grid-rows-subgrid justify-items-start gap-4">
-              <Flaps text={step.number} label={`Step ${step.number}`} size="lg" />
+          steps.map((step, index) => (
+            <li
+              class:list={[
+                "grid grid-rows-subgrid justify-items-start gap-4",
+                launched ? "row-span-5" : "row-span-4",
+              ]}
+            >
+              <Flaps
+                text={step.number}
+                label={`Step ${step.number}`}
+                size="lg"
+                delay={300 + index * 150}
+              />
               <h3 class="text-xl font-semibold tracking-tight">{step.title}</h3>
               <p class="text-base/7 text-pretty text-muted-foreground">{step.body}</p>
               <p class="rounded-lg bg-muted px-3 py-1.5 font-mono text-sm">{step.code}</p>
-              <a href={DOCS} class:list={[textLink, "min-h-8 text-base sm:text-[0.9375rem]"]}>
-                {step.link} <Arrow size={14} />
-              </a>
+              {launched && (
+                <a href={DOCS} class:list={[textLink, "min-h-8 text-base sm:text-[0.9375rem]"]}>
+                  {step.link} <Arrow size={14} />
+                </a>
+              )}
             </li>
           ))
         }
@@ -537,15 +578,30 @@ const inlineLink =
     <section
       class="mt-20 flex flex-col items-center gap-7 border-t border-border pt-20 pb-24 text-center md:mt-28 md:pt-28 md:pb-40"
     >
-      <Mark size={56} />
-      <h2 class={displayHeading}>
-        Next departure: <span class="sendoff-highlight text-nowrap">yours.</span>
+      <div data-reveal>
+        <Mark size={56} />
+      </div>
+      <h2 class:list={[displayHeading, "[--reveal-delay:80ms]"]} data-reveal>
+        Give your emails a <span class="sendoff-highlight text-nowrap">proper sendoff.</span>
       </h2>
-      <p class="max-w-[48ch] text-lg/7 text-pretty text-muted-foreground">
-        Deploy to your own Cloudflare and AWS accounts, bring your list from Resend, and send the
-        next issue from the chat.
+      <p
+        class="max-w-[48ch] text-lg/7 text-pretty text-muted-foreground [--reveal-delay:160ms]"
+        data-reveal
+      >
+        Deploy to your own Cloudflare and AWS accounts, bring your list with you, and send the next
+        issue from the chat.
       </p>
-      <a href={DOCS} class={primaryButton}>Deploy your own <Arrow /></a>
+      <div class="[--reveal-delay:240ms]" data-reveal>
+        {
+          launched ? (
+            <a href={DOCS} class={primaryButton}>
+              Deploy your own <Arrow />
+            </a>
+          ) : (
+            <Flaps text="COMING SOON" label="Coming soon" delay={400} />
+          )
+        }
+      </div>
     </section>
   </div>
 
@@ -558,7 +614,54 @@ const inlineLink =
         <span class="font-semibold tracking-tight text-foreground">Sendoff</span>
         <span>Runs on Cloudflare Workers and Amazon SES</span>
       </div>
-      <a href={DOCS} class="text-muted-foreground no-underline hover:text-foreground">Docs</a>
+      {
+        launched && (
+          <a href={DOCS} class="text-muted-foreground no-underline hover:text-foreground">
+            Docs
+          </a>
+        )
+      }
     </div>
   </footer>
 </PageLayout>
+
+<script>
+  // On-view reveals. Each [data-reveal] element fades and rises into place the
+  // first time it comes into view; with data-reveal="contents" the element
+  // stays still and its children animate instead (theme.css has the states).
+  // Anything already on screen is marked revealed before the hidden states
+  // switch on, so nothing visible blinks out, and without script nothing is
+  // hidden at all.
+  const init = () => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting && entry.target instanceof HTMLElement) {
+            observer.unobserve(entry.target);
+            entry.target.dataset.revealed = "";
+          }
+        }
+      },
+      { rootMargin: "0px 0px -10% 0px" }
+    );
+
+    for (const element of document.querySelectorAll<HTMLElement>(
+      "[data-reveal]:not([data-revealed], [data-reveal-ready])"
+    )) {
+      element.dataset.revealReady = "";
+
+      if (element.getBoundingClientRect().top < window.innerHeight) {
+        element.dataset.revealed = "";
+      } else {
+        observer.observe(element);
+      }
+    }
+
+    document.documentElement.dataset.motion = "";
+  };
+
+  // ClientRouter fires astro:page-load on every navigation; the ready flag keeps elements from being observed twice.
+  init();
+
+  document.addEventListener("astro:page-load", init);
+</script>
