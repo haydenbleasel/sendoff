@@ -31,6 +31,7 @@ import {
   accountIdFromTopicArn,
   createAwsSetup,
   topicPolicy,
+  AwsError,
 } from "./setup/aws";
 import type { AwsCredentials, AwsSetup } from "./setup/aws";
 import {
@@ -64,6 +65,9 @@ const SECRET_BYTES = 32;
 const HEX = 16;
 const POLL_MS = 5000;
 const POLL_ATTEMPTS = 24;
+
+/** Certificates for a new custom domain can take a few minutes. */
+const REACHABLE_ATTEMPTS = 60;
 
 const REGIONS = [
   "us-east-1",
@@ -193,23 +197,28 @@ const cloudflareAccount = async (draft: InstanceDraft) => {
   return accountId;
 };
 
-const newsletterDetails = async (): Promise<Newsletter> => {
+const newsletterDetails = async (
+  previous?: Newsletter
+): Promise<Newsletter> => {
   note(
     "These go in every email's header and footer. Change them later by asking your agent.",
     "Your newsletter"
   );
 
   const name = await ask("Newsletter name", {
+    initial: previous?.name,
     placeholder: "The Weekly Thing",
     validate: required("A name"),
   });
 
   const fromName = await ask("Sender name", {
+    initial: previous?.fromName,
     placeholder: "Jane Doe",
     validate: required("A sender name"),
   });
 
   const senderEmail = await ask("Sender email (its domain must be yours)", {
+    initial: previous?.fromEmail,
     placeholder: "hello@example.com",
     validate: validEmail,
   });
@@ -217,6 +226,7 @@ const newsletterDetails = async (): Promise<Newsletter> => {
   const fromEmail = senderEmail.toLowerCase();
 
   const replyTo = await ask("Reply-to address (optional)", {
+    initial: previous?.replyTo,
     placeholder: "Leave empty to use the sender",
     validate: (value) => (value.trim() === "" ? undefined : validEmail(value)),
   });
@@ -224,13 +234,14 @@ const newsletterDetails = async (): Promise<Newsletter> => {
   const address = await ask(
     "Postal address for the footer (required by anti-spam law)",
     {
+      initial: previous?.address,
       placeholder: "1 Example St, Sydney NSW 2000, Australia",
       validate: required("A postal address"),
     }
   );
 
   const website = await ask("Your website (where people sign up today)", {
-    initial: `https://${fromEmail.split("@")[1] ?? ""}`,
+    initial: previous?.website ?? `https://${fromEmail.split("@")[1] ?? ""}`,
     validate: (value) =>
       URL.canParse(value.trim())
         ? undefined
@@ -589,13 +600,14 @@ const configureDns = async (
 
 const waitFor = async (
   label: string,
-  check: () => Promise<boolean>
+  check: () => Promise<boolean>,
+  attempts = POLL_ATTEMPTS
 ): Promise<boolean> => {
   const progress = spinner();
 
   progress.start(label);
 
-  for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt += 1) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     // oxlint-disable-next-line no-await-in-loop -- polling
     if (await check().catch(() => false)) {
       progress.stop(`${label}: done`);
@@ -612,6 +624,107 @@ const waitFor = async (
   );
 
   return false;
+};
+
+/** A brand-new custom domain needs a minute for its certificate before SNS can reach it. */
+const waitUntilReachable = async (publicUrl: string): Promise<boolean> =>
+  await waitFor(
+    `Waiting for ${publicUrl} to come online`,
+    async () => {
+      const response = await fetch(`${publicUrl}/health`);
+
+      return response.ok;
+    },
+    REACHABLE_ATTEMPTS
+  );
+
+const UNREACHABLE = "Unreachable Endpoint";
+const SUBSCRIBE_ATTEMPTS = 6;
+
+const subscribeWebhook = async (
+  aws: AwsSetup,
+  topicArn: string,
+  webhook: string
+): Promise<void> => {
+  for (let attempt = 1; attempt <= SUBSCRIBE_ATTEMPTS; attempt += 1) {
+    try {
+      // oxlint-disable-next-line no-await-in-loop -- retried until the endpoint is reachable
+      await aws.subscribeHttps(topicArn, webhook);
+
+      return;
+    } catch (error) {
+      if (
+        !(error instanceof AwsError && error.message.includes(UNREACHABLE)) ||
+        attempt === SUBSCRIBE_ATTEMPTS
+      ) {
+        throw error;
+      }
+
+      // oxlint-disable-next-line no-await-in-loop -- see above
+      await wait(POLL_MS);
+    }
+  }
+};
+
+/**
+ * The MCP token can't be read back from the Worker. If one exists, keep it
+ * (the person has it saved) or replace it; rotating it is harmless.
+ */
+const chooseMcpToken = async (
+  workerSecrets: Set<string>
+): Promise<{ created: boolean; token: string | undefined }> => {
+  if (!workerSecrets.has("MCP_TOKEN")) {
+    return { created: true, token: randomSecret() };
+  }
+
+  const choice = answer(
+    await select({
+      message: "Sendoff already has an MCP token. Do you have it saved?",
+      options: [
+        { label: "Yes, keep it", value: "keep" },
+        {
+          label:
+            "No, create a new one (connected agents will need the new token)",
+          value: "new",
+        },
+      ],
+    })
+  );
+
+  if (choice === "new") {
+    return { created: true, token: randomSecret() };
+  }
+
+  const saved = answer(
+    await password({
+      message:
+        "Paste it to finish setup, or leave empty to skip the steps that need it",
+    })
+  ).trim();
+
+  return { created: false, token: saved || undefined };
+};
+
+const showMcpToken = (publicUrl: string, token: string): void => {
+  note(
+    [
+      "Connect your agent with this token. It's shown once, so save it now:",
+      "",
+      token,
+      "",
+      "Claude Code:",
+      `  claude mcp add --transport http sendoff ${publicUrl}/mcp --header "Authorization: Bearer ${token}"`,
+      "",
+      "Codex: add a custom MCP server, type Streamable HTTP,",
+      `  URL ${publicUrl}/mcp. Under Headers, add Authorization with the value:`,
+      `  Bearer ${token}`,
+      '  Leave "Bearer token env var" empty: it takes a variable name, not the token.',
+      "",
+      "claude.ai and Claude Desktop: Settings → Connectors → Add custom connector,",
+      `  URL ${publicUrl}/mcp. When it asks you to sign in, paste this token.`,
+    ].join("\n"),
+    "Your MCP token"
+  );
 };
 
 const mcpClient = async (publicUrl: string, token: string) => {
@@ -676,6 +789,72 @@ const requestProductionAccess = async (
   }
 };
 
+/** After deploy: wire up SES events, save settings, request production access, run doctor. */
+const finishSetup = async ({
+  aws,
+  domain,
+  newsletter,
+  publicUrl,
+  token,
+  topicArn,
+}: {
+  aws: AwsSetup;
+  domain: string;
+  newsletter: Newsletter;
+  publicUrl: string;
+  token: string | undefined;
+  topicArn: string;
+}): Promise<void> => {
+  const webhook = `${publicUrl}/webhooks/ses`;
+
+  if ((await aws.subscriptionState(topicArn, webhook)) !== "confirmed") {
+    await waitUntilReachable(publicUrl);
+    await subscribeWebhook(aws, topicArn, webhook);
+  }
+
+  await waitFor(
+    "Confirming the SNS subscription",
+    async () => (await aws.subscriptionState(topicArn, webhook)) === "confirmed"
+  );
+
+  await waitFor("Waiting for SES to verify your domain", async () => {
+    const identity = await aws.ensureDomainIdentity(domain);
+
+    return identity.verified;
+  });
+
+  await requestProductionAccess(aws, newsletter);
+
+  if (!token) {
+    log.warn(
+      "Skipped saving the newsletter settings (no MCP token). Your agent can set them with update_settings."
+    );
+
+    return;
+  }
+
+  const client = await mcpClient(publicUrl, token);
+
+  const settings: JsonObject = {
+    address: newsletter.address,
+    from: { email: newsletter.fromEmail, name: newsletter.fromName },
+    links: [{ label: "Website", url: newsletter.website }],
+    name: newsletter.name,
+  };
+
+  if (newsletter.replyTo) {
+    settings.replyTo = newsletter.replyTo;
+  }
+
+  await client.callTool({ arguments: settings, name: "update_settings" });
+  log.success("Saved the newsletter settings.");
+  note(
+    toolText(await client.callTool({ arguments: {}, name: "doctor" })),
+    "Preflight checks"
+  );
+  await client.close();
+};
+
 // --- Main ---------------------------------------------------------------------------
 
 const main = async () => {
@@ -691,7 +870,9 @@ const main = async () => {
   const accountId = await cloudflareAccount(draft);
   save({ accountId });
 
-  const newsletter = await newsletterDetails();
+  const newsletter = await newsletterDetails(draft.newsletter);
+
+  save({ newsletter });
   const domain = newsletter.fromEmail.split("@")[1] ?? "";
 
   const hostnameAnswer = await ask(
@@ -734,7 +915,14 @@ const main = async () => {
     .catch((error: Error) => fail(`AWS access didn't work: ${error.message}`));
   progress.stop("AWS access works");
 
-  const cloudflare = await cloudflareToken();
+  // Only ask for a Cloudflare API token if a step below needs it.
+  let cloudflare: Promise<CloudflareApi | null> | undefined;
+
+  const cloudflareApi = async (): Promise<CloudflareApi | null> => {
+    cloudflare ??= cloudflareToken();
+
+    return await cloudflare;
+  };
 
   progress.start("Creating the database, KV namespace and queue");
   const databaseId = ensureDatabase();
@@ -748,14 +936,21 @@ const main = async () => {
   });
   progress.stop("Database, KV namespace and queue ready");
 
-  const turnstile = await turnstileKeys(
-    cloudflare,
-    accountId,
-    hostname,
-    draft.turnstileSiteKey
-  );
+  const secrets: Secrets = {};
 
-  save({ turnstileSiteKey: turnstile.sitekey });
+  if (draft.turnstileSiteKey && existingSecrets.has("TURNSTILE_SECRET_KEY")) {
+    log.success("Turnstile widget: already set up.");
+  } else {
+    const turnstile = await turnstileKeys(
+      await cloudflareApi(),
+      accountId,
+      hostname,
+      draft.turnstileSiteKey
+    );
+
+    save({ turnstileSiteKey: turnstile.sitekey });
+    secrets.TURNSTILE_SECRET_KEY = turnstile.secret;
+  }
 
   progress.start("Setting up SES and SNS");
   const ses = await configureSes(aws, domain, region);
@@ -766,21 +961,24 @@ const main = async () => {
   });
   progress.stop("SES identity, configuration set and event topic ready");
 
-  const records = sesDnsRecords({
-    dkimTokens: ses.identity.dkimTokens,
-    dmarc: !(await hasDmarc(domain).catch(() => false)),
-    domain,
-    mailFromDomain: ses.mailFromDomain,
-    region,
-  });
+  const dmarc = await hasDmarc(domain).catch(() => false);
 
-  await configureDns(cloudflare, records, domain);
+  const dnsDone =
+    ses.identity.verified && ses.identity.mailFromStatus === "SUCCESS" && dmarc;
 
-  const mcpToken = existingSecrets.has("MCP_TOKEN")
-    ? undefined
-    : randomSecret();
+  if (dnsDone) {
+    log.success(`DNS: SES has verified ${domain}, and it has DMARC.`);
+  } else {
+    const records = sesDnsRecords({
+      dkimTokens: ses.identity.dkimTokens,
+      dmarc: !dmarc,
+      domain,
+      mailFromDomain: ses.mailFromDomain,
+      region,
+    });
 
-  const secrets: Secrets = { TURNSTILE_SECRET_KEY: turnstile.secret };
+    await configureDns(await cloudflareApi(), records, domain);
+  }
 
   if (access.runtime) {
     secrets.AWS_ACCESS_KEY_ID = access.runtime.accessKeyId;
@@ -792,8 +990,10 @@ const main = async () => {
     secrets.TOKEN_SECRET = randomSecret();
   }
 
-  if (mcpToken) {
-    secrets.MCP_TOKEN = mcpToken;
+  const mcp = await chooseMcpToken(existingSecrets);
+
+  if (mcp.created && mcp.token) {
+    secrets.MCP_TOKEN = mcp.token;
   }
 
   progress.start(`Deploying to ${publicUrl}`);
@@ -807,74 +1007,23 @@ const main = async () => {
 
   progress.stop(`Deployed to ${publicUrl}`);
 
-  const webhook = `${publicUrl}/webhooks/ses`;
-
-  if ((await aws.subscriptionState(ses.topicArn, webhook)) !== "confirmed") {
-    await aws.subscribeHttps(ses.topicArn, webhook);
+  // Show a new token straight away, so nothing after this can lose it.
+  if (mcp.created && mcp.token) {
+    showMcpToken(publicUrl, mcp.token);
   }
 
-  await waitFor(
-    "Confirming the SNS subscription",
-    async () =>
-      (await aws.subscriptionState(ses.topicArn, webhook)) === "confirmed"
-  );
-
-  const token =
-    mcpToken ??
-    answer(
-      await password({
-        message:
-          "Your existing MCP token (to save the newsletter settings), or leave empty to skip",
-      })
-    ).trim();
-
-  if (token) {
-    const client = await mcpClient(publicUrl, token).catch((error: Error) =>
-      fail(`Couldn't reach ${publicUrl}/mcp: ${error.message}`)
-    );
-
-    const settings: JsonObject = {
-      address: newsletter.address,
-      from: { email: newsletter.fromEmail, name: newsletter.fromName },
-      links: [{ label: "Website", url: newsletter.website }],
-      name: newsletter.name,
-    };
-
-    if (newsletter.replyTo) {
-      settings.replyTo = newsletter.replyTo;
-    }
-
-    await client.callTool({ arguments: settings, name: "update_settings" });
-    log.success("Saved the newsletter settings.");
-
-    await waitFor("Waiting for SES to verify your domain", async () => {
-      const identity = await aws.ensureDomainIdentity(domain);
-
-      return identity.verified;
+  try {
+    await finishSetup({
+      aws,
+      domain,
+      newsletter,
+      publicUrl,
+      token: mcp.token,
+      topicArn: ses.topicArn,
     });
-    await requestProductionAccess(aws, newsletter);
-
-    note(
-      toolText(await client.callTool({ arguments: {}, name: "doctor" })),
-      "Preflight checks"
-    );
-    await client.close();
-  }
-
-  if (mcpToken) {
-    note(
-      [
-        "Connect your agent (this token is shown once; keep it somewhere safe):",
-        "",
-        "Claude Code:",
-        `  claude mcp add --transport http sendoff ${publicUrl}/mcp --header "Authorization: Bearer ${mcpToken}"`,
-        "",
-        `Codex: add an MCP server with URL ${publicUrl}/mcp and this bearer token.`,
-        "",
-        "claude.ai and Claude Desktop: Settings → Connectors → Add custom connector,",
-        `  URL ${publicUrl}/mcp. When it asks you to sign in, paste this token.`,
-      ].join("\n"),
-      "Your MCP token"
+  } catch (error) {
+    fail(
+      `${error instanceof Error ? error.message : String(error)}\n\nEverything before this step is done. Run \`bun run setup\` again to finish; it skips what's already set up.`
     );
   }
 

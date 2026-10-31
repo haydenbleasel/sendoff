@@ -16,6 +16,17 @@ export const instanceSchema = z.object({
   hostname: z.string().optional(),
   /** KV namespace for OAuth grants and tokens (claude.ai and Claude Desktop connectors). */
   kvNamespaceId: z.string(),
+  /** Setup's answers about the newsletter, so re-runs can pre-fill them. */
+  newsletter: z
+    .object({
+      address: z.string(),
+      fromEmail: z.string(),
+      fromName: z.string(),
+      name: z.string(),
+      replyTo: z.string().optional(),
+      website: z.string(),
+    })
+    .optional(),
   publicUrl: z.url(),
   queueName: z.string().default("sendoff-send"),
   sesConfigurationSet: z.string().default("sendoff"),
