@@ -1,0 +1,6 @@
+# Blume's generated Astro project, and the copy `--isolated` builds use
+.blume/
+.blume-verify/
+
+# Local secrets
+.env.local
