@@ -13,6 +13,9 @@
     "types": {
       "dependsOn": ["^build"],
       "outputs": []
+    },
+    "test": {
+      "outputs": []
     }
   }
 }

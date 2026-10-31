@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sendoff",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sendoff",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "secrets": {
+    "required": ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"],
+  },
+  "vars": {
+    "SES_REGION": "us-east-1",
+    "SES_CONFIGURATION_SET": "sendoff",
+  },
+}
