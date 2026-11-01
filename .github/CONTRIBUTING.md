@@ -69,6 +69,23 @@ The pre-commit hook runs `bun run fix` on staged files, and CI runs `check`, `ty
 - **`create-sendoff`:** test it end to end with `--repo <path>` pointing at a local repo whose `setup` script is harmless, like `echo`, so it never touches real accounts.
 - **Docs:** keep the writing short and plain, like the pages around it.
 
+## Changesets
+
+We use [Changesets](https://github.com/changesets/changesets) to version and publish `create-sendoff`, the one package on npm. The Worker and the docs site aren't published: people update them with `git pull`, so they don't need changesets.
+
+When you change `packages/create-sendoff` in a way people would notice:
+
+1. Run `bun changeset` in the root directory
+2. Select `create-sendoff`
+3. Choose the version bump:
+   - `patch`: bug fixes and small changes
+   - `minor`: new features that don't break anything
+   - `major`: breaking changes, such as a new required flag
+4. Describe the change in a sentence or two. It goes in the changelog.
+5. Commit the generated file in `.changeset/` with your change
+
+Skip it for refactors, tests and build configuration. Merging to `main` opens a "Version Packages" pull request; merging that publishes the new version.
+
 ## Pull requests
 
 - Keep each pull request focused on one change.
@@ -76,6 +93,7 @@ The pre-commit hook runs `bun run fix` on staged files, and CI runs `check`, `ty
 - Add or update tests for behavior changes.
 - Update the docs and `SPEC.md` when behavior changes.
 - Add screenshots when the email layout or a page changes.
+- Add a changeset if you changed `create-sendoff` (see [Changesets](#changesets)).
 
 ## Reporting bugs
 

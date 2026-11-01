@@ -15,12 +15,16 @@
     "test": "turbo run test",
     "check": "ultracite check",
     "fix": "ultracite fix",
+    "changeset": "changeset",
+    "changeset:version": "changeset version && bun install --lockfile-only",
+    "changeset:publish": "turbo run build && changeset publish",
     "bump-deps": "npx npm-check-updates --deep -u && bun install",
     "prepare": "husky",
     "setup": "cd apps/app && bun run setup",
     "deploy": "cd apps/app && bun run deploy"
   },
   "devDependencies": {
+    "@changesets/cli": "^3.0.3",
     "@typescript/native-preview": "^7.0.0-dev.20260707.2",
     "husky": "^9.1.7",
     "oxfmt": "^0.74.0",
