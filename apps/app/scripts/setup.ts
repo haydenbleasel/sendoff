@@ -90,10 +90,28 @@ const HOSTNAME = /^(?:[a-z\d](?:[a-z\d-]*[a-z\d])?\.)+[a-z]{2,}$/u;
 
 // --- Prompt helpers -------------------------------------------------------------
 
+// The shell's code for Ctrl+C. Not 0, so `bun create sendoff` doesn't report
+// a cancelled setup as finished.
+const EXIT_CANCELLED = 130;
+
+const CANCELLED =
+  "Setup cancelled. Run it again any time; finished steps are kept.";
+
+const cancelSetup = (): never => {
+  cancel(CANCELLED);
+  process.exit(EXIT_CANCELLED);
+};
+
+/** clack's spinner handles Ctrl+C itself; without onCancel, setup would carry on. */
+const progressSpinner = () =>
+  spinner({
+    cancelMessage: CANCELLED,
+    onCancel: () => process.exit(EXIT_CANCELLED),
+  });
+
 const answer = <T>(value: T): Exclude<T, symbol> => {
   if (isCancel(value)) {
-    cancel("Setup cancelled. Run it again any time; finished steps are kept.");
-    process.exit(0);
+    cancelSetup();
   }
 
   // SAFETY: isCancel is true for the only symbol a clack prompt returns.
@@ -805,7 +823,7 @@ const waitFor = async (
   check: () => Promise<boolean>,
   attempts = POLL_ATTEMPTS
 ): Promise<boolean> => {
-  const progress = spinner();
+  const progress = progressSpinner();
 
   progress.start(label);
 
@@ -1253,7 +1271,7 @@ const main = async () => {
   }
 
   const aws = createAwsSetup(access.provisioning);
-  const progress = spinner();
+  const progress = progressSpinner();
 
   progress.start("Checking AWS access");
   await aws
