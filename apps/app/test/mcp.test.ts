@@ -139,6 +139,14 @@ describe("tools", () => {
       accent: "#ff0066",
       name: "Test Newsletter",
     });
+
+    // Some clients can't send null, so an empty string clears it too.
+    const cleared = await call("update_settings", { address: "" });
+
+    expect(cleared.isError).toBe(false);
+    expect(dataOf(cleared.text)).not.toHaveProperty("address");
+
+    await call("update_settings", { address: "1 Test Lane, Sydney" });
   });
 
   it("drafts, edits and previews an issue", async () => {

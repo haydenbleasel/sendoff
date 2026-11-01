@@ -21,13 +21,15 @@ const updateSchema = z.object({
     .nullable()
     .optional()
     .describe(
-      "Postal address for the footer: a street address, PO box or private mailbox. US and Canadian law require one in commercial email (launches, promotions). Without one, prepare_send checks each issue and blocks any that read as commercial. null removes it."
+      "Postal address for the footer: a street address, PO box or private mailbox. US and Canadian law require one in commercial email (launches, promotions). Without one, prepare_send checks each issue and blocks any that read as commercial. null or an empty string removes it."
     ),
   description: z
     .string()
     .nullable()
     .optional()
-    .describe("One or two sentences for the subscribe page. null removes it."),
+    .describe(
+      "One or two sentences for the subscribe page. null or an empty string removes it."
+    ),
   from: z
     .object({ email: z.string(), name: z.string() })
     .optional()
@@ -60,7 +62,9 @@ const updateSchema = z.object({
     .string()
     .nullable()
     .optional()
-    .describe("Where replies go, if not the sender. null removes it."),
+    .describe(
+      "Where replies go, if not the sender. null or an empty string removes it."
+    ),
   tracking: z
     .object({
       clicks: z
@@ -90,18 +94,27 @@ const pick = <T>(
   current: T | undefined
 ): T | undefined => (next === undefined ? current : (next ?? undefined));
 
+/**
+ * An empty string clears optional text too: some clients can't send null,
+ * and turn it into the string "null" instead.
+ */
+const pickText = (
+  next: string | null | undefined,
+  current: string | undefined
+): string | undefined => pick(next?.trim() === "" ? null : next, current);
+
 const merge = (
   current: Settings | null,
   update: SettingsUpdate
 ): SettingsDraft => ({
   accent: update.accent ?? current?.accent,
-  address: pick(update.address, current?.address),
-  description: pick(update.description, current?.description),
+  address: pickText(update.address, current?.address),
+  description: pickText(update.description, current?.description),
   from: update.from ?? current?.from,
   links: update.links ?? current?.links,
   logo: pick(update.logo, current?.logo),
   name: update.name ?? current?.name,
-  replyTo: pick(update.replyTo, current?.replyTo),
+  replyTo: pickText(update.replyTo, current?.replyTo),
   tracking: {
     clicks: update.tracking?.clicks ?? current?.tracking.clicks,
     opens: update.tracking?.opens ?? current?.tracking.opens,
