@@ -499,6 +499,34 @@ describe("sending", () => {
     expect(newsletterEmails()).toHaveLength(CHUNK_SIZE);
   });
 
+  it("stops the chunk it's in the middle of when cancelled", async () => {
+    await addActive(5);
+    const confirmed = await startSend();
+    let cancelled = false;
+
+    // At 1 email a second, the worker pauses after each one: cancel then.
+    deps.sleep = async () => {
+      if (!cancelled) {
+        cancelled = true;
+        await cancelSend(deps, confirmed.issue.id);
+      }
+    };
+
+    await processSendChunk(deps, {
+      issueId: confirmed.issue.id,
+      maxSendRate: 1,
+    });
+
+    const status = await sendStatus(deps, confirmed.issue.id);
+    expect(newsletterEmails()).toHaveLength(1);
+    expect(status.counts).toMatchObject({
+      queued: 0,
+      sending: 0,
+      sent: 1,
+      skipped: 4,
+    });
+  });
+
   it("restarts stalled sends from the cron", async () => {
     await addActive(2);
     deps = {

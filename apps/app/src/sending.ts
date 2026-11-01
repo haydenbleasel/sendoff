@@ -740,7 +740,23 @@ export const processSendChunk = async (
 
   const requeue: string[] = [];
 
+  const cancelled = async () => {
+    const current = await db.query.issues.findFirst({
+      columns: { status: true },
+      where: eq(issues.id, issue.id),
+    });
+
+    return current?.status !== "sending";
+  };
+
   for (let start = 0; start < recipients.length; start += groupSize) {
+    // cancel_send stops the rest of this chunk too, not just the next one.
+    // oxlint-disable-next-line no-await-in-loop -- one read before each group
+    if (await cancelled()) {
+      requeue.push(...recipients.slice(start).map((recipient) => recipient.id));
+      break;
+    }
+
     const group = recipients.slice(start, start + groupSize);
     const groupStarted = Date.now();
 
@@ -863,7 +879,12 @@ export const processSendChunk = async (
     finish.push(
       db
         .update(sends)
-        .set({ status: "queued" })
+        .set({
+          // Skipped, like the rest of the queue, if the send was cancelled meanwhile.
+          status: sql<
+            "queued" | "skipped"
+          >`CASE WHEN EXISTS (SELECT 1 FROM issues WHERE id = ${issue.id} AND status = 'sending') THEN 'queued' ELSE 'skipped' END`,
+        })
         .where(
           and(eq(sends.issueId, issue.id), inArray(sends.subscriberId, requeue))
         )
