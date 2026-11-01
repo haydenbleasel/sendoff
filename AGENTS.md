@@ -2,10 +2,11 @@
 
 Bun + Turborepo monorepo:
 
-| Path       | What                                                        |
-| ---------- | ----------------------------------------------------------- |
+| Path | What |
+| --- | --- |
 | `apps/app` | The Sendoff Worker (Cloudflare Workers + D1, sends via SES) |
-| `apps/web` | Docs site: [Blume](https://useblume.dev) (on Astro)         |
+| `apps/web` | Docs site: [Blume](https://useblume.dev) (on Astro) |
+| `packages/create-sendoff` | `bun create sendoff`: clones the repo, installs it and runs `bun run setup` |
 
 `SPEC.md` is the design: decisions, data model, MCP tools, send pipeline and milestones.
 
@@ -23,6 +24,8 @@ Commands (from the repo root):
 - `src/email/` renders issues: Markdown (validated subset, see `markdown.ts`) into a fixed React Email layout. Preview it at `/preview/sample` with `bun run dev`.
 - `bun run bench` measures render CPU against the Workers CPU limit.
 - `bun run setup` (from the repo root) provisions and deploys a real instance into your Cloudflare and AWS accounts; `bun run deploy` redeploys. Instance ids live in the gitignored `apps/app/.sendoff/`, and deploys use the generated `.sendoff/wrangler.jsonc`, so `wrangler.jsonc` stays generic. Don't run setup against someone's accounts without asking.
+
+`packages/create-sendoff` is the npm package behind `bun create sendoff`. `bun run build` bundles it (with `@clack/prompts` and `zod/mini`) into one `dist/index.js` for Node, so its dependencies are all devDependencies. Test it end to end with `--repo <path>` pointing at a local repo whose `setup` script is harmless; never let it run the real setup against someone's accounts without asking.
 
 `apps/web` is a Blume site: `blume dev` and `blume build` generate an Astro project in `.blume/`, so settings go in `blume.config.ts` and pages in `docs/`. Blume's own docs ship in `node_modules/blume/docs`.
 

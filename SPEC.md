@@ -17,9 +17,9 @@ A self-hosted, newsletter-only email tool that you drive from an agent. You depl
 
 ## Deployment and settings
 
-Sendoff is one Worker app (`apps/app`). There's no published framework package and no generated project.
+Sendoff is one Worker app (`apps/app`). There's no published framework package and no generated project: the only published package is `create-sendoff`, which clones the repo.
 
-- **Deploying:** clone the repo and run `bun run setup` (see [Setup flow](#setup-flow)); later, `bun run deploy` ships updates. A Deploy to Cloudflare button comes later.
+- **Deploying:** `bun create sendoff [folder]` clones the repo (a real clone, so `git pull` updates it), runs `bun install` and hands off to `bun run setup` (see [Setup flow](#setup-flow)); later, `bun run deploy` ships updates. Before cloning it checks for Git and Bun and nudges people to log in to the AWS CLI. Run again on an existing clone, it skips the clone and resumes setup. A Deploy to Cloudflare button comes later.
 - **Customizing doesn't touch code.** Brand and sender settings live in D1 and are edited through MCP: "make the accent color #ff0066" or "add my GitHub link". A user's copy never drifts from upstream, so updating is just pulling and redeploying.
 - **Where config lives:**
   - Secrets are Worker secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `TOKEN_SECRET` (signs links), `TURNSTILE_SECRET_KEY`, and later the MCP token.
@@ -270,11 +270,12 @@ Later optimization: SES `SendBulkEmail` (50 destinations per call) with per-dest
 ## Repo layout
 
 ```
-apps/web    Blume docs site (exists)
-apps/app    the Worker: public pages, MCP, preview, send queue, SES client, email template, setup script
+apps/web                  Blume docs site (exists)
+apps/app                  the Worker: public pages, MCP, preview, send queue, SES client, email template, setup script
+packages/create-sendoff   `bun create sendoff`: clones the repo and hands off to setup (published to npm)
 ```
 
-The app stays self-contained (no internal workspace packages) so a Deploy to Cloudflare button can deploy the `apps/app` directory on its own. Pull code out into `packages/` only once something else needs it.
+The app stays self-contained (no internal workspace packages) so a Deploy to Cloudflare button can deploy the `apps/app` directory on its own. Pull code out into `packages/` only once something else needs it. `create-sendoff` isn't shared code: nothing imports it, and it's bundled into one file with no runtime dependencies.
 
 ## Milestones
 

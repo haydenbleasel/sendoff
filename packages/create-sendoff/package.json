@@ -1,0 +1,42 @@
+{
+  "name": "create-sendoff",
+  "version": "0.0.0",
+  "description": "Deploy Sendoff, the newsletter you run from your agent, into your own Cloudflare and AWS accounts.",
+  "keywords": [
+    "cloudflare",
+    "mcp",
+    "newsletter",
+    "sendoff",
+    "ses"
+  ],
+  "homepage": "https://sendoff.dev",
+  "bugs": "https://github.com/haydenbleasel/sendoff/issues",
+  "author": "Hayden Bleasel",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/haydenbleasel/sendoff.git",
+    "directory": "packages/create-sendoff"
+  },
+  "bin": {
+    "create-sendoff": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/index.ts --target node --outfile dist/index.js",
+    "prepack": "bun run build",
+    "types": "tsgo --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@clack/prompts": "^1.8.1",
+    "@types/node": "^26.6.6",
+    "vitest": "^4.1.0",
+    "zod": "^4.6.7"
+  },
+  "engines": {
+    "node": ">=20.12"
+  }
+}

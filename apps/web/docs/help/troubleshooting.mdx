@@ -50,7 +50,7 @@ Ask your agent to "run doctor" at any time. `prepare_send` runs the same checks,
 
 ## Common problems
 
-**Setup stopped partway.** Run `bun run setup` again. It skips everything that's done and continues from the step that failed.
+**Setup stopped partway.** Run `bun run setup` again from your Sendoff folder, or `bun create sendoff` again from where you first ran it. It skips everything that's done and continues from the step that failed.
 
 **The agent can't connect.** Check the URL ends in `/mcp` and the header is `Authorization: Bearer <token>`, with a space after `Bearer`. If you've lost the token, [replace it](/docs/connect#keep-the-token-safe).
 
