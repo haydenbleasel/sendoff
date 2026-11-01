@@ -109,13 +109,18 @@ const deliveryLine = (stats: IssueStats): string => {
   }
 
   if (stats.skipped > 0) {
-    parts.push(`skipped (left the list mid-send): ${number(stats.skipped)}`);
+    const why =
+      stats.issue.status === "cancelled"
+        ? "the send was cancelled, or they left the list mid-send"
+        : "left the list mid-send";
+
+    parts.push(`skipped (${why}): ${number(stats.skipped)}`);
   }
 
   return `${parts.join(", ")}.`;
 };
 
-const clicksLine = ({ clicks, rates }: IssueStats): string => {
+const clicksLine = ({ clicks, delivered, rates }: IssueStats): string => {
   if (!clicks) {
     return "Clicks weren't tracked for this issue.";
   }
@@ -125,7 +130,10 @@ const clicksLine = ({ clicks, rates }: IssueStats): string => {
       ? ` ${plural(clicks.automated, "automated click")} from link scanners and checkers aren't counted.`
       : "";
 
-  return `Clicks: ${people(clicks.people)} clicked (${percent(rates.click)} of delivered), ${plural(clicks.total, "click")} in all.${automated}`;
+  // Rates fall back to emails sent until SES reports a delivery.
+  const of = delivered > 0 ? "delivered" : "sent";
+
+  return `Clicks: ${people(clicks.people)} clicked (${percent(rates.click)} of ${of}), ${plural(clicks.total, "click")} in all.${automated}`;
 };
 
 const opensLine = ({ opens, rates, delivered, sent }: IssueStats): string => {
