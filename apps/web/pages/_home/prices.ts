@@ -144,7 +144,7 @@ export const prices: Prices = {
 };
 
 export interface PricingInput {
-  /** Issues sent a year. */
+  /** Issues sent a month, counting a month as four weeks. */
   issues: number;
   subscribers: number;
 }
@@ -228,7 +228,7 @@ const providerBill = (input: PricingInput, provider: Provider): Bill => {
 
 /** Sendoff's bill: no license fee, Workers Paid, and SES for each email. */
 const sendoffBill = (input: PricingInput, p: Prices): Bill => {
-  const emails = Math.round((input.subscribers * input.issues) / 12);
+  const emails = Math.round(input.subscribers * input.issues);
   const ses = cents((emails / 1000) * p.ses.perThousand);
 
   return {
@@ -319,7 +319,7 @@ export const fields: Field[] = [
     key: "issues",
     label: "How often you send",
     labels: ["Quarterly", "Monthly", "Twice a month", "Weekly", "Twice a week"],
-    steps: [4, 12, 24, 52, 104],
+    steps: [1 / 3, 1, 2, 4, 8],
   },
 ];
 
@@ -327,17 +327,17 @@ export const fields: Field[] = [
 export const presets: { id: string; input: PricingInput; label: string }[] = [
   {
     id: "side-project",
-    input: { issues: 12, subscribers: 2500 },
+    input: { issues: 1, subscribers: 2500 },
     label: "Side project",
   },
   {
     id: "newsletter",
-    input: { issues: 52, subscribers: 10_000 },
+    input: { issues: 4, subscribers: 10_000 },
     label: "Weekly newsletter",
   },
   {
     id: "publication",
-    input: { issues: 52, subscribers: 100_000 },
+    input: { issues: 4, subscribers: 100_000 },
     label: "Publication",
   },
 ];
