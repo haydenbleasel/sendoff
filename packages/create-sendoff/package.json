@@ -1,6 +1,6 @@
 {
   "name": "create-sendoff",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Deploy Sendoff, which emails your list (newsletters, launches, announcements) from your agent, into your own Cloudflare and AWS accounts.",
   "keywords": [
     "broadcast",
