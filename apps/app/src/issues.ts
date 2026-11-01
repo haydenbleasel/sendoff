@@ -1,4 +1,4 @@
-import { and, desc, eq, like, or } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, lt, or } from "drizzle-orm";
 
 import type { Database } from "./db/client";
 import { issues } from "./db/schema";
@@ -15,8 +15,10 @@ const QUOTE_LENGTH = 60;
 const HEX = 16;
 const COMBINING_MARKS = /[̀-ͯ]/gu;
 const NON_SLUG = /[^a-z\d]+/gu;
+
+// Dropped rather than turned into dashes, so "Let's" becomes "lets".
+const APOSTROPHES = /['\u2018\u2019\u02BC]/gu;
 const EDGE_DASHES = /^-+|-+$/gu;
-const SLUG_SUFFIX = /-\d+$/u;
 const VALID_SLUG = /^[a-z\d]+(?:-[a-z\d]+)*$/u;
 
 export class IssueError extends Error {
@@ -31,6 +33,7 @@ export const slugify = (value: string): string =>
     .normalize("NFKD")
     .replaceAll(COMBINING_MARKS, "")
     .toLowerCase()
+    .replaceAll(APOSTROPHES, "")
     .replaceAll(NON_SLUG, "-")
     .replaceAll(EDGE_DASHES, "")
     .slice(0, MAX_SLUG_LENGTH)
@@ -55,16 +58,50 @@ export const contentHash = async ({
     .join("");
 };
 
-const uniqueSlug = async (
+/** The longest numbered suffix, "-999". */
+const MAX_SUFFIX_LENGTH = 4;
+const MAX_SUFFIX = 999;
+
+/**
+ * What numbered variants are built on: the slug itself, or for one too long
+ * to take a suffix, the slug cut back to a whole word that leaves room.
+ */
+const stemFor = (base: string): string => {
+  const room = MAX_SLUG_LENGTH - MAX_SUFFIX_LENGTH;
+
+  if (base.length <= room) {
+    return base;
+  }
+
+  const cut = base.slice(0, room);
+
+  if (base.charAt(room) === "-") {
+    return cut;
+  }
+
+  const lastDash = cut.lastIndexOf("-");
+
+  return lastDash > 0 ? cut.slice(0, lastDash) : cut;
+};
+
+/**
+ * `base` if it's free, otherwise the first free numbered variant, so two
+ * issues called "Roadmap 2024" get roadmap-2024 and roadmap-2024-2.
+ */
+export const uniqueSlug = async (
   db: Database,
   base: string,
   exceptId?: string
 ): Promise<string> => {
-  // Slugs only contain [a-z0-9-], so there are no LIKE wildcards to escape.
+  const stem = stemFor(base);
+
+  // `base` and every variant start with the stem, and slugs only use
+  // [a-z0-9-], which all sort before "{", so a range finds them. (D1 rejects
+  // LIKE patterns over 50 bytes, which a long subject's slug passes.)
   const rows = await db
     .select({ id: issues.id, slug: issues.slug })
     .from(issues)
-    .where(or(eq(issues.slug, base), like(issues.slug, `${base}-%`)));
+    .where(and(gte(issues.slug, stem), lt(issues.slug, `${stem}{`)));
 
   const taken = new Set(
     rows.filter((row) => row.id !== exceptId).map((row) => row.slug)
@@ -74,14 +111,17 @@ const uniqueSlug = async (
     return base;
   }
 
-  const stem = base.replace(SLUG_SUFFIX, "");
-  let suffix = 2;
+  for (let suffix = 2; suffix <= MAX_SUFFIX; suffix += 1) {
+    const candidate = `${stem}-${suffix}`;
 
-  while (taken.has(`${stem}-${suffix}`)) {
-    suffix += 1;
+    if (!taken.has(candidate)) {
+      return candidate;
+    }
   }
 
-  return `${stem}-${suffix}`;
+  throw new IssueError(
+    `Too many issues use the slug "${base}". Choose another one.`
+  );
 };
 
 /** Look an issue up by id or slug. */
@@ -342,15 +382,27 @@ export const setDraftMeta = async (
   return await saveContent(db, issue, changes, now);
 };
 
+/** Delete a draft, or an imported issue (so it can be imported again from scratch). */
 export const deleteDraft = async (
   db: Database,
   ref: string
 ): Promise<Issue> => {
-  const issue = await requireDraft(db, ref);
+  const issue = await requireIssue(db, ref);
+
+  if (issue.status !== "draft" && !issue.importedAt) {
+    throw new IssueError(
+      `"${issue.subject}" is ${issue.status}, so it can't be deleted. Only drafts and imported issues can.`
+    );
+  }
 
   await db
     .delete(issues)
-    .where(and(eq(issues.id, issue.id), eq(issues.status, "draft")));
+    .where(
+      and(
+        eq(issues.id, issue.id),
+        or(eq(issues.status, "draft"), isNotNull(issues.importedAt))
+      )
+    );
 
   return issue;
 };

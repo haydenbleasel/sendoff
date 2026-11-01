@@ -44,7 +44,7 @@ Nothing reaches your list without you. Before a send, the agent has to email you
 - **Works with your agent.** Claude Code and Codex connect with a token; claude.ai and Claude Desktop add it as a connector and sign in with OAuth.
 - **Deliverability built in.** DKIM, a custom MAIL FROM domain and DMARC on your own domain, one-click unsubscribe headers, and double opt-in with Turnstile on the signup form. Bounces and complaints come off the list automatically.
 - **Preflight before every send.** Sendoff checks your domain, your SES account and quota, and your latest test, and won't send until everything passes. Ask your agent to run `doctor` to see the checks any time.
-- **Bring your list.** Import any provider's CSV export. Imports never resubscribe anyone who unsubscribed, bounced or complained.
+- **Bring your list and your back catalog.** Import any provider's CSV export; imports never resubscribe anyone who unsubscribed, bounced or complained. Past issues come over exactly as they were sent, so nothing's lost.
 - **Signups from your site.** A hosted signup page, plus a REST API with scoped keys and an OpenAPI description for your own forms.
 - **Stats your agent can read.** Ask "how's my latest send doing?" for deliveries, clicks and unsubscribes in people, with security scanners filtered out, compared with your earlier issues. Clicks go through your own domain; opens are opt-in.
 - **Sends you can stop and resume.** Sends go out in chunks through a queue. If SES pauses or a worker crashes, the send stops and picks up where it left off when you resume it, and nobody gets the issue twice.

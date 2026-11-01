@@ -63,6 +63,7 @@ One Worker serves everything:
 | `GET/POST /authorize`, `POST /authorize/sign-in` | OAuth authorize step: the owner signs in with the admin token (a 15-minute signed `__Host-` session cookie), then sees a consent page (client name, verified domain for CIMD clients, redirect host, loopback warning) and allows or denies. |
 | `/oauth/token`, `/oauth/register`, `/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource/mcp` | Served by `@cloudflare/workers-oauth-provider`: token endpoint, dynamic registration, and discovery metadata. |
 | `POST /api/v1/subscribers` | REST: subscribe an address (double opt-in). Needs an API key with `subscribers:write`. See [REST API](#rest-api). |
+| `POST /api/v1/subscribers/import`, `POST /api/v1/issues/import` | REST imports: a CSV of subscribers (`subscribers:import`) and past issues (`issues:import`). See [Importing](#importing). |
 | `GET /api/v1/openapi.json` | OpenAPI 3.1 description of the REST API, generated from the handlers' zod schemas. Public. |
 | `/issues/:slug` | Hosted "view in browser" page and archive (later milestone). |
 | Queue consumer (`sendoff-send`) | One message = one chunk of up to 50 recipients. Batch size 1, concurrency 1. |
@@ -94,8 +95,11 @@ issues       id PK, slug UNIQUE, subject, preheader, body, version INT,
              rendered_html, rendered_text, sender JSON, tracking JSON,
              recipient_count,
              send_started_at, send_heartbeat_at, send_error,
-             created_at, updated_at, sent_at, cancelled_at
+             created_at, updated_at, sent_at, cancelled_at, imported_at
              status: draft | sending | sent | cancelled
+             imported_at: set for past issues from another provider (see
+             Importing): status sent, rendered_html/text as they were sent,
+             body empty, updated_at = sent_at, send_started_at null
 
 sends        (issue_id, subscriber_id) PK, status, message_id, error, sent_at,
              delivered_at
@@ -132,7 +136,7 @@ Unsubscribe and confirm tokens are `subscriberId.base64url(HMAC-SHA256(TOKEN_SEC
 | --- | --- | --- |
 | Settings | `get_settings`, `update_settings` | `update_settings` merges a partial update (`null` clears optional fields), including `tracking: { clicks, opens }`. It warns, rather than blocks, when the sender's domain isn't verified in SES; sending is blocked until it is. |
 | Setup | `doctor` | Fails (blocks sending): no settings, no active subscribers, SES unreachable, sandbox, sending disabled, account shut down, quota below the list size, sender domain not verified, no DMARC record (looked up over DNS-over-HTTPS, falling back to the parent domain), configuration set missing. Warns: probation, no custom MAIL FROM, bounce/complaint events not wired to Sendoff's SNS topic, deliveries not reported, account suppression list off. |
-| Drafts | `create_draft`, `get_draft`, `edit_draft`, `set_draft_meta`, `list_issues`, `preview_draft`, `delete_draft` | `edit_draft` applies exact find/replace edits all-or-nothing (or replaces the body), takes an optional `expectedVersion`, and bumps `version`. Drafts are stored even with Markdown problems; results list them by line. `preview_draft` returns the URL plus the plain-text version so the agent can proofread. Issues are addressed by id or slug. |
+| Drafts | `create_draft`, `get_draft`, `edit_draft`, `set_draft_meta`, `list_issues`, `preview_draft`, `delete_draft`, `import_issue` | `edit_draft` applies exact find/replace edits all-or-nothing (or replaces the body), takes an optional `expectedVersion`, and bumps `version`. Drafts are stored even with Markdown problems; results list them by line. `preview_draft` returns the URL plus the plain-text version so the agent can proofread. Issues are addressed by id or slug. `import_issue` keeps one past issue from another provider (see [Importing](#importing)); `delete_draft` also deletes imported issues. |
 | Sending | `send_test`, `prepare_send`, `confirm_send`, `send_status`, `cancel_send`, `resume_send` | See [Send pipeline](#send-pipeline). `confirm_send` and `cancel_send` are annotated `destructiveHint: true`, and the instructions tell the agent to confirm only after the person explicitly says to send. |
 | Subscribers | `add_subscriber`, `import_csv`, `import_subscribers`, `search_subscribers`, `unsubscribe_subscriber` (`prune` in M6) | `add_subscriber` sends a confirmation email unless `skipConfirmation` (only when the person asked to be added). Imports support `dryRun`, can suppress an existing subscriber but never reactivate one, and treat imported active subscribers as confirmed. `import_csv` reads any provider's CSV export (see [Importing](#importing)); `import_subscribers` takes a short list of addresses. |
 | API keys | `create_api_key`, `list_api_keys`, `revoke_api_key` | Keys are shown once (to the agent, which hands them to the person) and stored hashed. Revoke by id or prefix. |
@@ -157,6 +161,13 @@ Every provider exports contacts as CSV, so Sendoff reads CSV rather than talking
 
 A row with several signals takes the most severe (complained, bounced, unsubscribed, active), and a `status` option marks a whole file of suppressions. Anything unclear is skipped and reported (unrecognized status values with counts, rows without an email) rather than imported as active, because emailing someone who unsubscribed is the mistake an import must not make. Small files go through `import_csv` directly; bigger ones go to the REST endpoint with `curl`, so the agent doesn't copy thousands of addresses into a tool call.
 
+### Past issues
+
+Issues sent with another provider are kept exactly as they went out (`src/importers/issues.ts`): `{ subject, html, text?, preheader?, sentAt, slug? }`, where `sentAt` is ISO 8601 or a close variant like Resend's `2025-03-01 09:00:00.123+00` (no zone means UTC) and must be in the past. Each becomes an issue with `imported_at` set, `status` sent, the HTML and text in `rendered_html`/`rendered_text` and an empty Markdown body, so it can never be sent, edited or counted. Missing plain text is made from the HTML (head, styles and scripts dropped; links as "label (url)"; entities decoded). Importing the same subject and `sent_at` again replaces it (and bumps `version`), so a corrected copy can be re-imported. The old provider's merge tags (`{{{…}}}`, `{{ name }}`, `*|TAG|*`) are kept as they are and reported, so the agent can replace them with what readers saw and import again; double braces in code samples are reported too, which is why nothing is rewritten automatically.
+
+- **Viewing:** the preview link shows the stored HTML (status "imported"), in the preview's iframe, which is sandboxed without scripts. `get_draft` and `preview_draft` return the plain text. `issue_stats` and `send_status` say Sendoff has no data for it, and imported issues never count as the latest send or in comparisons (`send_started_at` is null).
+- **Bulk:** `import_issue` takes one issue in the tool call. For more, the agent creates an `issues:import` key and pipes the issues straight from the old provider's API (Resend's Retrieve Broadcast returns `html`, `text`, `subject`, `preview_text`, `sent_at`) to `POST /api/v1/issues/import` with `curl`, so the HTML is never retyped through the model.
+
 ## REST API
 
 A small API under `/api/v1` for servers. MCP tools don't go through it: both are thin layers over the same functions (`subscribers.ts`, `issues.ts`, `sending.ts`), which keeps them in sync without an extra HTTP hop. More endpoints (issues, sending, settings) get added when something needs them, each with its own scope.
@@ -168,6 +179,7 @@ A small API under `/api/v1` for servers. MCP tools don't go through it: both are
   - `502 confirmation_failed` if SES couldn't send the confirmation; safe to retry.
 - **Errors** are always `{ "error": { "code", "message" } }`.
 - **`POST /api/v1/subscribers/import`** (`subscribers:import`) takes a CSV as the raw body (`curl --data-binary @export.csv -H "Content-Type: text/csv"`) or a multipart `file` field, up to 10 MB and 25,000 rows, with `?dryRun=true` and an optional `?status=unsubscribed|bounced|complained`. It returns the import report (columns used, counts by status, skipped rows, new/suppressed/unchanged), or `400 invalid_request` (no email column, too many rows) and `413 too_large`. Its own scope because it adds people without confirmation emails: agents create a key for one import and revoke it afterwards.
+- **`POST /api/v1/issues/import`** (`issues:import`) takes `{ "issues": [...] }`, up to 50 issues and 10 MB, and imports them in order. It returns each issue's `outcome` (`created`, `updated` or `failed` with an `error`, such as a taken slug; a failure doesn't stop the rest) with its id, slug, send date and leftover `mergeTags`, or `400 invalid_request` and `413 too_large`.
 - **Signing up from a website's server**, e.g. a Next.js server action replacing another provider's contacts call:
   ```ts
   "use server";

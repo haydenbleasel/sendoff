@@ -20,12 +20,13 @@ You don't call these yourself: your agent picks them from what you ask. This pag
 | Tool | What it does |
 | --- | --- |
 | `create_draft` | Starts an issue from a subject, optional preheader and Markdown body, and returns the live preview URL. |
-| `get_draft` | Returns an issue's subject, preheader, body, version and preview URL. |
+| `get_draft` | Returns an issue's subject, preheader, body, version and preview URL. For an imported issue, it returns the plain-text version. |
 | `edit_draft` | Applies exact find-and-replace edits, in order and all or nothing, or replaces the whole body. Takes an optional `expectedVersion` so two agents can't overwrite each other. |
 | `set_draft_meta` | Changes the subject, preheader or slug. |
 | `list_issues` | Lists issues, most recently updated first, optionally by status (`draft`, `sending`, `sent`, `cancelled`). |
 | `preview_draft` | Returns the preview URL and the plain-text version, so the agent can proofread. |
-| `delete_draft` | Deletes a draft. Sent issues can't be deleted. |
+| `delete_draft` | Deletes a draft, or an imported issue. Issues sent with Sendoff can't be deleted. |
+| `import_issue` | Keeps a past issue sent with another provider, exactly as it went out: HTML, plain text, subject, preview text and send date. For many issues, the agent uses the [REST API](/docs/reference/rest-api#import-past-issues) instead. See [Importing past issues](/docs/guides/past-issues). |
 
 Drafts are saved even when the Markdown has problems; each result lists them by line so the agent can fix them.
 

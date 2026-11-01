@@ -87,6 +87,7 @@ describe("tools", () => {
       "get_draft",
       "get_settings",
       "import_csv",
+      "import_issue",
       "import_subscribers",
       "issue_stats",
       "list_api_keys",
@@ -293,5 +294,54 @@ describe("tools", () => {
     const rejected = await post();
 
     expect(rejected.status).toBe(401);
+  });
+});
+
+describe("import_issue", () => {
+  it("keeps a past issue as sent, readable but not editable", async () => {
+    const imported = await call("import_issue", {
+      html: '<p>Hi {{{contact.first_name|there}}}, <a href="https://example.com">read this</a>.</p>',
+      sentAt: "2025-02-03T04:05:06Z",
+      subject: "An old issue from elsewhere",
+    });
+
+    expect(imported.isError).toBe(false);
+    expect(imported.text).toContain(
+      'Imported "An old issue from elsewhere" (sent 2025-02-03, slug an-old-issue-from-elsewhere).'
+    );
+    expect(imported.text).toContain("{{{contact.first_name|there}}}");
+
+    const read = await call("get_draft", {
+      issue: "an-old-issue-from-elsewhere",
+    });
+
+    expect(read.text).toContain("was imported: sent 2025-02-03");
+    expect(read.text).toContain(
+      "Hi {{{contact.first_name|there}}}, read this (https://example.com)."
+    );
+
+    const edit = await call("edit_draft", {
+      body: "New body",
+      issue: "an-old-issue-from-elsewhere",
+    });
+
+    expect(edit.isError).toBe(true);
+
+    const badDate = await call("import_issue", {
+      html: "<p>Hi</p>",
+      sentAt: "last week",
+      subject: "Undated",
+    });
+
+    expect(badDate.isError).toBe(true);
+    expect(badDate.text).toContain("isn't a past send date");
+
+    const deleted = await call("delete_draft", {
+      issue: "an-old-issue-from-elsewhere",
+    });
+
+    expect(deleted.text).toBe(
+      'Deleted the imported issue "An old issue from elsewhere".'
+    );
   });
 });

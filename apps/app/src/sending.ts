@@ -806,6 +806,12 @@ export const sendStatus = async (
   const { db } = deps;
   const issue = await requireIssue(db, ref);
 
+  if (issue.importedAt) {
+    throw new IssueError(
+      `"${issue.subject}" was imported from another provider, so Sendoff didn't send it and has no progress to show.`
+    );
+  }
+
   const [sendRows, eventRows, failures] = await Promise.all([
     db
       .select({

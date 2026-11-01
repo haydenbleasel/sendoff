@@ -7,6 +7,12 @@ import { issueStatuses } from "../db/schema";
 import { renderIssue } from "../email/render";
 import { sampleSettings } from "../email/sample";
 import {
+  MAX_ISSUE_HTML,
+  MAX_ISSUE_TEXT,
+  importIssue,
+  importedIssueSchema,
+} from "../importers/issues";
+import {
   createDraft,
   deleteDraft,
   editDraft,
@@ -28,6 +34,37 @@ import {
 
 const MAX_SUBJECT = 200;
 const MAX_BODY = 100_000;
+const DATE_LENGTH = 10;
+
+const sentOn = (issue: Issue) =>
+  issue.sentAt?.toISOString().slice(0, DATE_LENGTH) ?? "an unknown date";
+
+const importSchema = z.object({
+  html: z
+    .string()
+    .min(1)
+    .max(MAX_ISSUE_HTML)
+    .describe("The HTML exactly as it was sent."),
+  preheader: z
+    .string()
+    .max(MAX_SUBJECT)
+    .optional()
+    .describe("Its preview text, if it had one."),
+  sentAt: z
+    .string()
+    .describe("When it was sent, in ISO 8601, like 2025-03-01T09:00:00Z."),
+  slug: z
+    .string()
+    .optional()
+    .describe("Its slug. Defaults to one made from the subject."),
+  subject: z.string().min(1).max(MAX_SUBJECT),
+  text: z
+    .string()
+    .max(MAX_ISSUE_TEXT)
+    .optional()
+    .describe("Its plain-text version. Made from the HTML if left out."),
+});
+
 const MAX_EDITS = 50;
 const MAX_LIST = 100;
 const DEFAULT_LIST = 20;
@@ -59,6 +96,14 @@ export const registerDraftTools = (
     verb: string
   ): Promise<{ summary: string; url: string }> => {
     const url = await previewUrl(config, issue.id);
+
+    if (issue.importedAt) {
+      return {
+        summary: `"${issue.subject}" (slug ${issue.slug}) was imported: sent ${sentOn(issue)} with another provider, and kept as it was sent. It can't be edited or sent again.\nView it: ${url}`,
+        url,
+      };
+    }
+
     const problems = describeProblems(problemsFor(issue.body));
 
     return {
@@ -108,6 +153,13 @@ export const registerDraftTools = (
       await run(async () => {
         const issue = await requireIssue(db, ref);
         const { summary, url } = await describeDraft(issue, "Draft");
+
+        if (issue.importedAt) {
+          return result(
+            `${summary}\n\nPlain-text version:\n\n${issue.renderedText ?? ""}`,
+            presentIssue(issue, { previewUrl: url })
+          );
+        }
 
         return result(
           summary,
@@ -173,7 +225,8 @@ export const registerDraftTools = (
     "list_issues",
     {
       annotations: READ_ONLY,
-      description: "List issues, most recently updated first.",
+      description:
+        "List issues, most recently updated first. Imported issues sit at the date they were sent.",
       inputSchema: z.object({
         limit: z.number().int().min(1).max(MAX_LIST).optional(),
         status: z.enum(issueStatuses).optional(),
@@ -212,6 +265,14 @@ export const registerDraftTools = (
       await run(async () => {
         const issue = await requireIssue(db, ref);
         const { summary, url } = await describeDraft(issue, "Preview of");
+
+        if (issue.importedAt) {
+          return result(
+            `${summary}\n\nPlain-text version:\n\n${issue.renderedText ?? ""}`,
+            presentIssue(issue, { previewUrl: url })
+          );
+        }
+
         const settings = (await getSettings(db)) ?? sampleSettings;
 
         const rendered = await renderIssue(
@@ -237,7 +298,8 @@ export const registerDraftTools = (
     "delete_draft",
     {
       annotations: { destructiveHint: true },
-      description: "Delete a draft. Sent issues can't be deleted.",
+      description:
+        "Delete a draft, or an imported issue (to import it again from scratch). Issues sent with Sendoff can't be deleted.",
       inputSchema: z.object({ issue: issueRef }),
       title: "Delete draft",
     },
@@ -245,7 +307,37 @@ export const registerDraftTools = (
       await run(async () => {
         const issue = await deleteDraft(db, ref);
 
-        return result(`Deleted the draft "${issue.subject}".`);
+        return result(
+          `Deleted the ${issue.importedAt ? "imported issue" : "draft"} "${issue.subject}".`
+        );
+      })
+  );
+
+  server.registerTool(
+    "import_issue",
+    {
+      description: `Import a past issue sent with another provider, so it isn't lost. Its HTML and plain text are kept exactly as sent, with the subject, preview text and send date. It becomes a sent issue marked imported: it can't be edited or sent again, and has no stats. Importing the same subject and send date again replaces the earlier copy. Use this only for a single issue whose exact HTML you already have; never retype or rebuild HTML. For several issues, or anything from the old provider's API, keep the HTML out of this conversation: create_api_key with scope issues:import, POST them as JSON to ${config.publicUrl}/api/v1/issues/import straight from the provider with curl ({"issues": [{"subject", "html", "text", "preheader", "sentAt"}]}, up to 50 per request; see /api/v1/openapi.json), then revoke the key. Show the person what was imported and any leftover merge tags.`,
+      inputSchema: importSchema,
+      title: "Import a past issue",
+    },
+    async (input) =>
+      await run(async () => {
+        const { issue, mergeTags, outcome } = await importIssue(
+          db,
+          importedIssueSchema.parse(input)
+        );
+
+        const url = await previewUrl(config, issue.id);
+
+        const tags =
+          mergeTags.length > 0
+            ? `\n\nIt still has the old provider's merge tags, which show as-is in this copy: ${mergeTags.join(", ")}. If the person wants, replace them with what readers saw (such as the fallback after the |) and import it again.`
+            : "";
+
+        return result(
+          `${outcome === "created" ? "Imported" : "Replaced the earlier import of"} "${issue.subject}" (sent ${sentOn(issue)}, slug ${issue.slug}).\nView it: ${url}${tags}`,
+          presentIssue(issue, { mergeTags, previewUrl: url })
+        );
       })
   );
 };

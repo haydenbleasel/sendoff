@@ -1,0 +1,63 @@
+---
+title: Importing past issues
+description: Keep the issues you sent with another provider, exactly as they went out.
+sidebar:
+  icon: archive
+---
+
+Moving to Sendoff doesn't mean losing what you've already sent. Sendoff keeps each past issue exactly as it went out: the HTML, the plain-text version, the subject, the preview text and the date it was sent.
+
+Imported issues are stored as sent issues, marked imported. They:
+
+- **open in a private preview link**, looking the way they did when they were sent
+- **can be read by your agent** in plain text, for questions like "what did I write about last spring?"
+- **are never sent again**, can't be edited, and have no stats, since Sendoff didn't send them
+
+## Import
+
+Ask your agent:
+
+> Import my past issues from my old newsletter provider into Sendoff.
+
+The agent needs a way to read them: an API key for the old provider, or files you've exported. Most providers can give you each issue's HTML; Resend's API, for example, returns each broadcast's `html`, `text`, `subject`, `preview_text` and `sent_at`.
+
+If the agent can run commands (Claude Code, Codex), it creates a temporary Sendoff API key with the `issues:import` scope, copies the issues across with `curl`, and revokes the key when it's done. The HTML goes straight from one service to the other, without passing through the conversation, so nothing gets retyped or cut short. In claude.ai and Claude Desktop, it imports issues one at a time with the `import_issue` tool.
+
+Importing the same subject and send date again replaces the earlier copy, so it's safe to run again. To start over, ask the agent to delete an imported issue.
+
+## Merge tags
+
+Your old provider filled in placeholders like `{{{contact.first_name|there}}}` or `*|FNAME|*` for each reader. They're kept as they were, so they'd show in the archived copy, and the import lists any it finds. Ask the agent to replace them with what readers saw, such as the fallback after the `|`, and import again.
+
+The old provider's unsubscribe link is usually one of them. It doesn't matter in an archived copy: nobody's receiving it.
+
+## Viewing them
+
+Ask the agent for an issue's preview link, or to list your issues: imported ones sit at the date they were sent. The preview shows the HTML in a sandbox, so nothing in it can run. A public archive of past issues is planned.
+
+## Doing it yourself
+
+With a key that has the `issues:import` scope, send up to 50 issues per request:
+
+```bash
+curl -X POST "https://news.example.com/api/v1/issues/import" \
+  -H "Authorization: Bearer $SENDOFF_IMPORT_KEY" \
+  -H "Content-Type: application/json" \
+  --data-binary @issues.json
+```
+
+```json
+{
+  "issues": [
+    {
+      "subject": "Spring update",
+      "preheader": "What happened this spring",
+      "sentAt": "2025-03-01T09:00:00Z",
+      "html": "<!DOCTYPE html>…",
+      "text": "Spring update…"
+    }
+  ]
+}
+```
+
+`text` is optional; without it, Sendoff makes a plain-text version from the HTML. See the [REST API](/docs/reference/rest-api#import-past-issues) for the response.

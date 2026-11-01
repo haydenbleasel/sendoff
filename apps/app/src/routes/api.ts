@@ -6,12 +6,17 @@ import { z } from "zod";
 import { findApiKey, touchApiKey } from "../api-keys";
 import type { ApiKey, ApiScope } from "../api-keys";
 import { openApiDocument } from "../api/openapi";
-import { createSubscriberBody, csvImportQuery } from "../api/schemas";
+import {
+  createSubscriberBody,
+  csvImportQuery,
+  importIssuesBody,
+} from "../api/schemas";
 import type { ErrorCode } from "../api/schemas";
 import { getConfig } from "../config";
 import { sendConfirmationEmail } from "../confirmations";
 import { createDb } from "../db/client";
 import { MAX_CSV_BYTES, importCsv } from "../importers/csv";
+import { MAX_ISSUE_IMPORT_BYTES, importIssue } from "../importers/issues";
 import { IssueError } from "../issues";
 import { parseJsonWith } from "../json";
 import { getSettings } from "../settings";
@@ -216,6 +221,80 @@ apiRoutes.post(
 
       throw error;
     }
+  }
+);
+
+const BYTES_PER_MB = 1024 * 1024;
+
+apiRoutes.post(
+  "/api/v1/issues/import",
+  requireScope("issues:import"),
+  async (c) => {
+    const tooLarge = () =>
+      apiError(
+        c,
+        HTTP_TOO_LARGE,
+        "too_large",
+        `Send at most ${MAX_ISSUE_IMPORT_BYTES / BYTES_PER_MB} MB at a time: split the issues across requests.`
+      );
+
+    if (Number(c.req.header("content-length") ?? 0) > MAX_ISSUE_IMPORT_BYTES) {
+      return tooLarge();
+    }
+
+    const text = await c.req.text();
+
+    if (text.length > MAX_ISSUE_IMPORT_BYTES) {
+      return tooLarge();
+    }
+
+    const body = parseJsonWith(importIssuesBody, text);
+
+    if (!body.success) {
+      return apiError(
+        c,
+        HTTP_BAD_REQUEST,
+        "invalid_request",
+        z.prettifyError(body.error)
+      );
+    }
+
+    const db = createDb(c.env.DB);
+    const results = [];
+
+    // One at a time, so slugs made from the same subject stay unique.
+    for (const input of body.data.issues) {
+      const reported = {
+        sentAt: input.sentAt.toISOString(),
+        subject: input.subject,
+      };
+
+      try {
+        // oxlint-disable-next-line no-await-in-loop -- see above
+        const { issue, mergeTags, outcome } = await importIssue(db, input);
+
+        results.push({
+          ...reported,
+          id: issue.id,
+          mergeTags,
+          outcome,
+          slug: issue.slug,
+        });
+      } catch (error) {
+        if (!(error instanceof IssueError)) {
+          throw error;
+        }
+
+        results.push({
+          ...reported,
+          error: error.message,
+          mergeTags: [],
+          outcome: "failed" as const,
+        });
+      }
+    }
+
+    return c.json({ issues: results });
   }
 );
 

@@ -9,6 +9,7 @@ import {
   editDraft,
   findIssue,
   setDraftMeta,
+  isValidSlug,
   slugify,
 } from "../src/issues";
 import { db } from "./helpers";
@@ -19,6 +20,9 @@ describe("slugify", () => {
       "shipping-in-public-q4-notes"
     );
     expect(slugify("Café déjà vu")).toBe("cafe-deja-vu");
+    expect(slugify("Let's optimize: you’re invited")).toBe(
+      "lets-optimize-youre-invited"
+    );
     expect(slugify("🚀")).toBe("");
   });
 });
@@ -65,6 +69,58 @@ describe("drafts", () => {
     expect(untitled.slug).toMatch(/^draft-[\da-f]{8}$/u);
     expect(first.contentHash).toMatch(/^[\da-f]{64}$/u);
     expect(first.contentHash).not.toBe(second.contentHash);
+  });
+
+  it("dedupes slugs longer than D1's 50-byte LIKE pattern limit, within the length limit", async () => {
+    const subject =
+      "Ultracite v5: The AI-ready formatter that helps you write and generate code faster.";
+
+    const first = await createDraft(db(), { body: "One", subject });
+    const second = await createDraft(db(), { body: "Two", subject });
+    const third = await createDraft(db(), { body: "Three", subject });
+
+    expect(first.slug).toBe(
+      "ultracite-v5-the-ai-ready-formatter-that-helps-you-write-and"
+    );
+    expect(second.slug).toBe(
+      "ultracite-v5-the-ai-ready-formatter-that-helps-you-write-2"
+    );
+    expect(third.slug).toBe(
+      "ultracite-v5-the-ai-ready-formatter-that-helps-you-write-3"
+    );
+    expect(
+      [first, second, third].every((draft) => isValidSlug(draft.slug))
+    ).toBe(true);
+  });
+
+  it("cuts a long slug back to a whole word before numbering it", async () => {
+    const subject =
+      "Everything I learned shipping newsletters, products and wonderful experiments";
+
+    await createDraft(db(), { body: "One", subject });
+    const second = await createDraft(db(), { body: "Two", subject });
+
+    expect(second.slug).toBe(
+      "everything-i-learned-shipping-newsletters-products-and-2"
+    );
+  });
+
+  it("numbers a taken slug in full, even when it ends in a number", async () => {
+    await createDraft(db(), { body: "One", subject: "Roadmap 2" });
+    await createDraft(db(), { body: "Two", subject: "Roadmap 2024" });
+
+    const again = await createDraft(db(), {
+      body: "Three",
+      subject: "Roadmap 2024",
+    });
+
+    const twice = await createDraft(db(), {
+      body: "Four",
+      subject: "Roadmap 2",
+    });
+
+    expect(again.slug).toBe("roadmap-2024-2");
+    expect(twice.slug).toBe("roadmap-2-2");
   });
 
   it("bumps the version on content changes and guards concurrent edits", async () => {

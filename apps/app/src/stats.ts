@@ -522,6 +522,12 @@ export const issueReport = async (
     throw new IssueError("Nothing has been sent yet, so there are no stats.");
   }
 
+  if (issue.importedAt) {
+    throw new IssueError(
+      `"${issue.subject}" was imported from another provider, so Sendoff has no stats for it.`
+    );
+  }
+
   if (!issue.sendStartedAt) {
     throw new IssueError(
       `"${issue.subject}" is a draft that hasn't been sent, so there are no stats yet.`

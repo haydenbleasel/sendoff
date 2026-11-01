@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+import {
+  MAX_ISSUES_PER_IMPORT,
+  importedIssueSchema,
+} from "../importers/issues";
+
 // Request and response shapes for the REST API. The OpenAPI document is
 // generated from this registry, so it can't drift from what handlers accept.
 
@@ -89,6 +94,43 @@ export const csvImportResponse = z
     unchanged: z.number().int().describe("Addresses already on the list."),
   })
   .register(apiSchemas, { id: "CsvImport" });
+
+export const importIssuesBody = z
+  .object({
+    issues: z
+      .array(importedIssueSchema.register(apiSchemas, { id: "ImportedIssue" }))
+      .min(1)
+      .max(MAX_ISSUES_PER_IMPORT)
+      .describe(`Up to ${MAX_ISSUES_PER_IMPORT} past issues.`),
+  })
+  .register(apiSchemas, { id: "ImportIssues" });
+
+export const issueImportResponse = z
+  .object({
+    issues: z.array(
+      z.object({
+        error: z
+          .string()
+          .optional()
+          .describe("Why it wasn't imported, when the outcome is failed."),
+        id: z.string().optional(),
+        mergeTags: z
+          .array(z.string())
+          .describe(
+            "The old provider's merge tags left in it, like {{{contact.first_name|there}}}, which show as-is. Up to 10."
+          ),
+        outcome: z
+          .enum(["created", "updated", "failed"])
+          .describe(
+            "updated: an issue with the same subject and send date was imported before, and this replaced it."
+          ),
+        sentAt: z.string().describe("The send date, in ISO 8601."),
+        slug: z.string().optional(),
+        subject: z.string(),
+      })
+    ),
+  })
+  .register(apiSchemas, { id: "IssueImport" });
 
 export const errorCodes = [
   "confirmation_failed",

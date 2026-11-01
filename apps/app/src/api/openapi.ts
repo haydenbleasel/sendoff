@@ -46,6 +46,29 @@ export const openApiDocument = (publicUrl: string) => ({
   },
   openapi: "3.1.0",
   paths: {
+    "/issues/import": {
+      post: {
+        description:
+          "Import past issues sent with another provider, so they aren't lost. Each keeps its HTML and plain text exactly as given, with its subject, preview text and send date, as a sent issue marked imported: it's never sent again, and has no Sendoff stats. Importing the same subject and send date again replaces the earlier copy. Send the HTML straight from the old provider's API or export (e.g. with curl and jq), not retyped. Issues that can't be imported (such as a taken slug) are reported with outcome failed; the rest still import.",
+        operationId: "importIssues",
+        requestBody: { content: json("ImportIssues"), required: true },
+        responses: {
+          200: {
+            content: json("IssueImport"),
+            description: "What happened to each issue, in order.",
+          },
+          400: error(
+            "The body isn't valid JSON, has more than 50 issues, or an issue is missing its subject, HTML or a past send date."
+          ),
+          401: error("Missing, invalid or revoked API key."),
+          403: error("The API key doesn't have the issues:import scope."),
+          413: error("The body is over 10 MB."),
+        },
+        summary: "Import past issues",
+        tags: ["Issues"],
+        "x-scopes": ["issues:import"],
+      },
+    },
     "/subscribers": {
       post: {
         description:

@@ -21,7 +21,11 @@ export const subscriberStatuses = [
 export const subscriberSources = ["api", "import", "form", "mcp"] as const;
 
 /** What an API key may do. Add scopes as endpoints are added. */
-export const apiScopes = ["subscribers:write", "subscribers:import"] as const;
+export const apiScopes = [
+  "subscribers:write",
+  "subscribers:import",
+  "issues:import",
+] as const;
 
 export const issueStatuses = ["draft", "sending", "sent", "cancelled"] as const;
 
@@ -86,6 +90,12 @@ export const issues = sqliteTable("issues", {
   contentHash: text("content_hash"),
   createdAt: createdAt(),
   id: text("id").primaryKey(),
+  /**
+   * Set for a past issue imported from another provider: sent, but not by
+   * Sendoff, so there's no send or stats data, and `rendered_html` is the
+   * HTML it was sent with.
+   */
+  importedAt: integer("imported_at", { mode: "timestamp_ms" }),
   preheader: text("preheader"),
   /** Active subscribers snapshotted when the send was confirmed. */
   recipientCount: integer("recipient_count"),

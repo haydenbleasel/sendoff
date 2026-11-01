@@ -7,6 +7,7 @@ export default defineMeta({
     "stats",
     "subscribers",
     "importing",
+    "past-issues",
     "deliverability",
     "updating",
   ],

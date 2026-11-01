@@ -1,6 +1,6 @@
 ---
 title: REST API
-description: Subscribe addresses from your site's server and import CSV files, with scoped API keys.
+description: Subscribe addresses from your site's server, and import CSV files and past issues, with scoped API keys.
 sidebar:
   icon: code
 ---
@@ -21,6 +21,7 @@ Ask your agent to create one ("create an API key for my website's signup form").
 | --- | --- |
 | `subscribers:write` | `POST /subscribers`. The default, for signup forms. |
 | `subscribers:import` | `POST /subscribers/import`. It adds people without confirmation emails, so create it for one import and revoke it afterwards. |
+| `issues:import` | `POST /issues/import`, for bringing past issues over. Create it for the import and revoke it afterwards. |
 
 Keep keys in server-side secrets. The API sends no CORS headers, so browsers can't call it.
 
@@ -148,6 +149,69 @@ Use `--data-binary`, not `-d`, which strips the line breaks. The response is a r
 | `401` | `invalid_api_key` | The key is missing, wrong or revoked |
 | `403` | `insufficient_scope` | The key doesn't have `subscribers:import` |
 | `413` | `too_large` | The file is over 10 MB |
+
+## Import past issues
+
+```http
+POST /api/v1/issues/import
+```
+
+Keeps issues you sent with another provider, exactly as they went out. Each becomes a sent issue marked imported: it's never sent again and has no stats. Up to 50 issues and 10 MB per request. See [Importing past issues](/docs/guides/past-issues).
+
+<ParamField body="issues" type="object[]" required>
+  The issues, each with:
+
+- `subject` (required)
+- `html` (required): the HTML as it was sent, kept exactly as given, up to 1 MB
+- `sentAt` (required): when it was sent, in ISO 8601, like `2025-03-01T09:00:00Z`. Without a time zone, it's read as UTC.
+- `text`: the plain-text version. Without it, one is made from the HTML.
+- `preheader`: the preview text
+- `slug`: defaults to one made from the subject
+
+</ParamField>
+
+Importing the same subject and send date again replaces the earlier copy. The response says what happened to each issue, in order:
+
+```json
+{
+  "issues": [
+    {
+      "id": "0195512a-6e80-7c3a-9a41-2f0e1d4c8b77",
+      "mergeTags": ["{{{contact.first_name|there}}}"],
+      "outcome": "created",
+      "sentAt": "2025-03-01T09:00:00.000Z",
+      "slug": "spring-update",
+      "subject": "Spring update"
+    },
+    {
+      "error": "The slug \"summer\" is taken by another issue.",
+      "mergeTags": [],
+      "outcome": "failed",
+      "sentAt": "2025-06-01T09:00:00.000Z",
+      "subject": "Summer"
+    }
+  ]
+}
+```
+
+<ResponseField name="outcome" type="string">
+  `created`, `updated` (it replaced an earlier import with the same subject and
+  send date), or `failed`, with the reason in `error`. A failed issue doesn't
+  stop the others.
+</ResponseField>
+
+<ResponseField name="mergeTags" type="string[]">
+  The old provider's placeholders left in the issue, like
+  `{{{contact.first_name|there}}}` or `*|FNAME|*`, which show as they are. Up to
+  10.
+</ResponseField>
+
+| Status | Code | When |
+| --- | --- | --- |
+| `400` | `invalid_request` | The body isn't valid JSON, has no issues or more than 50, or an issue is missing its subject, HTML or a past send date |
+| `401` | `invalid_api_key` | The key is missing, wrong or revoked |
+| `403` | `insufficient_scope` | The key doesn't have `issues:import` |
+| `413` | `too_large` | The body is over 10 MB |
 
 ## Errors
 

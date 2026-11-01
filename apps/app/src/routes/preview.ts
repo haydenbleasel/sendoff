@@ -12,10 +12,15 @@ import { getSettingsRecord } from "../settings";
 import { verifyToken } from "../tokens";
 
 const HTTP_NOT_FOUND = 404;
-const HEAD_TAG = "<head>";
+const HEAD_TAG = /<head\b[^>]*>/iu;
 
 // Links in the preview open in a new tab instead of inside the iframe.
-const BASE_TARGET = '<head><base target="_blank">';
+const BASE_TARGET = '<base target="_blank">';
+
+const withBaseTarget = (html: string): string =>
+  HEAD_TAG.test(html)
+    ? html.replace(HEAD_TAG, (head) => `${head}${BASE_TARGET}`)
+    : `${BASE_TARGET}${html}`;
 
 type AppContext = Context<{ Bindings: Env }>;
 
@@ -80,6 +85,22 @@ previewRoutes.get("/preview/:token/render", async (c) => {
   const record = await getSettingsRecord(createDb(c.env.DB));
   const settings = record?.settings ?? sampleSettings;
 
+  // Imported issues show the HTML they were sent with. The frame is
+  // sandboxed without scripts, so nothing in it can run.
+  if (issue.importedAt) {
+    return c.json({
+      from: settings.from,
+      html: withBaseTarget(issue.renderedHtml ?? ""),
+      ok: true,
+      preheader: issue.preheader,
+      sampleSettings: false,
+      status: "imported",
+      subject: issue.subject,
+      text: issue.renderedText ?? "",
+      version: issue.version,
+    });
+  }
+
   const rendered = await renderIssue(
     {
       body: issue.body,
@@ -105,7 +126,7 @@ previewRoutes.get("/preview/:token/render", async (c) => {
 
   return c.json({
     ...common,
-    html: rendered.html.replace(HEAD_TAG, BASE_TARGET),
+    html: withBaseTarget(rendered.html),
     ok: true,
     text: rendered.text,
   });

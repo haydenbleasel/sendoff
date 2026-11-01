@@ -75,6 +75,7 @@ export const presentIssue = (
   extra: JsonObject = {}
 ): JsonObject => ({
   id: issue.id,
+  importedAt: iso(issue.importedAt),
   preheader: issue.preheader,
   sentAt: iso(issue.sentAt),
   slug: issue.slug,
