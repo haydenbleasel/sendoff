@@ -33,7 +33,7 @@
   "scripts": {
     "build": "bun build src/index.ts --target node --outfile dist/index.js",
     "prepack": "bun run build",
-    "types": "tsgo --noEmit",
+    "types": "tsc --noEmit",
     "test": "bun test"
   },
   "devDependencies": {

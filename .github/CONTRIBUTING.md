@@ -53,7 +53,7 @@ From the repo root:
 | --- | --- |
 | `bun run fix` | Formats and fixes lint issues with Ultracite |
 | `bun run check` | Lints and checks formatting |
-| `bun run types` | Typechecks with tsgo |
+| `bun run types` | Typechecks with `tsc` (TypeScript 7, the native compiler) |
 | `bun run test` | Runs the tests: the Worker's inside workerd (the Workers runtime), and `create-sendoff`'s with `bun test`, which fails below 100% coverage |
 | `bun run build` | Builds the docs site and `create-sendoff`, and bundles the Worker (a Wrangler dry run) |
 
