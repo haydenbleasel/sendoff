@@ -337,6 +337,74 @@ describe("sending", () => {
     expect(resumed.issue).toMatchObject({ sendError: null, status: "sent" });
   });
 
+  it.each([
+    // SES reports a used-up daily quota as throttling, but it won't clear for hours.
+    [
+      "the daily quota is used up",
+      "TooManyRequestsException",
+      429,
+      "Daily message quota exceeded.",
+    ],
+    // How SES v2 reports a missing configuration set.
+    [
+      "the configuration set is missing",
+      "NotFoundException",
+      404,
+      "Configuration set sendoff does not exist.",
+    ],
+  ])(
+    "stops, rather than failing everyone, when %s",
+    async (_, code, status, message) => {
+      await addActive(3);
+      useNetwork({
+        onSend: (email) =>
+          email.subject.startsWith("[Test]")
+            ? undefined
+            : sesError(code, status, message),
+      });
+
+      const confirmed = await startSend();
+
+      const result = await processSendChunk(
+        deps,
+        messages.shift() ?? { issueId: "", maxSendRate: 1 }
+      );
+
+      expect(result.stopped).toContain(message);
+      expect(messages).toHaveLength(0);
+
+      const stopped = await sendStatus(deps, confirmed.issue.id);
+      expect(stopped.counts).toMatchObject({ failed: 0, queued: 3 });
+      expect(stopped.issue.sendError).toContain(message);
+    }
+  );
+
+  it("retries a ThrottlingException like any other rate limit", async () => {
+    await addActive(2);
+    let throttledOnce = false;
+    useNetwork({
+      onSend: (email) => {
+        const throttle = email.to === "reader-0@example.com" && !throttledOnce;
+
+        throttledOnce ||= throttle;
+
+        return throttle
+          ? sesError(
+              "ThrottlingException",
+              400,
+              "Maximum sending rate exceeded."
+            )
+          : undefined;
+      },
+    });
+
+    const confirmed = await startSend();
+    await drain();
+
+    const status = await sendStatus(deps, confirmed.issue.id);
+    expect(status.counts).toMatchObject({ failed: 0, sent: 2 });
+  });
+
   it("never resends recipients a crashed worker had claimed", async () => {
     await addActive(3);
     const confirmed = await startSend();

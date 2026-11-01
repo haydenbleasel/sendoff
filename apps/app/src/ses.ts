@@ -51,16 +51,6 @@ export interface SesIdentity {
   verifiedForSending: boolean;
 }
 
-// Errors worth retrying: throttling and transient server-side failures.
-const RETRYABLE_CODES = new Set([
-  "TooManyRequestsException",
-  "LimitExceededException",
-  "InternalFailure",
-  "ServiceUnavailable",
-]);
-
-const HTTP_TOO_MANY_REQUESTS = 429;
-const HTTP_SERVER_ERROR = 500;
 const HTTP_NOT_FOUND = 404;
 
 // SES tag values allow only letters, numbers, _ - . @
@@ -69,9 +59,9 @@ const TAG_INVALID_CHARACTERS = /[^\w.@-]/gu;
 // Printable ASCII can go in a quoted string (with " and \ escaped).
 const PLAIN_DISPLAY_NAME = /^[\u0020-\u007E]*$/u;
 
+/** What to do about one is up to the caller: see `classify` in sending.ts. */
 export class SesError extends Error {
   readonly code: string;
-  readonly retryable: boolean;
   readonly status: number;
 
   constructor(code: string, message: string, status: number) {
@@ -79,10 +69,6 @@ export class SesError extends Error {
     this.name = "SesError";
     this.code = code;
     this.status = status;
-    this.retryable =
-      RETRYABLE_CODES.has(code) ||
-      status === HTTP_TOO_MANY_REQUESTS ||
-      status >= HTTP_SERVER_ERROR;
   }
 }
 

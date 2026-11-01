@@ -91,7 +91,7 @@ describe("createSesClient", () => {
     });
   });
 
-  it("maps throttling to a retryable SesError", async () => {
+  it("maps an error response to an SesError with its code and status", async () => {
     const { fetcher } = capture(
       Response.json(
         { message: "Maximum sending rate exceeded." },
@@ -115,18 +115,8 @@ describe("createSesClient", () => {
     await expect(sending).rejects.toBeInstanceOf(SesError);
     await expect(sending).rejects.toMatchObject({
       code: "TooManyRequestsException",
-      retryable: true,
+      status: 429,
     });
-  });
-
-  it("treats a rejected message as permanent", () => {
-    const error = new SesError(
-      "MessageRejected",
-      "Email address is not verified.",
-      400
-    );
-
-    expect(error.retryable).toBe(false);
   });
 
   it("returns null for a missing identity and maps account details", async () => {

@@ -72,10 +72,24 @@ const FATAL_SES_CODES = new Set([
   "InvalidClientTokenId",
   "LimitExceededException",
   "MailFromDomainNotVerifiedException",
+  // SendEmail's only resources are the configuration set and contact list,
+  // so this is never about one recipient: SES v2 reports a missing
+  // configuration set this way.
+  "NotFoundException",
   "SendingPausedException",
   "SignatureDoesNotMatch",
   "UnrecognizedClientException",
 ]);
+
+/** Rate limits: SES didn't take the email, so it's safe to try again shortly. */
+const THROTTLED_SES_CODES = new Set([
+  "Throttling",
+  "ThrottlingException",
+  "TooManyRequestsException",
+]);
+
+/** SES reports a used-up daily quota as throttling, but it won't clear for hours. */
+const DAILY_QUOTA_EXCEEDED = /daily message quota exceeded/iu;
 
 export const sendMessageSchema = z.object({
   issueId: z.string(),
@@ -537,9 +551,13 @@ type Outcome =
 
 const classify = (error: Error): Outcome => {
   if (error instanceof SesError) {
+    if (DAILY_QUOTA_EXCEEDED.test(error.message)) {
+      return { error: error.message, kind: "fatal" };
+    }
+
     if (
       error.status === HTTP_TOO_MANY_REQUESTS ||
-      error.code === "TooManyRequestsException"
+      THROTTLED_SES_CODES.has(error.code)
     ) {
       return { kind: "throttled" };
     }
