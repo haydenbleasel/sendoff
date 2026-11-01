@@ -1,14 +1,19 @@
-# Copy to .dev.vars for local development. `bun run setup` writes real values.
+# Copy to .dev.vars for local development. Deploys don't use it: setup gives
+# the deployed Worker its own secrets.
 PUBLIC_URL=http://localhost:8787
 
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
+# Placeholders, so the Worker starts. Put AWS keys for an SES account here to
+# send test emails.
+AWS_ACCESS_KEY_ID=local
+AWS_SECRET_ACCESS_KEY=local
 
-# Bearer token your agent sends to /mcp. Any long random string, e.g. `openssl rand -hex 32`.
-MCP_TOKEN=
+# Bearer token your agent sends to /mcp. Any string of 32 or more characters;
+# make your own with `openssl rand -hex 32`.
+MCP_TOKEN=local-development-mcp-token-0000000000
 
-# Signs confirm and unsubscribe links. Any long random string, e.g. `openssl rand -hex 32`.
-TOKEN_SECRET=
+# Signs confirm, unsubscribe, tracking and preview links. Any string of 32 or
+# more characters; make your own with `openssl rand -hex 32`.
+TOKEN_SECRET=local-development-token-secret-000000
 
 # Cloudflare's Turnstile test keys: the widget always passes.
 TURNSTILE_SITE_KEY=1x00000000000000000000AA
