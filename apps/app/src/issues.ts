@@ -232,7 +232,10 @@ const saveContent = async (
     next.preheader !== issue.preheader ||
     next.subject !== issue.subject;
 
-  // Guard on version so two concurrent edits can't silently overwrite each other.
+  // Guard on version so two concurrent edits can't silently overwrite each
+  // other, and on status: confirm_send doesn't bump the version, and the send
+  // reads the subject live, so an edit landing after it would change the
+  // subject mid-send.
   const [saved] = await db
     .update(issues)
     .set({
@@ -241,12 +244,18 @@ const saveContent = async (
       updatedAt: now,
       version: contentChanged ? issue.version + 1 : issue.version,
     })
-    .where(and(eq(issues.id, issue.id), eq(issues.version, issue.version)))
+    .where(
+      and(
+        eq(issues.id, issue.id),
+        eq(issues.version, issue.version),
+        eq(issues.status, "draft")
+      )
+    )
     .returning();
 
   if (!saved) {
     throw new IssueError(
-      "The draft changed while you were editing it. Fetch it again with get_draft and retry."
+      "The draft changed while you were editing it, or started sending. Fetch it again with get_draft and retry."
     );
   }
 
@@ -424,14 +433,22 @@ export const deleteDraft = async (
     );
   }
 
-  await db
+  const deleted = await db
     .delete(issues)
     .where(
       and(
         eq(issues.id, issue.id),
         or(eq(issues.status, "draft"), isNotNull(issues.importedAt))
       )
+    )
+    .returning({ id: issues.id });
+
+  // It started sending between the check above and the delete.
+  if (deleted.length === 0) {
+    throw new IssueError(
+      `"${issue.subject}" isn't a draft any more, so it can't be deleted.`
     );
+  }
 
   return issue;
 };
