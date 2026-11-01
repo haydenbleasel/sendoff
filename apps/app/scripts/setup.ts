@@ -47,12 +47,19 @@ import type { CloudflareApi } from "./setup/cloudflare";
 import { deploy } from "./setup/deploy";
 import type { Secrets } from "./setup/deploy";
 import { formatRecords, mailFromDomainFor, sesDnsRecords } from "./setup/dns";
+import type { DnsRecord } from "./setup/dns";
 import {
   INSTANCE_DIR,
   readInstanceDraft,
   writeInstanceDraft,
 } from "./setup/files";
 import type { InstanceDraft } from "./setup/files";
+import {
+  PAGES_BRANCH,
+  PAGES_PROJECT,
+  pagesCnameRecord,
+  pagesSubdomain,
+} from "./setup/pages";
 import { wrangler, wranglerJson } from "./setup/wrangler";
 
 const WORKER_NAME = "sendoff";
@@ -375,15 +382,26 @@ const workerSecretNames = (): Set<string> =>
     ).map((secret) => secret.name)
   );
 
-const cloudflareToken = async (): Promise<CloudflareApi | null> => {
+/** `dnsOnCloudflare` is false when the hostname's DNS is elsewhere, so the token is only for Turnstile. */
+const cloudflareToken = async (
+  dnsOnCloudflare: boolean
+): Promise<CloudflareApi | null> => {
   note(
-    [
-      "With an API token, setup adds your DNS records and creates the Turnstile widget for the signup page.",
-      "Create one at https://dash.cloudflare.com/profile/api-tokens with:",
-      "  Zone > DNS > Edit, Zone > Zone > Read (for your domain)",
-      "  Account > Turnstile > Edit",
-      "It's only used now and isn't stored. Leave it empty to do those steps by hand.",
-    ].join("\n"),
+    (dnsOnCloudflare
+      ? [
+          "With an API token, setup adds your DNS records and creates the Turnstile widget for the signup page.",
+          "Create one at https://dash.cloudflare.com/profile/api-tokens with:",
+          "  Zone > DNS > Edit, Zone > Zone > Read (for your domain)",
+          "  Account > Turnstile > Edit",
+          "It's only used now and isn't stored. Leave it empty to do those steps by hand.",
+        ]
+      : [
+          "With an API token, setup creates the Turnstile widget for the signup page.",
+          "Create one at https://dash.cloudflare.com/profile/api-tokens with:",
+          "  Account > Turnstile > Edit",
+          "It's only used now and isn't stored. Leave it empty to make the widget by hand.",
+        ]
+    ).join("\n"),
     "Cloudflare API token (optional)"
   );
 
@@ -408,6 +426,102 @@ const cloudflareToken = async (): Promise<CloudflareApi | null> => {
 
     return null;
   }
+};
+
+/**
+ * Cloudflare's API with Wrangler's own login, so setup can find zones and add
+ * a Pages custom domain without asking for more token permissions. Null when
+ * Wrangler is logged in some way that has no bearer token.
+ */
+const wranglerApi = (): CloudflareApi | null => {
+  const auth = wranglerJson<{ token?: string }>(["auth", "token"]);
+
+  return auth?.token ? createCloudflareApi(auth.token) : null;
+};
+
+/**
+ * Whether the hostname's DNS is an active zone in this account, which a
+ * Workers Custom Domain needs. If not, a Pages project serves it instead.
+ */
+const hostnameOnCloudflare = async (
+  api: CloudflareApi | null,
+  accountId: string,
+  hostname: string
+): Promise<boolean> => {
+  const zone = api
+    ? await api.findZone(hostname, accountId).catch(() => "unknown" as const)
+    : "unknown";
+
+  const onCloudflare =
+    zone === "unknown"
+      ? answer(
+          await confirm({
+            message: `Is ${hostname}'s DNS on Cloudflare, in this account?`,
+          })
+        )
+      : zone?.status === "active";
+
+  if (onCloudflare) {
+    return true;
+  }
+
+  const pending =
+    zone !== "unknown" && zone && zone.status !== "active"
+      ? ` (${zone.name} is on Cloudflare but isn't active yet)`
+      : "";
+
+  note(
+    [
+      `${hostname}'s DNS isn't on Cloudflare${pending}, so the Worker can't serve it directly.`,
+      `Setup puts a small Cloudflare Pages project in front of it instead, and you'll add one CNAME record for ${hostname} with the others.`,
+    ].join("\n"),
+    "Hostname"
+  );
+
+  return false;
+};
+
+const pagesProjectsSchema = z.array(
+  z.object({ "Project Domains": z.string(), "Project Name": z.string() })
+);
+
+/** Create the Pages project (if it's new) and return its `*.pages.dev` hostname. */
+const ensurePagesProject = (accountId: string): string => {
+  const find = () => {
+    const parsed = pagesProjectsSchema.safeParse(
+      wranglerJson(["pages", "project", "list"], { accountId })
+    );
+
+    return parsed.success
+      ? pagesSubdomain(parsed.data, PAGES_PROJECT)
+      : undefined;
+  };
+
+  const existing = find();
+
+  if (existing) {
+    return existing;
+  }
+
+  const created = wrangler(
+    [
+      "pages",
+      "project",
+      "create",
+      PAGES_PROJECT,
+      "--production-branch",
+      PAGES_BRANCH,
+    ],
+    { accountId }
+  );
+
+  if (!created.ok) {
+    return fail(`Creating the Pages project failed:\n${created.output}`);
+  }
+
+  return (
+    find() ?? fail("Created the Pages project but couldn't find its domain.")
+  );
 };
 
 const ensureDatabase = (): string => {
@@ -539,9 +653,10 @@ const configureSes = async (aws: AwsSetup, domain: string, region: string) => {
   return { identity, mailFromDomain, topicArn };
 };
 
-const hasDmarc = async (domain: string): Promise<boolean> => {
+/** A public DNS answer, as lowercase JSON text. */
+const lookup = async (name: string, type: "CNAME" | "TXT"): Promise<string> => {
   const response = await fetch(
-    `https://cloudflare-dns.com/dns-query?name=_dmarc.${domain}&type=TXT`,
+    `https://cloudflare-dns.com/dns-query?name=${name}&type=${type}`,
     {
       headers: { accept: "application/dns-json" },
     }
@@ -549,25 +664,53 @@ const hasDmarc = async (domain: string): Promise<boolean> => {
 
   const body = await response.text();
 
-  return body.toLowerCase().includes("v=dmarc1");
+  return body.toLowerCase();
 };
 
-const configureDns = async (
-  cloudflare: CloudflareApi | null,
-  records: ReturnType<typeof sesDnsRecords>,
-  domain: string
-) => {
-  const zone = cloudflare
-    ? await cloudflare.findZone(domain).catch(() => null)
-    : null;
+const hasDmarc = async (domain: string): Promise<boolean> => {
+  const records = await lookup(`_dmarc.${domain}`, "TXT");
+
+  return records.includes("v=dmarc1");
+};
+
+const hasCname = async (hostname: string, target: string): Promise<boolean> => {
+  const records = await lookup(hostname, "CNAME");
+
+  return records.includes(target.toLowerCase());
+};
+
+const addRecordsByHand = async (records: DnsRecord[]): Promise<void> => {
+  note(formatRecords(records), "Add these DNS records at your DNS provider");
+  answer(
+    await confirm({
+      message: "Added them? (Setup checks they've verified at the end.)",
+    })
+  );
+};
+
+/**
+ * Add the SES records through the API token when the domain's zone is on
+ * Cloudflare, or list them to add by hand. `byHand` records (the Pages CNAME,
+ * on DNS that isn't Cloudflare's) are always listed.
+ */
+const configureDns = async ({
+  byHand,
+  cloudflare,
+  domain,
+  records,
+}: {
+  byHand: DnsRecord[];
+  cloudflare: CloudflareApi | null;
+  domain: string;
+  records: DnsRecord[];
+}) => {
+  const zone =
+    cloudflare && records.length > 0
+      ? await cloudflare.findZone(domain).catch(() => null)
+      : null;
 
   if (!(cloudflare && zone)) {
-    note(formatRecords(records), `Add these DNS records for ${domain}`);
-    answer(
-      await confirm({
-        message: "Added them? (Setup checks they've verified at the end.)",
-      })
-    );
+    await addRecordsByHand([...records, ...byHand]);
 
     return;
   }
@@ -595,6 +738,46 @@ const configureDns = async (
       "These clash with existing records. Fix them by hand"
     );
   }
+
+  if (byHand.length > 0) {
+    await addRecordsByHand(byHand);
+  }
+};
+
+/** Point the hostname at the Pages project. Its certificate follows once the CNAME resolves. */
+const attachPagesDomain = async (
+  api: CloudflareApi | null,
+  accountId: string,
+  hostname: string
+): Promise<void> => {
+  if (api) {
+    try {
+      const status = await api.ensurePagesDomain(
+        accountId,
+        PAGES_PROJECT,
+        hostname
+      );
+
+      log.success(
+        `Pages: ${hostname} is the project's custom domain${status ? ` (${status})` : ""}.`
+      );
+
+      return;
+    } catch (error) {
+      log.warn(
+        `Couldn't add ${hostname} to the Pages project (${error instanceof Error ? error.message : String(error)}).`
+      );
+    }
+  }
+
+  note(
+    [
+      `In the Cloudflare dashboard, open Workers & Pages, then the "${PAGES_PROJECT}" Pages project, then Custom domains, and add ${hostname}:`,
+      `https://dash.cloudflare.com/${accountId}/workers-and-pages`,
+    ].join("\n"),
+    "Add your hostname to the Pages project"
+  );
+  answer(await confirm({ message: "Added it?" }));
 };
 
 const waitFor = async (
@@ -858,6 +1041,102 @@ const finishSetup = async ({
   await client.close();
 };
 
+/**
+ * Where Sendoff lives, and whether a Pages project has to front it. Once a
+ * hostname is behind Pages it stays there: if its DNS moves to Cloudflare
+ * later, the CNAME comes along, and a Custom Domain can't share it.
+ */
+const chooseHostname = async ({
+  accountId,
+  api,
+  domain,
+  draft,
+}: {
+  accountId: string;
+  api: CloudflareApi | null;
+  domain: string;
+  draft: InstanceDraft;
+}): Promise<{ hostname: string; usePages: boolean }> => {
+  const hostnameAnswer = await ask(
+    "Where should Sendoff live? (A subdomain of your domain, used for signup and unsubscribe links)",
+    {
+      initial: draft.hostname ?? `news.${domain}`,
+      validate: (value) =>
+        HOSTNAME.test(value.trim().toLowerCase())
+          ? undefined
+          : "Enter a hostname like news.example.com.",
+    }
+  );
+
+  const hostname = hostnameAnswer.toLowerCase();
+
+  if (draft.pagesProject !== undefined && draft.hostname === hostname) {
+    return { hostname, usePages: true };
+  }
+
+  return {
+    hostname,
+    usePages: !(await hostnameOnCloudflare(api, accountId, hostname)),
+  };
+};
+
+/** SES's records, plus the hostname's CNAME when it's behind Pages (`pagesDev`). */
+const configureAllDns = async ({
+  cloudflareApi,
+  domain,
+  hostname,
+  pagesDev,
+  region,
+  ses,
+}: {
+  cloudflareApi: () => Promise<CloudflareApi | null>;
+  domain: string;
+  hostname: string;
+  pagesDev: string | undefined;
+  region: string;
+  ses: Awaited<ReturnType<typeof configureSes>>;
+}): Promise<void> => {
+  const dmarc = await hasDmarc(domain).catch(() => false);
+
+  const sesDone =
+    ses.identity.verified && ses.identity.mailFromStatus === "SUCCESS" && dmarc;
+
+  const cnameDone =
+    pagesDev === undefined ||
+    (await hasCname(hostname, pagesDev).catch(() => false));
+
+  if (sesDone) {
+    log.success(`DNS: SES has verified ${domain}, and it has DMARC.`);
+  }
+
+  if (pagesDev && cnameDone) {
+    log.success(`DNS: ${hostname} points to ${pagesDev}.`);
+  }
+
+  if (sesDone && cnameDone) {
+    return;
+  }
+
+  // Behind Pages, the hostname's DNS isn't on Cloudflare, so the token can't add records.
+  const useToken = !(sesDone || pagesDev);
+
+  await configureDns({
+    byHand:
+      pagesDev && !cnameDone ? [pagesCnameRecord(hostname, pagesDev)] : [],
+    cloudflare: useToken ? await cloudflareApi() : null,
+    domain,
+    records: sesDone
+      ? []
+      : sesDnsRecords({
+          dkimTokens: ses.identity.dkimTokens,
+          dmarc: !dmarc,
+          domain,
+          mailFromDomain: ses.mailFromDomain,
+          region,
+        }),
+  });
+};
+
 // --- Main ---------------------------------------------------------------------------
 
 const main = async () => {
@@ -878,21 +1157,22 @@ const main = async () => {
   save({ newsletter });
   const domain = newsletter.fromEmail.split("@")[1] ?? "";
 
-  const hostnameAnswer = await ask(
-    "Where should Sendoff live? (A subdomain on Cloudflare, used for signup and unsubscribe links)",
-    {
-      initial: draft.hostname ?? `news.${domain}`,
-      validate: (value) =>
-        HOSTNAME.test(value.trim().toLowerCase())
-          ? undefined
-          : "Enter a hostname like news.example.com.",
-    }
-  );
+  const cloudflareLogin = wranglerApi();
 
-  const hostname = hostnameAnswer.toLowerCase();
+  const { hostname, usePages } = await chooseHostname({
+    accountId,
+    api: cloudflareLogin,
+    domain,
+    draft,
+  });
 
   const publicUrl = `https://${hostname}`;
-  save({ hostname, publicUrl, workerName: WORKER_NAME });
+  save({
+    hostname,
+    pagesProject: usePages ? PAGES_PROJECT : undefined,
+    publicUrl,
+    workerName: WORKER_NAME,
+  });
 
   const region = answer(
     await select({
@@ -922,22 +1202,29 @@ const main = async () => {
   let cloudflare: Promise<CloudflareApi | null> | undefined;
 
   const cloudflareApi = async (): Promise<CloudflareApi | null> => {
-    cloudflare ??= cloudflareToken();
+    cloudflare ??= cloudflareToken(!usePages);
 
     return await cloudflare;
   };
 
-  progress.start("Creating the database, KV namespace and queue");
+  const resources = usePages
+    ? "database, KV namespace, queue and Pages project"
+    : "database, KV namespace and queue";
+
+  progress.start(`Creating the ${resources}`);
   const databaseId = ensureDatabase();
   const kvNamespaceId = ensureKvNamespace();
   ensureQueue();
+
+  // The hostname's CNAME target, e.g. sendoff-abc.pages.dev.
+  const pagesDev = usePages ? ensurePagesProject(accountId) : undefined;
   save({
     databaseId,
     databaseName: DATABASE_NAME,
     kvNamespaceId,
     queueName: QUEUE_NAME,
   });
-  progress.stop("Database, KV namespace and queue ready");
+  progress.stop(`The ${resources} are ready`);
 
   const secrets: Secrets = {};
 
@@ -964,24 +1251,14 @@ const main = async () => {
   });
   progress.stop("SES identity, configuration set and event topic ready");
 
-  const dmarc = await hasDmarc(domain).catch(() => false);
-
-  const dnsDone =
-    ses.identity.verified && ses.identity.mailFromStatus === "SUCCESS" && dmarc;
-
-  if (dnsDone) {
-    log.success(`DNS: SES has verified ${domain}, and it has DMARC.`);
-  } else {
-    const records = sesDnsRecords({
-      dkimTokens: ses.identity.dkimTokens,
-      dmarc: !dmarc,
-      domain,
-      mailFromDomain: ses.mailFromDomain,
-      region,
-    });
-
-    await configureDns(await cloudflareApi(), records, domain);
-  }
+  await configureAllDns({
+    cloudflareApi,
+    domain,
+    hostname,
+    pagesDev,
+    region,
+    ses,
+  });
 
   if (access.runtime) {
     secrets.AWS_ACCESS_KEY_ID = access.runtime.accessKeyId;
@@ -1013,6 +1290,10 @@ const main = async () => {
   // Show a new token straight away, so nothing after this can lose it.
   if (mcp.created && mcp.token) {
     showMcpToken(publicUrl, mcp.token);
+  }
+
+  if (usePages) {
+    await attachPagesDomain(cloudflareLogin, accountId, hostname);
   }
 
   try {

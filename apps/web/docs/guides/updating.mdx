@@ -17,14 +17,15 @@ bun install
 bun run deploy
 ```
 
-`bun run deploy` applies any new database migrations first, then deploys the Worker with your instance's settings. It doesn't touch your secrets, DNS or SES setup.
+`bun run deploy` applies any new database migrations first, then deploys the Worker with your instance's settings, and the Pages project in front of it if [your DNS isn't on Cloudflare](/docs/reference/setup#domains-outside-cloudflare). It doesn't touch your secrets, DNS or SES setup.
 
 ## Your instance's files
 
 Setup records your instance in `apps/app/.sendoff/`, which git ignores:
 
-- `instance.json`: your Cloudflare account, hostname, and the IDs of the database, KV namespace, queue, Turnstile widget and SES resources
+- `instance.json`: your Cloudflare account, hostname, and the IDs of the database, KV namespace, queue, Turnstile widget, SES resources and Pages project (if you have one)
 - `wrangler.jsonc`: the deploy config generated from it
+- `pages/`: the Pages project's code and config, generated from it, if you have one
 
 `bun run deploy` needs them. If you lose them, or move to another machine, run `bun run setup` again: it finds the resources that already exist instead of creating new ones.
 

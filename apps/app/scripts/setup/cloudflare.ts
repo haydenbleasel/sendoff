@@ -2,8 +2,11 @@ import { z } from "zod";
 
 import type { DnsRecord } from "./dns";
 
-// Cloudflare API calls setup makes with an API token: DNS records and a
-// Turnstile widget. Workers, D1, queues and secrets go through Wrangler.
+// Cloudflare API calls setup makes. With the person's optional API token:
+// DNS records and a Turnstile widget. With Wrangler's own login, whose OAuth
+// scopes cover reading zones and editing Pages but not DNS or Turnstile:
+// finding the hostname's zone and adding a Pages custom domain. Workers, D1,
+// queues and secrets go through Wrangler itself.
 
 const API = "https://api.cloudflare.com/client/v4";
 const MIN_ZONE_LABELS = 2;
@@ -24,7 +27,17 @@ export class CloudflareError extends Error {
   }
 }
 
-const zoneSchema = z.object({ id: z.string(), name: z.string() });
+const zoneSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  /** "active" once its nameservers point at Cloudflare. */
+  status: z.string().optional(),
+});
+
+const pagesDomainSchema = z.object({
+  name: z.string(),
+  status: z.string().optional(),
+});
 
 const dnsRecordSchema = z.object({
   content: z.string(),
@@ -102,15 +115,19 @@ export const createCloudflareApi = (
     return parsed.result;
   };
 
-  const findZone = async (domain: string) => {
+  /** The zone `domain` belongs to, if it's on Cloudflare (in `accountId`, when given). */
+  const findZone = async (domain: string, accountId?: string) => {
     let labels = domain.split(".");
 
     while (labels.length >= MIN_ZONE_LABELS) {
+      const query = new URLSearchParams({ name: labels.join(".") });
+
+      if (accountId) {
+        query.set("account.id", accountId);
+      }
+
       // oxlint-disable-next-line no-await-in-loop -- most specific zone first
-      const [zone] = await call(
-        `/zones?name=${encodeURIComponent(labels.join("."))}`,
-        z.array(zoneSchema)
-      );
+      const [zone] = await call(`/zones?${query}`, z.array(zoneSchema));
 
       if (zone) {
         return zone;
@@ -174,6 +191,28 @@ export const createCloudflareApi = (
       });
 
       return "created";
+    },
+
+    /** Add `hostname` as a custom domain of a Pages project, unless it already is one. Returns its status. */
+    ensurePagesDomain: async (
+      accountId: string,
+      project: string,
+      hostname: string
+    ): Promise<string | undefined> => {
+      const path = `/accounts/${accountId}/pages/projects/${encodeURIComponent(project)}/domains`;
+      const domains = await call(path, z.array(pagesDomainSchema));
+      const existing = domains.find((domain) => domain.name === hostname);
+
+      if (existing) {
+        return existing.status;
+      }
+
+      const added = await call(path, pagesDomainSchema, {
+        body: JSON.stringify({ name: hostname }),
+        method: "POST",
+      });
+
+      return added.status;
     },
 
     findZone,

@@ -58,6 +58,8 @@ Ask your agent to "run doctor" at any time. `prepare_send` runs the same checks,
 
 **Setup stopped partway.** Run `bun run setup` again from your Sendoff folder, or `bun create sendoff` again from where you first ran it. It skips everything that's done and continues from the step that failed.
 
+**Setup gave up waiting for your hostname to come online.** A new hostname needs a few minutes for its certificate. If your DNS isn't on Cloudflare, check that the `CNAME` from your hostname to the `*.pages.dev` address is in place, and that your hostname is listed under the `sendoff-pages` project's custom domains in the Cloudflare dashboard. Then run `bun run setup` again.
+
 **The agent can't connect.** Check the URL ends in `/mcp` and the header is `Authorization: Bearer <token>`, with a space after `Bearer`. If you've lost the token, [replace it](/docs/connect#keep-the-token-safe).
 
 **A test email didn't arrive.** Check spam. While the account is in the SES sandbox, tests only reach addresses verified in SES, which your sender domain counts as. If SES refused it, the agent saw the reason when it sent the test; `doctor` shows anything else in the way.

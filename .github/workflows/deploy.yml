@@ -7,7 +7,9 @@ name: Deploy
 #
 # Repository secrets:
 # - CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID: for both deploys. The
-#   token needs Workers Scripts, Workers Routes and D1 edit permissions.
+#   token needs Workers Scripts, Workers Routes and D1 edit permissions, and
+#   Cloudflare Pages edit if the instance has a Pages project (its DNS isn't
+#   on Cloudflare).
 # - SENDOFF_INSTANCE: the contents of apps/app/.sendoff/instance.json, which
 #   setup writes. Without it, the Worker deploy is skipped.
 on:

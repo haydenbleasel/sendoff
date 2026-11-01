@@ -9,6 +9,12 @@ import {
 import { clashes, createCloudflareApi } from "../scripts/setup/cloudflare";
 import { mailFromDomainFor, sesDnsRecords } from "../scripts/setup/dns";
 import { deployConfig, instanceSchema } from "../scripts/setup/instance";
+import {
+  PAGES_WORKER,
+  pagesCnameRecord,
+  pagesConfig,
+  pagesSubdomain,
+} from "../scripts/setup/pages";
 
 const instance = instanceSchema.parse({
   accountId: "acct",
@@ -90,6 +96,59 @@ describe("deployConfig", () => {
       workers_dev: false,
     });
     expect(config).not.toHaveProperty("$schema");
+  });
+
+  it("leaves the Worker with no public route when a Pages project fronts it", () => {
+    const config = deployConfig(
+      { compatibility_date: "2026-10-01" },
+      { ...instance, pagesProject: "sendoff-pages" }
+    );
+
+    expect(config).toMatchObject({
+      routes: [],
+      vars: { PUBLIC_URL: "https://news.example.com" },
+      workers_dev: false,
+    });
+  });
+});
+
+describe("Pages front door", () => {
+  it("binds the Pages project to the Worker and forwards every request", () => {
+    expect(
+      pagesConfig(
+        { compatibility_date: "2026-10-01", main: "src/index.ts" },
+        instance,
+        "sendoff-pages"
+      )
+    ).toStrictEqual({
+      compatibility_date: "2026-10-01",
+      name: "sendoff-pages",
+      pages_build_output_dir: "./dist",
+      services: [{ binding: "SENDOFF", service: "sendoff" }],
+    });
+    expect(PAGES_WORKER).toContain("env.SENDOFF.fetch(request)");
+  });
+
+  it("finds the project's pages.dev hostname among its domains", () => {
+    const rows = [
+      { "Project Domains": "blog.pages.dev", "Project Name": "blog" },
+      {
+        "Project Domains": "sendoff-pages-4kd.pages.dev, news.example.com",
+        "Project Name": "sendoff-pages",
+      },
+    ];
+
+    expect(pagesSubdomain(rows, "sendoff-pages")).toBe(
+      "sendoff-pages-4kd.pages.dev"
+    );
+    expect(pagesSubdomain(rows, "missing")).toBeUndefined();
+    expect(
+      pagesCnameRecord("news.example.com", "sendoff-pages-4kd.pages.dev")
+    ).toMatchObject({
+      content: "sendoff-pages-4kd.pages.dev",
+      name: "news.example.com",
+      type: "CNAME",
+    });
   });
 });
 
@@ -200,6 +259,95 @@ describe("AWS setup", () => {
     expect(
       xmlValues("<a><Code>X&amp;Y</Code><Code> Z </Code></a>", "Code")
     ).toStrictEqual(["X&Y", "Z"]);
+  });
+});
+
+/** A Cloudflare API client whose requests are recorded and answered by `handle`. */
+const recordingApi = (
+  handle: (request: Request) => Response | Promise<Response>,
+  requests: Request[]
+) =>
+  createCloudflareApi("token", async (input, init) => {
+    const request = new Request(input, init);
+
+    requests.push(request.clone());
+
+    return await handle(request);
+  });
+
+describe("Cloudflare zones and Pages domains", () => {
+  it("looks for the hostname's zone in this account, most specific first", async () => {
+    const requests: Request[] = [];
+
+    const cloudflare = recordingApi((request) => {
+      const name = new URL(request.url).searchParams.get("name");
+
+      return Response.json({
+        result:
+          name === "example.com"
+            ? [{ id: "zone", name, status: "pending" }]
+            : [],
+        success: true,
+      });
+    }, requests);
+
+    expect(await cloudflare.findZone("news.example.com", "acct")).toStrictEqual(
+      {
+        id: "zone",
+        name: "example.com",
+        status: "pending",
+      }
+    );
+    expect(
+      requests.map((request) => new URL(request.url).search)
+    ).toStrictEqual([
+      "?name=news.example.com&account.id=acct",
+      "?name=example.com&account.id=acct",
+    ]);
+  });
+
+  it("adds a Pages custom domain only if it isn't there yet", async () => {
+    const requests: Request[] = [];
+    const domains = [{ name: "old.example.com", status: "active" }];
+
+    const cloudflare = recordingApi(async (request) => {
+      if (request.method === "POST") {
+        const { name } = await request.json<{ name: string }>();
+
+        domains.push({ name, status: "initializing" });
+
+        return Response.json({
+          result: { name, status: "initializing" },
+          success: true,
+        });
+      }
+
+      return Response.json({ result: domains, success: true });
+    }, requests);
+
+    expect(
+      await cloudflare.ensurePagesDomain(
+        "acct",
+        "sendoff-pages",
+        "news.example.com"
+      )
+    ).toBe("initializing");
+    expect(
+      await cloudflare.ensurePagesDomain(
+        "acct",
+        "sendoff-pages",
+        "news.example.com"
+      )
+    ).toBe("initializing");
+    expect(
+      requests.map(
+        (request) => `${request.method} ${new URL(request.url).pathname}`
+      )
+    ).toStrictEqual([
+      "GET /client/v4/accounts/acct/pages/projects/sendoff-pages/domains",
+      "POST /client/v4/accounts/acct/pages/projects/sendoff-pages/domains",
+      "GET /client/v4/accounts/acct/pages/projects/sendoff-pages/domains",
+    ]);
   });
 });
 

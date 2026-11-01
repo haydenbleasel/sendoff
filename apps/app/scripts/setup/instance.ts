@@ -27,6 +27,12 @@ export const instanceSchema = z.object({
       website: z.string(),
     })
     .optional(),
+  /**
+   * The Pages project that serves the hostname, when its DNS isn't on
+   * Cloudflare (see pages.ts). Without one, the hostname is the Worker's own
+   * Custom Domain.
+   */
+  pagesProject: z.string().optional(),
   publicUrl: z.url(),
   queueName: z.string().default("sendoff-send"),
   sesConfigurationSet: z.string().default("sendoff"),
@@ -71,9 +77,11 @@ export const deployConfig = (
       ],
       producers: [{ binding: "SEND_QUEUE", queue: instance.queueName }],
     },
-    routes: instance.hostname
-      ? [{ custom_domain: true, pattern: instance.hostname }]
-      : [],
+    // Behind a Pages project, the Worker has no public route of its own.
+    routes:
+      instance.hostname && !instance.pagesProject
+        ? [{ custom_domain: true, pattern: instance.hostname }]
+        : [],
     vars: {
       ...base.vars,
       PUBLIC_URL: instance.publicUrl,

@@ -7,17 +7,27 @@ export interface WranglerResult {
   output: string;
 }
 
+export interface WranglerOptions {
+  /** For commands with no config file to name the account, like `pages`. */
+  accountId?: string | undefined;
+  input?: string;
+  interactive?: boolean;
+}
+
 /**
  * Run the project's Wrangler. Interactive commands (login, migrations that
  * ask to confirm) inherit the terminal; the rest capture output.
  */
 export const wrangler = (
   args: string[],
-  { input, interactive = false }: { input?: string; interactive?: boolean } = {}
+  { accountId, input, interactive = false }: WranglerOptions = {}
 ): WranglerResult => {
   const result = spawnSync("bunx", ["wrangler", ...args], {
     cwd: APP_DIR,
     encoding: "utf-8",
+    env: accountId
+      ? { ...process.env, CLOUDFLARE_ACCOUNT_ID: accountId }
+      : process.env,
     input,
     stdio: interactive ? "inherit" : "pipe",
   });
@@ -28,8 +38,11 @@ export const wrangler = (
   };
 };
 
-export const wranglerJson = <T>(args: string[]): T | null => {
-  const result = wrangler([...args, "--json"]);
+export const wranglerJson = <T>(
+  args: string[],
+  options: WranglerOptions = {}
+): T | null => {
+  const result = wrangler([...args, "--json"], options);
 
   if (!result.ok) {
     return null;

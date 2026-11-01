@@ -11,7 +11,7 @@ sidebar:
 
 You need:
 
-- **A Cloudflare account on [Workers Paid](https://dash.cloudflare.com/?to=/:account/workers/plans)** ($5 a month), with your domain's DNS on Cloudflare. Sendoff lives on a subdomain of it, like `news.example.com`.
+- **A Cloudflare account on [Workers Paid](https://dash.cloudflare.com/?to=/:account/workers/plans)** ($5 a month). Sendoff lives on a subdomain of your domain, like `news.example.com`. Your domain's DNS can be on Cloudflare or anywhere else; see [Domains outside Cloudflare](/docs/reference/setup#domains-outside-cloudflare).
 - **An AWS account** for SES. A new account starts in the SES sandbox; setup asks AWS to move it out.
 - **An address on that domain to send from**, like `hello@example.com`. If you're moving from another provider, keep the same domain, so its sending reputation carries over.
 - **[Bun](https://bun.sh) and Git.**
@@ -19,7 +19,7 @@ You need:
 
 :::tip[Optional: a Cloudflare API token]
 
-With a token, setup writes the DNS records and creates the Turnstile widget for you. Create one at [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) with **Zone › DNS › Edit** and **Zone › Zone › Read** for your domain, and **Account › Turnstile › Edit**. It's only used during setup and isn't stored. Without it, setup prints the records to add and asks for Turnstile keys you make in the dashboard.
+With a token, setup writes the DNS records and creates the Turnstile widget for you. Create one at [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) with **Zone › DNS › Edit** and **Zone › Zone › Read** for your domain, and **Account › Turnstile › Edit**. If your domain's DNS isn't on Cloudflare, only the Turnstile permission matters, because you add the records yourself. It's only used during setup and isn't stored. Without it, setup prints the records to add and asks for Turnstile keys you make in the dashboard.
 
 :::
 

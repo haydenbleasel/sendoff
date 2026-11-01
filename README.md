@@ -20,7 +20,7 @@ That clones Sendoff into `./sendoff`, installs it and runs setup. Setup creates 
 
 You need:
 
-- A Cloudflare account on [Workers Paid](https://developers.cloudflare.com/workers/platform/pricing/), with your domain's DNS on Cloudflare
+- A Cloudflare account on [Workers Paid](https://developers.cloudflare.com/workers/platform/pricing/). Your domain's DNS can be on Cloudflare or anywhere else: elsewhere, setup lists the records for you to add.
 - An AWS account for SES
 - [Bun](https://bun.sh), Git and, ideally, the [AWS CLI](https://aws.amazon.com/cli/), logged in
 
