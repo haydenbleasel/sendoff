@@ -67,7 +67,9 @@ const findIssueId = async (
 
   const tagged = event.mail.tags?.issue?.[0];
 
-  if (!tagged) {
+  // Test sends carry the issue tag too, but they aren't part of its send:
+  // a mistyped test address mustn't count as one of the issue's bounces.
+  if (!tagged || event.mail.tags?.type?.includes("test")) {
     return null;
   }
 

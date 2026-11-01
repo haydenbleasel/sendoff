@@ -175,6 +175,33 @@ describe("POST /webhooks/ses", () => {
     expect(response.status).toBe(503);
   });
 
+  it("doesn't count a test send's bounce against the issue", async () => {
+    const issue = await createDraft(db(), { body: "Hi", subject: "Tested" });
+
+    await post(
+      await sesNotification({
+        bounce: {
+          bounceType: "Permanent",
+          bouncedRecipients: [{ emailAddress: "typo@example.com" }],
+        },
+        eventType: "Bounce",
+        mail: {
+          destination: ["typo@example.com"],
+          messageId: "ses-test-send",
+          tags: { issue: [issue.id], type: ["test"] },
+        },
+      })
+    );
+
+    const recorded = await db()
+      .select()
+      .from(events)
+      .where(eq(events.messageId, "ses-test-send"));
+
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]?.issueId).toBeNull();
+  });
+
   it("suppresses hard bounces, idempotently", async () => {
     await importSubscribers(db(), [
       { email: "gone@example.com", status: "active" },
