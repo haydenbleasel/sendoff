@@ -4,7 +4,9 @@ import { APP_DIR } from "./files";
 
 export interface WranglerResult {
   ok: boolean;
+  /** stdout and stderr together, for showing on failure. */
   output: string;
+  stdout: string;
 }
 
 export interface WranglerOptions {
@@ -35,7 +37,18 @@ export const wrangler = (
   return {
     ok: result.status === 0,
     output: `${result.stdout ?? ""}${result.stderr ?? ""}`,
+    stdout: result.stdout ?? "",
   };
+};
+
+/** The JSON a command printed to stdout (a warning on stderr would break parsing), or null. */
+export const parseJsonOutput = <T>(stdout: string): T | null => {
+  try {
+    // SAFETY: Wrangler's JSON output; callers read only the fields they need.
+    return JSON.parse(stdout.slice(stdout.search(/[[{]/u))) as T;
+  } catch {
+    return null;
+  }
 };
 
 export const wranglerJson = <T>(
@@ -44,14 +57,5 @@ export const wranglerJson = <T>(
 ): T | null => {
   const result = wrangler([...args, "--json"], options);
 
-  if (!result.ok) {
-    return null;
-  }
-
-  try {
-    // SAFETY: Wrangler's --json output; callers read only the fields they need.
-    return JSON.parse(result.output.slice(result.output.search(/[[{]/u))) as T;
-  } catch {
-    return null;
-  }
+  return result.ok ? parseJsonOutput<T>(result.stdout) : null;
 };

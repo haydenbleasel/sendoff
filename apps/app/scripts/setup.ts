@@ -368,19 +368,39 @@ const awsAccess = async (
   };
 };
 
-const workerSecretNames = (): Set<string> =>
-  new Set(
-    (
-      wranglerJson<{ name: string }[]>([
-        "secret",
-        "list",
-        "--name",
-        WORKER_NAME,
-        "--format",
-        "json",
-      ]) ?? []
-    ).map((secret) => secret.name)
+const workerSecretsSchema = z.array(z.object({ name: z.string() }));
+
+/**
+ * The Worker's secret names, or none before its first deploy. Any other
+ * failure stops setup: guessing "none" would rotate TOKEN_SECRET, breaking
+ * the unsubscribe links in every email already sent, and replace the MCP
+ * token and AWS key the Worker is using.
+ */
+const workerSecretNames = (): Set<string> => {
+  // `secret list` prints JSON by default and rejects a --json flag.
+  const listed = wrangler(["secret", "list", "--name", WORKER_NAME]);
+
+  if (!listed.ok) {
+    if (listed.output.includes(`Worker "${WORKER_NAME}" not found`)) {
+      return new Set();
+    }
+
+    return fail(
+      `Couldn't list the Worker's secrets, so setup can't tell which to keep:\n${listed.output}`
+    );
+  }
+
+  const parsed = parseJsonWith(
+    workerSecretsSchema,
+    listed.stdout.slice(Math.max(0, listed.stdout.indexOf("[")))
   );
+
+  return parsed.success
+    ? new Set(parsed.data.map((secret) => secret.name))
+    : fail(
+        `Couldn't read the Worker's secrets from Wrangler:\n${listed.output}`
+      );
+};
 
 /** `dnsOnCloudflare` is false when the hostname's DNS is elsewhere, so the token is only for Turnstile. */
 const cloudflareToken = async (
@@ -555,7 +575,7 @@ const ensureKvNamespace = (): string => {
 
     const parsed = parseJsonWith(
       kvNamespacesSchema,
-      listed.output.slice(Math.max(0, listed.output.indexOf("[")))
+      listed.stdout.slice(Math.max(0, listed.stdout.indexOf("[")))
     );
 
     return parsed.success
