@@ -7,7 +7,8 @@ name: Deploy
 #
 # Repository secrets:
 # - CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID: for both deploys. The
-#   token needs Workers Scripts, Workers Routes and D1 edit permissions, and
+#   token needs Workers Scripts, Workers Routes, D1 and Queues edit
+#   permissions (deploying updates the send queue's consumer), and
 #   Cloudflare Pages edit if the instance has a Pages project (its DNS isn't
 #   on Cloudflare).
 # - SENDOFF_INSTANCE: the contents of apps/app/.sendoff/instance.json, which
@@ -49,6 +50,9 @@ jobs:
         if: steps.credentials.outputs.ready == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # The docs' "Last updated" dates come from git history, which a
+          # shallow clone drops.
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Install Bun
