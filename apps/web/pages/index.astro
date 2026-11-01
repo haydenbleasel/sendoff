@@ -13,10 +13,11 @@ import Mark from "./_home/mark.astro";
 const { config } = data;
 
 const DOCS = "/docs";
+const QUICKSTART = "/docs/quickstart";
 
 // Until launch, the deploy and docs calls to action show a COMING SOON board
-// instead, and the steps and footer drop their docs links. Flip this to bring
-// them back.
+// instead, and the steps drop their docs links. Flip this to bring them back.
+// The footer's Docs link stays either way.
 const launched = false;
 
 // The hero conversation, from first draft to send.
@@ -185,6 +186,7 @@ const steps = [
   {
     body: "Clone the repo and run setup. It creates the database, queue and SES identity, writes your DNS records and asks AWS for production access.",
     code: "bun run setup",
+    href: QUICKSTART,
     link: "Setup guide",
     number: "1",
     title: "Deploy",
@@ -192,6 +194,7 @@ const steps = [
   {
     body: "Add one URL as a connector in claude.ai or Claude Desktop, or with the command setup prints for Claude Code and Codex.",
     code: "news.example.com/mcp",
+    href: "/docs/connect",
     link: "Connect your agent",
     number: "2",
     title: "Connect",
@@ -199,6 +202,7 @@ const steps = [
   {
     body: "Ask for a draft, check the preview and send yourself a test. Nothing goes out until you say so.",
     code: "“Send it.”",
+    href: "/docs/guides/sending",
     link: "How sending works",
     number: "3",
     title: "Send",
@@ -258,7 +262,7 @@ const inlineLink =
       {
         launched ? (
           <div class="sendoff-enter flex flex-wrap items-center justify-center gap-x-7 gap-y-3 [--i:3]">
-            <a href={DOCS} class={primaryButton}>
+            <a href={QUICKSTART} class={primaryButton}>
               Deploy your own <Arrow />
             </a>
             <a href={DOCS} class:list={[textLink, "min-h-11 text-base"]}>
@@ -565,7 +569,7 @@ const inlineLink =
               <p class="text-base/7 text-pretty text-muted-foreground">{step.body}</p>
               <p class="rounded-lg bg-muted px-3 py-1.5 font-mono text-sm">{step.code}</p>
               {launched && (
-                <a href={DOCS} class:list={[textLink, "min-h-8 text-base sm:text-[0.9375rem]"]}>
+                <a href={step.href} class:list={[textLink, "min-h-8 text-base sm:text-[0.9375rem]"]}>
                   {step.link} <Arrow size={14} />
                 </a>
               )}
@@ -594,7 +598,7 @@ const inlineLink =
       <div class="[--reveal-delay:240ms]" data-reveal>
         {
           launched ? (
-            <a href={DOCS} class={primaryButton}>
+            <a href={QUICKSTART} class={primaryButton}>
               Deploy your own <Arrow />
             </a>
           ) : (
@@ -614,13 +618,7 @@ const inlineLink =
         <span class="font-semibold tracking-tight text-foreground">Sendoff</span>
         <span>Runs on Cloudflare Workers and Amazon SES</span>
       </div>
-      {
-        launched && (
-          <a href={DOCS} class="text-muted-foreground no-underline hover:text-foreground">
-            Docs
-          </a>
-        )
-      }
+      <a href={DOCS} class="text-muted-foreground no-underline hover:text-foreground">Docs</a>
     </div>
   </footer>
 </PageLayout>
