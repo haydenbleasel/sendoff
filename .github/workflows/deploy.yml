@@ -30,6 +30,9 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # The changelog is built from this repo's GitHub releases. Without a
+      # token the API's rate limit can leave it empty.
+      GITHUB_TOKEN: ${{ github.token }}
 
     steps:
       - name: Check for Cloudflare credentials

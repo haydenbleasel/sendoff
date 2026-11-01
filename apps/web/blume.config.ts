@@ -1,4 +1,5 @@
 import { defineConfig } from "blume";
+import { filesystem, githubReleases } from "blume/sources";
 
 const REPO = "https://github.com/haydenbleasel/sendoff";
 const NPM = "https://www.npmjs.com/package/create-sendoff";
@@ -17,8 +18,30 @@ export default defineConfig({
     },
   },
 
-  // The landing page owns `/` (pages/index.astro), so the docs mount under /docs.
-  basePath: "/docs",
+  changelog: {
+    description:
+      "Every Sendoff release, newest first: the Worker and create-sendoff, straight from the release notes on GitHub.",
+  },
+
+  content: {
+    sources: [
+      // Local docs under docs/ → /docs/* (the landing page, pages/index.astro,
+      // owns "/").
+      filesystem({ prefix: "docs", root: "docs" }),
+      // The repo's GitHub releases (the Worker's app@ tags and
+      // create-sendoff's) become the changelog timeline at /changelog, each
+      // release a type:changelog entry. Set GITHUB_TOKEN in CI to avoid rate
+      // limits; a failed fetch degrades to an empty changelog.
+      githubReleases({
+        // Every release, not Blume's default of the newest 100, which drops
+        // the oldest release's page each time a new one is published.
+        limit: 1000,
+        owner: "haydenbleasel",
+        prefix: "changelog",
+        repo: "sendoff",
+      }),
+    ],
+  },
 
   // Workers exposes no site URL at build time, so canonicals and the sitemap need it here.
   deployment: { site: "https://sendoff.dev" },
@@ -50,6 +73,15 @@ export default defineConfig({
   lastModified: "git",
 
   logo: "/logo.svg",
+
+  // Header tabs. Changelog owns changelog/, so its releases stay out of the
+  // docs sidebar.
+  navigation: {
+    tabs: [
+      { label: "Docs", path: "/docs" },
+      { label: "Changelog", path: "/changelog" },
+    ],
+  },
 
   seo: {
     og: {
