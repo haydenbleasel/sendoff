@@ -4,6 +4,7 @@
 coverage = true
 coverageThreshold = 1.0
 coverageSkipTestFiles = true
-# index.ts only wires main() to the real process (argv, stdout, exit code).
+# index.ts checks Node's version (node-version.ts, tested) and loads start.ts,
+# which only wires main() to the real process (argv, stdout, exit code).
 # main.ts holds the flow and is tested in full.
-coveragePathIgnorePatterns = ["src/index.ts"]
+coveragePathIgnorePatterns = ["src/index.ts", "src/start.ts"]

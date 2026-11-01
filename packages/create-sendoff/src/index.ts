@@ -1,29 +1,16 @@
 #!/usr/bin/env node
-// The entry point: wires main() to the real process (arguments, terminal,
-// commands and exit code). The flow itself is in main.ts, which is tested.
+// The entry point. `bunx` runs it with whatever Node is installed, and on a
+// Node too old for the CLI's dependencies the bundle fails to load with an
+// error about a missing export, before it can say anything. So this checks
+// first, then loads the rest (a separate chunk; see the build script).
 
-import {
-  cancel,
-  confirm,
-  intro,
-  isCancel,
-  log,
-  outro,
-  spinner,
-} from "@clack/prompts";
+import { MIN_NODE, supportsNode } from "./node-version";
 
-import { awsLogin } from "./aws";
-import { main } from "./main";
-import { handOff, installed, run } from "./run";
-
-process.exitCode = await main({
-  argv: process.argv.slice(2),
-  awsLogin,
-  cwd: process.cwd(),
-  handOff,
-  installed,
-  prompts: { cancel, confirm, intro, isCancel, log, outro, spinner },
-  run,
-  stderr: (text) => process.stderr.write(text),
-  stdout: (text) => process.stdout.write(text),
-});
+if (supportsNode(process.versions.node)) {
+  await import("./start");
+} else {
+  process.stderr.write(
+    `create-sendoff needs Node.js ${MIN_NODE} or newer, and this is ${process.versions.node}. Update Node.js (https://nodejs.org), then run it again.\n`
+  );
+  process.exitCode = 1;
+}
