@@ -16,7 +16,7 @@
     },
     "apps/app": {
       "name": "app",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "dependencies": {
         "@cloudflare/workers-oauth-provider": "^1.2.4",
         "@modelcontextprotocol/server": "^2.4.0",
@@ -59,7 +59,7 @@
     },
     "packages/create-sendoff": {
       "name": "create-sendoff",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "bin": {
         "create-sendoff": "./dist/index.js",
       },
