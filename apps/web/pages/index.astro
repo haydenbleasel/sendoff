@@ -29,7 +29,10 @@ const chat = [
     ],
   },
   { from: "you", messages: [{ text: "Send me a test." }] },
-  { from: "agent", messages: [{ text: "Sent to hello@example.com. Preflight passed." }] },
+  {
+    from: "agent",
+    messages: [{ text: "Sent to hello@example.com. Preflight passed: send it to 6,042 subscribers?" }],
+  },
   { from: "you", messages: [{ text: "Looks good. Send it." }] },
   { from: "agent", messages: [{ text: "Issue 24 is going out to 6,042 subscribers." }] },
 ] as const;
@@ -225,7 +228,7 @@ const steps = [
     title: "Deploy",
   },
   {
-    body: "Add one URL as a connector in claude.ai or Claude Desktop, or with the command setup prints for Claude Code and Codex.",
+    body: "Add one URL as a connector in claude.ai or Claude Desktop, or with the details setup prints for Claude Code and Codex.",
     code: "news.example.com/mcp",
     href: "/docs/connect",
     link: "Connect your agent",
@@ -276,6 +279,7 @@ const inlineLink =
   ogImageAlt="The Sendoff mark and SENDOFF spelled out on split-flap tiles."
   ogImageSize={{ height: 630, width: 1200 }}
   structuredDataEnabled={config.structuredData}
+  x={config.x}
   page={{
     description: config.description,
     route: "/",
