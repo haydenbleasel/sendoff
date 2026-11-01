@@ -1,4 +1,16 @@
-import { and, count, eq, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  countDistinct,
+  eq,
+  inArray,
+  isNull,
+  lt,
+  ne,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { z } from "zod";
 
@@ -32,6 +44,7 @@ import { SesError } from "./ses";
 import type { SesClient } from "./ses";
 import { getSettings } from "./settings";
 import type { Settings } from "./settings";
+import { SUPPRESSED_SUBTYPES } from "./stats";
 import { isValidEmail, normalizeEmail } from "./subscribers";
 import {
   createSendConfirmation,
@@ -916,6 +929,7 @@ export interface SendStatus {
   counts: Record<(typeof sendStatuses)[number], number>;
   /** Sends SES has reported as accepted by the receiving server. */
   delivered: number;
+  /** People, not events, as issue_stats counts them. */
   events: {
     bounce: number;
     complaint: number;
@@ -949,10 +963,29 @@ export const sendStatus = async (
       .from(sends)
       .where(eq(sends.issueId, issue.id))
       .groupBy(sends.status),
+    // People, like issue_stats: one person's soft then hard bounce, or a
+    // repeat unsubscribe, counts once, and addresses on SES's suppression
+    // list (which SES never tried) aren't bounces.
     db
-      .select({ type: events.type, value: count() })
+      .select({
+        type: events.type,
+        value: countDistinct(
+          sql`coalesce(${events.subscriberId}, ${events.id})`
+        ),
+      })
       .from(events)
-      .where(eq(events.issueId, issue.id))
+      .where(
+        and(
+          eq(events.issueId, issue.id),
+          or(
+            ne(events.type, "bounce"),
+            notInArray(
+              sql`coalesce(json_extract(${events.detail}, '$.bounceSubType'), '')`,
+              [...SUPPRESSED_SUBTYPES]
+            )
+          )
+        )
+      )
       .groupBy(events.type),
     db
       .select({ email: subscribers.email, error: sends.error })

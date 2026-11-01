@@ -113,7 +113,10 @@ const bounceDetailSchema = z.object({
  * suppression list as a bounce with one of these subtypes, but it never
  * tried to deliver it, and it doesn't count toward SES's bounce rate.
  */
-const SUPPRESSED_SUBTYPES = new Set(["OnAccountSuppressionList", "Suppressed"]);
+export const SUPPRESSED_SUBTYPES = new Set([
+  "OnAccountSuppressionList",
+  "Suppressed",
+]);
 
 const rate = (part: number, whole: number): number | null =>
   whole > 0 ? part / whole : null;

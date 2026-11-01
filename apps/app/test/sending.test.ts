@@ -527,6 +527,54 @@ describe("sending", () => {
     });
   });
 
+  it("counts people in send_status, as issue_stats does", async () => {
+    await addActive(3);
+    const confirmed = await startSend();
+    await drain();
+
+    const [soft, suppressed, leaver] = await Promise.all(
+      [0, 1, 2].map((index) =>
+        findSubscriberByEmail(db(), `reader-${index}@example.com`)
+      )
+    );
+
+    const event = (
+      subscriberId: string | undefined,
+      type: "bounce" | "unsubscribe",
+      detail: Record<string, string> = {}
+    ) => ({
+      at: new Date(),
+      detail,
+      id: crypto.randomUUID(),
+      issueId: confirmed.issue.id,
+      subscriberId: subscriberId ?? null,
+      type,
+    });
+
+    await db()
+      .insert(events)
+      .values([
+        // One person: a full mailbox, then a hard bounce.
+        event(soft?.id, "bounce", { bounceType: "Transient" }),
+        event(soft?.id, "bounce", { bounceType: "Permanent" }),
+        // On SES's suppression list, so SES never tried it.
+        event(suppressed?.id, "bounce", {
+          bounceSubType: "OnAccountSuppressionList",
+          bounceType: "Permanent",
+        }),
+        event(leaver?.id, "unsubscribe"),
+        event(leaver?.id, "unsubscribe"),
+      ]);
+
+    const status = await sendStatus(deps, confirmed.issue.id);
+
+    expect(status.events).toStrictEqual({
+      bounce: 1,
+      complaint: 0,
+      unsubscribe: 1,
+    });
+  });
+
   it("restarts stalled sends from the cron", async () => {
     await addActive(2);
     deps = {
