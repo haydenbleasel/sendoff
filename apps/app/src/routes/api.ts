@@ -132,7 +132,7 @@ apiRoutes.post(
 
     const { outcome, subscriber } = await subscribe(db, {
       email: body.data.email,
-      name: body.data.name,
+      name: body.data.name || undefined,
       source: "api",
     });
 

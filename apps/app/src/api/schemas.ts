@@ -15,13 +15,13 @@ const MAX_NAME = 100;
 export const createSubscriberBody = z
   .object({
     email: z.email().describe("The address to subscribe."),
+    // Forms often send their optional name field empty; that's no name, not an error.
     name: z
       .string()
       .trim()
-      .min(1)
       .max(MAX_NAME)
       .optional()
-      .describe("Optional display name."),
+      .describe("Optional display name. An empty one is ignored."),
   })
   .register(apiSchemas, { id: "CreateSubscriber" });
 

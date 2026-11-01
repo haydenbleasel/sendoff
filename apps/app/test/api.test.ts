@@ -225,6 +225,18 @@ describe("POST /api/v1/subscribers", () => {
     expect(used?.lastUsedAt).toBeInstanceOf(Date);
   });
 
+  it("treats a form's blank name as no name", async () => {
+    const response = await subscribe(
+      '{"email":"blank@example.com","name":"  "}',
+      await newKey()
+    );
+
+    expect(response.status).toBe(202);
+
+    const subscriber = await findSubscriberByEmail(db(), "blank@example.com");
+    expect(subscriber?.name).toBeNull();
+  });
+
   it("responds the same for existing subscribers without emailing them", async () => {
     await importSubscribers(db(), [
       { email: "member@example.com", status: "active" },
