@@ -30,6 +30,10 @@ When setup finishes, it prints the URL and token to [connect your agent](https:/
 
 That shows anything still blocking a send, like SES production access (AWS usually approves it in about a day) or an empty list. The [quickstart](https://sendoff.dev/docs/quickstart) covers every step.
 
+### Updating
+
+From your Sendoff folder, run `git pull`, `bun install` and `bun run deploy`. Each version's [release notes](https://github.com/haydenbleasel/sendoff/releases) say what changed and anything else to do. See [Updating](https://sendoff.dev/docs/guides/updating).
+
 ## How it works
 
 - **Your agent writes the issues.** It drafts and edits them through Sendoff's MCP server. Issues are Markdown poured into one fixed, carefully designed email layout, so there's no template to build or maintain.

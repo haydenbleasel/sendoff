@@ -19,6 +19,14 @@ bun run deploy
 
 `bun run deploy` applies any new database migrations first, then deploys the Worker with your instance's settings, and the Pages project in front of it if [your DNS isn't on Cloudflare](/docs/reference/setup#domains-outside-cloudflare). It doesn't touch your secrets, DNS or SES setup.
 
+## What's changed
+
+Each version of the Worker has release notes on GitHub, under [Releases](https://github.com/haydenbleasel/sendoff/releases) (the ones tagged `app@`), and in `apps/app/CHANGELOG.md` in your folder. Read them when you update: if a version needs more than `bun run deploy`, like [running setup again](#running-setup-again), its notes say so.
+
+`git pull` brings in the latest code on `main`, which can be a little ahead of the latest release. Changes that haven't been released yet don't have notes until they are.
+
+To hear about new versions, open the [Sendoff repo](https://github.com/haydenbleasel/sendoff) on GitHub and choose **Watch › Custom › Releases**.
+
 ## Your instance's files
 
 Setup records your instance in `apps/app/.sendoff/`, which git ignores:

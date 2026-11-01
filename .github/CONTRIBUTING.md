@@ -79,13 +79,14 @@ CI runs on every pull request and push to `main`:
 
 ## Changesets
 
-We use [Changesets](https://github.com/changesets/changesets) to version and release three packages:
+We use [Changesets](https://github.com/changesets/changesets) to version and release two packages:
 
 | Package | What a release does |
 | --- | --- |
 | `create-sendoff` | Publishes it to npm |
 | `app` (the Worker) | Tags a GitHub release with its changelog, and deploys the maintainers' instance |
-| `web` (the website and docs) | Tags a GitHub release, and deploys sendoff.dev |
+
+The website and docs (`web`) aren't versioned, so they don't need a changeset. They deploy to sendoff.dev with every release.
 
 Self-hosters update the Worker with `git pull`, so the Worker's release notes are how they find out what changed, including anything to do after updating, like re-running setup.
 

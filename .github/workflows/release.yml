@@ -2,8 +2,9 @@ name: Release
 
 # Changesets: on each push to main, open (or update) a "Version Packages" pull
 # request from the pending changesets. Merging it releases: create-sendoff is
-# published to npm, the Worker (app) and website (web) are tagged with GitHub
-# releases, and deploy.yml ships the Worker and website. Publishing uses npm
+# published to npm, the Worker (app) is tagged with a GitHub release, and
+# deploy.yml ships the Worker and website. The website (web) isn't versioned:
+# .changeset/config.json ignores it. Publishing uses npm
 # trusted publishing (OIDC), so there's no npm token secret; the package's
 # trusted publisher on npmjs.com must name this repo and release.yml.
 permissions:
