@@ -66,6 +66,9 @@ const mail = (to: string) => ({
 const certFetcher: typeof fetch = () =>
   Promise.resolve(new Response(TEST_SNS_CERT));
 
+const unavailableFetcher: typeof fetch = () =>
+  Promise.resolve(new Response("Unavailable", { status: 503 }));
+
 describe("verifySnsMessage", () => {
   it.each(["1", "2"] as const)(
     "accepts SignatureVersion %s and rejects tampering",
@@ -77,14 +80,32 @@ describe("verifySnsMessage", () => {
         Type: "Notification",
       });
 
-      expect(await verifySnsMessage(message, certFetcher)).toBe(true);
+      expect(await verifySnsMessage(message, certFetcher)).toBe("valid");
       expect(
         await verifySnsMessage({ ...message, Message: "hell0" }, certFetcher)
-      ).toBe(false);
+      ).toBe("invalid");
     }
   );
 
-  it("refuses certificates from non-SNS hosts", async () => {
+  it.each([
+    "https://sns.us-east-1.amazonaws.com.evil.com/cert.pem",
+    // An S3 bucket named "sns" has this hostname.
+    "https://sns.s3.amazonaws.com/cert.pem",
+    // SNS, but not the topic's region.
+    "https://sns.eu-west-1.amazonaws.com/cert.pem",
+  ])("refuses a certificate from %s", async (url) => {
+    const message = await signedSnsMessage({
+      Message: "hello",
+      MessageId: "id",
+      Type: "Notification",
+    });
+
+    expect(
+      await verifySnsMessage({ ...message, SigningCertURL: url }, certFetcher)
+    ).toBe("invalid");
+  });
+
+  it("can't judge a message while the certificate can't be fetched", async () => {
     const message = await signedSnsMessage({
       Message: "hello",
       MessageId: "id",
@@ -95,12 +116,11 @@ describe("verifySnsMessage", () => {
       await verifySnsMessage(
         {
           ...message,
-          SigningCertURL:
-            "https://sns.us-east-1.amazonaws.com.evil.com/cert.pem",
+          SigningCertURL: "https://sns.us-east-1.amazonaws.com/unreachable.pem",
         },
-        certFetcher
+        unavailableFetcher
       )
-    ).toBe(false);
+    ).toBe("unavailable");
   });
 });
 
@@ -141,6 +161,18 @@ describe("POST /webhooks/ses", () => {
 
     expect(otherTopicResponse.status).toBe(403);
     expect(tamperedResponse.status).toBe(403);
+  });
+
+  it("asks SNS to retry when the signing certificate can't be fetched", async () => {
+    // SNS drops a message for good on a 4xx, so this has to be a 5xx.
+    const message = {
+      ...(await sesNotification({ eventType: "Delivery" })),
+      SigningCertURL: "https://sns.us-east-1.amazonaws.com/unreachable.pem",
+    };
+
+    const response = await post(message);
+
+    expect(response.status).toBe(503);
   });
 
   it("suppresses hard bounces, idempotently", async () => {

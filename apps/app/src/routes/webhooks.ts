@@ -13,8 +13,9 @@ const HTTP_UNAVAILABLE = 503;
 
 export const webhookRoutes = new Hono<{ Bindings: Env }>();
 
-// SES configuration set -> SNS topic -> this endpoint. SNS retries on non-2xx
-// responses, so only return an error when a retry could help.
+// SES configuration set -> SNS topic -> this endpoint. SNS retries only 5xx
+// and 429 responses and drops the message on any other error, so answer 5xx
+// whenever a retry could help.
 webhookRoutes.post("/webhooks/ses", async (c) => {
   const config = getConfig(c.env);
 
@@ -30,15 +31,29 @@ webhookRoutes.post("/webhooks/ses", async (c) => {
 
   const message = parsed.data;
 
-  if (
-    message.TopicArn !== config.sesEventsTopicArn ||
-    !(await verifySnsMessage(message))
-  ) {
+  if (message.TopicArn !== config.sesEventsTopicArn) {
+    return c.text("Forbidden", HTTP_FORBIDDEN);
+  }
+
+  const verification = await verifySnsMessage(message);
+
+  if (verification === "unavailable") {
+    // Usually a brief network failure; a 4xx here would lose the event for good.
+    return c.text(
+      "Couldn't fetch the SNS signing certificate",
+      HTTP_UNAVAILABLE
+    );
+  }
+
+  if (verification === "invalid") {
     return c.text("Forbidden", HTTP_FORBIDDEN);
   }
 
   if (message.Type === "SubscriptionConfirmation") {
-    if (!message.SubscribeURL || !isSnsUrl(message.SubscribeURL)) {
+    if (
+      !message.SubscribeURL ||
+      !isSnsUrl(message.SubscribeURL, message.TopicArn)
+    ) {
       return c.text("Invalid SubscribeURL", HTTP_BAD_REQUEST);
     }
 

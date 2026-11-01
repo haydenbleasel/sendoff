@@ -7,7 +7,9 @@ import { z } from "zod";
 // A valid signature only proves the message came from *some* SNS topic, so
 // callers must also check `TopicArn` against the one they own.
 
-const SNS_HOST = /^sns\.[a-z\d-]+\.amazonaws\.com(?:\.cn)?$/u;
+// arn:aws:sns:us-east-1:123456789012:name
+const ARN_REGION_INDEX = 3;
+const AWS_REGION = /^[a-z]{2}(?:-[a-z]+)+-\d+$/u;
 
 export const snsMessageSchema = z.object({
   Message: z.string(),
@@ -50,12 +52,26 @@ const SUBSCRIPTION_FIELDS: SignedField[] = [
   "Type",
 ];
 
-/** True for https URLs on an SNS endpoint, the only hosts we fetch from. */
-export const isSnsUrl = (value: string): boolean => {
+/**
+ * True for https URLs on the SNS endpoint in the topic's region, the only
+ * hosts we fetch from. A looser pattern like `sns.*.amazonaws.com` would also
+ * match an S3 bucket named "sns", whose owner could host a certificate.
+ */
+export const isSnsUrl = (value: string, topicArn: string): boolean => {
+  const region = topicArn.split(":")[ARN_REGION_INDEX] ?? "";
+
+  if (!AWS_REGION.test(region)) {
+    return false;
+  }
+
   try {
     const url = new URL(value);
+    const host = `sns.${region}.amazonaws.com`;
 
-    return url.protocol === "https:" && SNS_HOST.test(url.hostname);
+    return (
+      url.protocol === "https:" &&
+      (url.hostname === host || url.hostname === `${host}.cn`)
+    );
   } catch {
     return false;
   }
@@ -128,32 +144,45 @@ const decodeBase64 = (value: string): Uint8Array | null => {
   }
 };
 
+/**
+ * "unavailable" means the signing certificate couldn't be loaded, so the
+ * message can't be judged yet: answer with an error SNS retries.
+ */
+export type SnsVerification = "invalid" | "unavailable" | "valid";
+
 export const verifySnsMessage = async (
   message: SnsMessage,
   fetcher: typeof fetch = fetch
-): Promise<boolean> => {
-  if (!isSnsUrl(message.SigningCertURL)) {
-    return false;
+): Promise<SnsVerification> => {
+  if (!isSnsUrl(message.SigningCertURL, message.TopicArn)) {
+    return "invalid";
   }
 
   const signature = decodeBase64(message.Signature);
 
   if (!signature) {
-    return false;
+    return "invalid";
   }
 
   const hash = message.SignatureVersion === "1" ? "SHA-1" : "SHA-256";
+  let key: CryptoKey;
 
   try {
-    const key = await keyFor(message.SigningCertURL, hash, fetcher);
+    key = await keyFor(message.SigningCertURL, hash, fetcher);
+  } catch {
+    return "unavailable";
+  }
 
-    return await crypto.subtle.verify(
+  try {
+    const valid = await crypto.subtle.verify(
       "RSASSA-PKCS1-v1_5",
       key,
       signature,
       new TextEncoder().encode(stringToSign(message))
     );
+
+    return valid ? "valid" : "invalid";
   } catch {
-    return false;
+    return "invalid";
   }
 };
