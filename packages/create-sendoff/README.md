@@ -19,3 +19,7 @@ You need a Cloudflare account on Workers Paid with your domain on it, an AWS acc
 | `-h`, `--help` | Show help.                                     |
 
 Keep the folder: `apps/app/.sendoff/` holds your instance's settings, and updates (`git pull && bun install && bun run deploy`) deploy from it.
+
+## License
+
+MIT © [Hayden Bleasel](https://github.com/haydenbleasel)

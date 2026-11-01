@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest an idea for Sendoff.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Sendoff does one thing on purpose: it runs one newsletter with one list, from an agent. Transactional email, segments, automations, A/B tests, open tracking, a visual editor and team accounts are [out of scope](https://github.com/haydenbleasel/sendoff/blob/main/.github/CONTRIBUTING.md#scope).
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: What would you like to happen?
+      description: For example, what you'd ask your agent and what Sendoff would do.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered

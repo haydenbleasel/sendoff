@@ -11,6 +11,7 @@
   ],
   "homepage": "https://sendoff.dev",
   "bugs": "https://github.com/haydenbleasel/sendoff/issues",
+  "license": "MIT",
   "author": "Hayden Bleasel",
   "repository": {
     "type": "git",

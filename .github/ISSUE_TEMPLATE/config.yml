@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://sendoff.dev/docs
+    about: Setup, guides, troubleshooting and the FAQ.
+  - name: Report a security vulnerability
+    url: https://github.com/haydenbleasel/sendoff/security/advisories/new
+    about: Please report security issues privately, not as a public issue.

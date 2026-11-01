@@ -1,0 +1,68 @@
+name: Bug report
+description: Something in Sendoff isn't working.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please don't paste secrets: your MCP token, API keys, AWS keys or subscribers' email addresses. Security issues go through a [private report](https://github.com/haydenbleasel/sendoff/security/advisories/new) instead.
+
+        If it's a setup or sending problem, the [troubleshooting guide](https://sendoff.dev/docs/help/troubleshooting) may already cover it.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where did it happen?
+      options:
+        - bun create sendoff or setup
+        - Connecting an agent (MCP or OAuth)
+        - Drafting or the live preview
+        - Sending
+        - Subscribers, signup or unsubscribe pages
+        - Importing a list
+        - REST API
+        - The website or docs
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Ask the agent to "…"
+        2. …
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Doctor output
+      description: For setup and sending problems, ask your agent to "run Sendoff's doctor" and paste the result.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Errors or logs
+      description: From setup, `wrangler tail` or your agent.
+      render: shell
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Agent
+      options:
+        - Claude Code
+        - Claude Desktop
+        - claude.ai
+        - Codex
+        - Another MCP client
+        - Not relevant
+  - type: input
+    id: version
+    attributes:
+      label: Sendoff version
+      description: Run `git rev-parse --short HEAD` in your Sendoff folder.
+      placeholder: da4ffd7
