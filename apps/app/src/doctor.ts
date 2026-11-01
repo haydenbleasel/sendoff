@@ -102,7 +102,10 @@ const findDmarc = async (
   return null;
 };
 
-const accountChecks = (account: SesAccount, recipients: number): Check[] => {
+const accountChecks = (
+  account: SesAccount,
+  recipients: { count: number; label: string }
+): Check[] => {
   const checks: Check[] = [
     account.productionAccessEnabled
       ? check("pass", "SES production access", "Approved")
@@ -153,7 +156,7 @@ const accountChecks = (account: SesAccount, recipients: number): Check[] => {
       : account.max24HourSend - account.sentLast24Hours;
 
   checks.push(
-    remaining >= recipients
+    remaining >= recipients.count
       ? check(
           "pass",
           "Sending quota",
@@ -162,7 +165,7 @@ const accountChecks = (account: SesAccount, recipients: number): Check[] => {
       : check(
           "fail",
           "Sending quota",
-          `Only ${remaining.toLocaleString("en-US")} emails left in today's SES quota, but there are ${recipients.toLocaleString("en-US")} subscribers. Ask AWS to raise the quota, or wait for it to reset.`
+          `Only ${remaining.toLocaleString("en-US")} emails left in today's SES quota, but there are ${recipients.count.toLocaleString("en-US")} ${recipients.label}. Ask AWS to raise the quota, or wait for it to reset.`
         ),
     REQUIRED_EVENTS.every((reason) =>
       account.suppressedReasons.includes(reason)
@@ -340,10 +343,13 @@ export const runDoctor = async ({
   config,
   db,
   fetcher = fetch,
+  toSend,
 }: {
   config: Config;
   db: Database;
   fetcher?: typeof fetch;
+  /** When resuming a send: the recipients it still has to reach, which the quota must cover. */
+  toSend?: number;
 }): Promise<DoctorReport> => {
   const [settings, counts] = await Promise.all([
     getSettings(db),
@@ -393,7 +399,12 @@ export const runDoctor = async ({
 
   try {
     account = await ses.getAccount();
-    checks.push(...accountChecks(account, counts.active));
+    checks.push(
+      ...accountChecks(account, {
+        count: toSend ?? counts.active,
+        label: toSend === undefined ? "subscribers" : "recipients left to send",
+      })
+    );
   } catch (error) {
     checks.push(
       check(

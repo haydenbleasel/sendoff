@@ -405,6 +405,55 @@ describe("sending", () => {
     expect(status.counts).toMatchObject({ failed: 0, sent: 2 });
   });
 
+  it("refuses to resume a send that's still going", async () => {
+    await addActive(2);
+    const confirmed = await startSend();
+
+    await expect(resumeSend(deps, confirmed.issue.id)).rejects.toThrow(
+      "still sending"
+    );
+  });
+
+  it("resumes when the quota covers who's left, not the whole list", async () => {
+    await addActive(CHUNK_SIZE + 5);
+    let paused = false;
+    useNetwork({
+      onSend: (email) =>
+        paused && !email.subject.startsWith("[Test]")
+          ? sesError("SendingPausedException", 400, "Sending is paused")
+          : undefined,
+    });
+
+    const confirmed = await startSend();
+    await processSendChunk(
+      deps,
+      messages.shift() ?? { issueId: "", maxSendRate: 1 }
+    );
+    paused = true;
+    await processSendChunk(
+      deps,
+      messages.shift() ?? { issueId: "", maxSendRate: 1 }
+    );
+
+    // 10 left today: too few for all 55 subscribers, enough for the 5 to go.
+    useNetwork({
+      account: {
+        SendQuota: {
+          Max24HourSend: CHUNK_SIZE + 10,
+          MaxSendRate: 1000,
+          SentLast24Hours: CHUNK_SIZE,
+        },
+      },
+    });
+
+    await resumeSend(deps, confirmed.issue.id);
+    await drain();
+
+    const status = await sendStatus(deps, confirmed.issue.id);
+    expect(status.counts.sent).toBe(CHUNK_SIZE + 5);
+    expect(status.issue.status).toBe("sent");
+  });
+
   it("never resends recipients a crashed worker had claimed", async () => {
     await addActive(3);
     const confirmed = await startSend();

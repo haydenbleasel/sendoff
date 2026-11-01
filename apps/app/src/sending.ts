@@ -1017,7 +1017,21 @@ export const resumeSend = async (
     );
   }
 
-  const report = await runDoctor({ config, db });
+  const heartbeat = issue.sendHeartbeatAt?.getTime() ?? 0;
+  const stalled = clock(deps) - heartbeat > STALL_AFTER_MS;
+
+  // A second queue chain on a healthy send would only double its pace.
+  if (!issue.sendError && !stalled) {
+    throw new IssueError(
+      `"${issue.subject}" is still sending, so there's nothing to resume. Check progress with send_status.`
+    );
+  }
+
+  const report = await runDoctor({
+    config,
+    db,
+    toSend: await remaining(db, issue.id, "queued"),
+  });
 
   if (!report.ok || !report.account) {
     throw new IssueError(
