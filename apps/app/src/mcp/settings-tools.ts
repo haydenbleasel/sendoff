@@ -53,6 +53,25 @@ const updateSchema = z.object({
     .nullable()
     .optional()
     .describe("Where replies go, if not the sender. null removes it."),
+  tracking: z
+    .object({
+      clicks: z
+        .boolean()
+        .optional()
+        .describe(
+          "Count clicks by sending links in the HTML email through this Sendoff's domain. On by default."
+        ),
+      opens: z
+        .boolean()
+        .optional()
+        .describe(
+          "Count opens with a 1×1 image. Off by default: Apple Mail loads images automatically, so opens are always an estimate. Ask the person before turning it on."
+        ),
+    })
+    .optional()
+    .describe(
+      "What issue_stats can measure. Applies to issues sent afterwards."
+    ),
 });
 
 type SettingsUpdate = z.infer<typeof updateSchema>;
@@ -75,6 +94,10 @@ const merge = (
   logo: pick(update.logo, current?.logo),
   name: update.name ?? current?.name,
   replyTo: pick(update.replyTo, current?.replyTo),
+  tracking: {
+    clicks: update.tracking?.clicks ?? current?.tracking.clicks,
+    opens: update.tracking?.opens ?? current?.tracking.opens,
+  },
 });
 
 /** Warn (don't block) when the sender's domain isn't ready in SES; sending checks again. */
@@ -120,7 +143,7 @@ export const registerSettingsTools = (
     {
       annotations: READ_ONLY,
       description:
-        "Get the newsletter's settings: name, sender, postal address, accent color, logo and footer links. Returns a setup hint if nothing is configured yet.",
+        "Get the newsletter's settings: name, sender, postal address, accent color, logo, footer links, and whether clicks and opens are tracked. Returns a setup hint if nothing is configured yet.",
       inputSchema: z.object({}),
       title: "Get settings",
     },

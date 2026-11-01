@@ -37,8 +37,9 @@ Setup is safe to re-run at any time. It checks every step and skips what's alrea
 - **Finish an interrupted setup**, such as when DNS took too long
 - **Replace the MCP token**, by choosing **create a new one** when it asks
 - **Recreate the Worker's AWS key**, if you deleted it
+- **Turn on delivery reports**, when `doctor` warns that SES doesn't send them (instances set up before Sendoff counted deliveries)
 
-It never rotates `TOKEN_SECRET`, which signs the unsubscribe link in every email you've ever sent. Changing it would break all of them.
+It never rotates `TOKEN_SECRET`, which signs the unsubscribe and tracked links in every email you've ever sent. Changing it would break all of them.
 
 ## Running locally
 

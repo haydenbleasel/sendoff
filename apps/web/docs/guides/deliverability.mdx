@@ -33,7 +33,6 @@ Once you're approved, check your quota with `doctor`. New accounts often start a
 - **Your postal address** in every footer
 - **Double opt-in** for signups, with Turnstile on the form
 - **Bounces and complaints** suppressed automatically, plus SES's account-wide suppression list
-- **No open or click tracking.** Tracking pixels and rewritten links can count against you with spam filters, and Apple Mail Privacy Protection makes open rates unreliable anyway.
 
 ## What's up to you
 
@@ -41,7 +40,8 @@ Once you're approved, check your quota with `doctor`. New accounts often start a
 - **Import your suppressions.** Bring over unsubscribes and bounces from your old provider, so you don't email them again. See [Importing your list](/docs/guides/importing).
 - **Send what people signed up for.** A list that hasn't heard from you in a year will complain more. If it's been a while, say so at the top of the issue and make unsubscribing easy.
 - **Use a real postal address.** US law (CAN-SPAM) requires a street address, PO box or private mailbox, not just a city.
-- **Watch the numbers after each send.** SES reviews an account at about a 5% bounce rate or 0.1% complaint rate, and may pause sending at about 10% or 0.5%. Gmail wants spam complaints under 0.3%. `send_status` shows bounces and complaints for each issue.
+- **Watch the numbers after each send.** SES reviews an account at about a 5% bounce rate or 0.1% complaint rate, and may pause sending at about 10% or 0.5%. Gmail wants spam complaints under 0.3%. [`issue_stats`](/docs/guides/stats) shows both rates for each issue, and flags them when they get close.
+- **Decide on tracking.** Click tracking is on, and goes through your own domain rather than a shared tracking domain, which some spam filters distrust. Open tracking is off, because Apple Mail loads every image automatically, which makes open rates unreliable. You can change either. See [Issue stats](/docs/guides/stats).
 
 SES uses shared IP addresses, which is the right choice at newsletter volume: a dedicated IP needs steady daily sending to stay warm.
 

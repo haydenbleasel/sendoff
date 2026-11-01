@@ -31,9 +31,10 @@ sidebar:
     what your agent can.
   </AccordionItem>
   <AccordionItem title="Does it track opens and clicks?">
-    No. Apple Mail Privacy Protection makes open rates unreliable, and tracking
-    can count against you with spam filters. `send_status` shows what's
-    dependable: bounces, complaints and unsubscribes.
+    Clicks, yes: links go through your own Sendoff domain, and clicks from email
+    security scanners are filtered out. Opens are off by default, because Apple
+    Mail loads every image automatically, but you can turn them on. Ask your
+    agent "how's my latest send doing?" See [Issue stats](/docs/guides/stats).
   </AccordionItem>
   <AccordionItem title="Can I customize the email design?">
     You set the name or logo, the accent color, the footer links and the postal
@@ -51,6 +52,6 @@ sidebar:
     your subscribers, or export the database with `wrangler d1 export`.
   </AccordionItem>
   <AccordionItem title="Is there a web archive of past issues?">
-    Not yet. A web archive, RSS, image uploads and per-issue stats are planned.
+    Not yet. A web archive, RSS and image uploads are planned.
   </AccordionItem>
 </Accordion>

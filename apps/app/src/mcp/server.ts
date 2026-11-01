@@ -8,6 +8,7 @@ import { INSTRUCTIONS } from "./instructions";
 import { registerKeyTools } from "./key-tools";
 import { registerSendTools } from "./send-tools";
 import { registerSettingsTools } from "./settings-tools";
+import { registerStatsTools } from "./stats-tools";
 import { registerSubscriberTools } from "./subscriber-tools";
 
 export const SERVER_INFO = { name: "sendoff", version: "0.1.0" } as const;
@@ -24,6 +25,7 @@ export const createMcpServer = (deps: {
   registerDraftTools(server, deps);
   registerSubscriberTools(server, deps);
   registerSendTools(server, deps);
+  registerStatsTools(server, deps);
   registerKeyTools(server, deps);
 
   return server;

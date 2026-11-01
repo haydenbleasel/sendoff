@@ -46,6 +46,14 @@ export const settingsSchema = z.object({
     .optional(),
   name: z.string().trim().min(1).max(100),
   replyTo: z.email().optional(),
+  tracking: z
+    .object({
+      /** Count clicks by sending links through Sendoff's own domain. */
+      clicks: z.boolean().default(true),
+      /** Count opens with a 1×1 image. Apple Mail's automatic loads are counted separately. */
+      opens: z.boolean().default(false),
+    })
+    .prefault({}),
 });
 
 export type Settings = z.output<typeof settingsSchema>;

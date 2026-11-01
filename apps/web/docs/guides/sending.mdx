@@ -27,7 +27,8 @@ Sending takes four steps, and the agent can't skip any of them. Ask "send a test
   </Step>
   <Step title="Watch">
     `send_status` shows how many emails are sent, failed, skipped and still to
-    go, plus bounces, complaints and unsubscribes so far.
+    go, plus deliveries, bounces, complaints and unsubscribes so far. Once it's
+    out, ask how it's doing: see [Issue stats](/docs/guides/stats).
   </Step>
 </Steps>
 
@@ -40,6 +41,7 @@ Sendoff snapshots your active subscribers the moment you confirm, then works thr
 Each email gets:
 
 - its own unsubscribe link in the footer
+- links that count clicks, through your Sendoff domain, unless you've [turned click tracking off](/docs/guides/stats#turning-tracking-on-or-off)
 - `List-Unsubscribe` and `List-Unsubscribe-Post` headers, which give Gmail, Apple Mail and Yahoo their one-click unsubscribe button
 - your postal address
 

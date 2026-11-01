@@ -46,6 +46,7 @@ Nothing reaches your list without you. Before a send, the agent has to email you
 - **Preflight before every send.** Sendoff checks your domain, your SES account and quota, and your latest test, and won't send until everything passes. Ask your agent to run `doctor` to see the checks any time.
 - **Bring your list.** Import any provider's CSV export. Imports never resubscribe anyone who unsubscribed, bounced or complained.
 - **Signups from your site.** A hosted signup page, plus a REST API with scoped keys and an OpenAPI description for your own forms.
+- **Stats your agent can read.** Ask "how's my latest send doing?" for deliveries, clicks and unsubscribes in people, with security scanners filtered out, compared with your earlier issues. Clicks go through your own domain; opens are opt-in.
 - **Sends you can stop and resume.** Sends go out in chunks through a queue. If SES pauses or a worker crashes, the send stops and picks up where it left off when you resume it, and nobody gets the issue twice.
 
 ## What it costs
@@ -59,7 +60,7 @@ Four issues a year to 6,000 subscribers is 24,000 emails, or $2.40 a year in SES
 
 ## What it doesn't do
 
-Sendoff runs one newsletter with one list. It doesn't send transactional email, and there are no segments, automations, A/B tests, open tracking, visual editor or team accounts.
+Sendoff runs one newsletter with one list. It doesn't send transactional email, and there are no segments, automations, A/B tests, visual editor or team accounts.
 
 ## Repository
 

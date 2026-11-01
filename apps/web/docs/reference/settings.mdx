@@ -24,7 +24,8 @@ Settings live in Sendoff's database, not in code, so you change them by asking y
   "links": [
     { "label": "Website", "url": "https://example.com" },
     { "label": "X", "url": "https://x.com/example" }
-  ]
+  ],
+  "tracking": { "clicks": true, "opens": false }
 }
 ```
 
@@ -65,6 +66,13 @@ Settings live in Sendoff's database, not in code, so you change them by asking y
 
 <ResponseField name="links" type="object[]">
   Footer links, each a `label` and `url`. Setting them replaces the whole list.
+</ResponseField>
+
+<ResponseField name="tracking" type="object">
+  What [issue stats](/docs/guides/stats) can measure. `clicks` (on by default)
+  sends links in the HTML email through your Sendoff domain to count clicks.
+  `opens` (off by default) adds a 1×1 image to count opens. Changes apply to
+  issues sent afterwards.
 </ResponseField>
 
 `null` clears an optional field, such as `"logo": null` to go back to showing the name.

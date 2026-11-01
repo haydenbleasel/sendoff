@@ -34,6 +34,7 @@ const duration = (recipients: number, rate: number): string => {
 
 const describeStatus = ({
   counts,
+  delivered,
   events,
   failures,
   issue,
@@ -47,7 +48,7 @@ const describeStatus = ({
     total > 0
       ? `${number(counts.sent)} sent, ${number(counts.failed)} failed, ${number(counts.skipped)} skipped, ${number(counts.queued + counts.sending)} to go (${Math.floor((done / total) * PERCENT)}% of ${number(total)}).`
       : "",
-    `Since sending: ${events.bounce} bounced, ${events.complaint} complaints, ${events.unsubscribe} unsubscribed, ${events.click} clicks.`,
+    `Since sending: ${number(delivered)} delivered, ${events.bounce} bounced, ${events.complaint} complaints, ${events.unsubscribe} unsubscribed. issue_stats has clicks, opens, rates and how this compares with earlier issues.`,
   ];
 
   if (issue.sendError) {
@@ -200,7 +201,7 @@ export const registerSendTools = (
     {
       annotations: READ_ONLY,
       description:
-        "Progress of a send: sent, failed, skipped and remaining, plus bounces, complaints, unsubscribes and clicks so far.",
+        "Progress of a send: sent, failed, skipped and remaining, plus deliveries, bounces, complaints and unsubscribes so far. For how an issue is doing (clicks, opens, rates, comparisons), use issue_stats.",
       inputSchema: z.object({ issue: issueRef }),
       title: "Send status",
     },
@@ -212,6 +213,7 @@ export const registerSendTools = (
           describeStatus(status),
           presentIssue(status.issue, {
             counts: status.counts,
+            delivered: status.delivered,
             events: status.events,
           })
         );

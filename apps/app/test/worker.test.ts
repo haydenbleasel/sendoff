@@ -25,6 +25,7 @@ describe("settings", () => {
       accent: "#ff0066",
       links: [],
       name: "Renamed",
+      tracking: { clicks: true, opens: false },
     });
   });
 

@@ -38,6 +38,7 @@ export const eventTypes = [
   "complaint",
   "reject",
   "click",
+  "open",
   "unsubscribe",
 ] as const;
 
@@ -73,6 +74,12 @@ export interface IssueSender {
   replyTo?: string | undefined;
 }
 
+/** What a sent issue measured, snapshotted at confirm time. */
+export interface IssueTracking {
+  clicks: boolean;
+  opens: boolean;
+}
+
 export const issues = sqliteTable("issues", {
   body: text("body").notNull().default(""),
   cancelledAt: integer("cancelled_at", { mode: "timestamp_ms" }),
@@ -98,6 +105,8 @@ export const issues = sqliteTable("issues", {
   testSentAt: integer("test_sent_at", { mode: "timestamp_ms" }),
   /** Fingerprint (content + settings) of the last test send. */
   testSentHash: text("test_sent_hash"),
+  /** Click and open tracking as sent; null for issues sent before tracking existed. */
+  tracking: text("tracking", { mode: "json" }).$type<IssueTracking>(),
   updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
   version: integer("version").notNull().default(1),
 });
@@ -105,6 +114,8 @@ export const issues = sqliteTable("issues", {
 export const sends = sqliteTable(
   "sends",
   {
+    /** When SES reported the receiving server accepted it. */
+    deliveredAt: integer("delivered_at", { mode: "timestamp_ms" }),
     error: text("error"),
     issueId: text("issue_id")
       .notNull()

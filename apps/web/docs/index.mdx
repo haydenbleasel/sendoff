@@ -13,6 +13,7 @@ Sendoff is a newsletter with no dashboard. You deploy it into your own Cloudflar
 - **You watch a live preview.** The agent shares a link that updates as it edits, with toggles for desktop and mobile, light and dark mode, and the plain-text version.
 - **Amazon SES sends the email** from your own domain, at $0.10 per thousand.
 - **Cloudflare runs everything else.** One Worker serves the signup page, unsubscribe links, the MCP server and a small REST API. D1 stores subscribers and issues, and Queues spread a send out over a few minutes.
+- **The agent reports back.** Ask how an issue is doing, and it tells you how many people it reached, clicked and unsubscribed, compared with your earlier issues.
 
 Nothing reaches your list without you. Before a send, the agent has to email you a test of the exact version you're sending, show you a summary, and get your go-ahead in the conversation.
 
@@ -29,7 +30,7 @@ Workers Paid is required because rendering an email takes about 30 ms of CPU on 
 
 ## What it doesn't do
 
-Sendoff runs one newsletter with one list. It doesn't send transactional email, and there are no segments, automations, A/B tests, open tracking, visual editor or team accounts.
+Sendoff runs one newsletter with one list. It doesn't send transactional email, and there are no segments, automations, A/B tests, visual editor or team accounts.
 
 <CardGroup cols={2}>
   <Card title="Quickstart" href="/docs/quickstart" icon="rocket">

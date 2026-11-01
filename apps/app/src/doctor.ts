@@ -263,46 +263,77 @@ const dmarcCheck = async (
   }
 };
 
-const eventsCheck = async (config: Config, ses: SesClient): Promise<Check> => {
+const eventsChecks = async (
+  config: Config,
+  ses: SesClient
+): Promise<Check[]> => {
   const name = config.sesConfigurationSet;
 
   if (!name) {
-    return check(
-      "warn",
-      "Bounce and complaint tracking",
-      "No SES configuration set, so bounces and complaints won't reach Sendoff."
-    );
+    return [
+      check(
+        "warn",
+        "Bounce and complaint tracking",
+        "No SES configuration set, so bounces and complaints won't reach Sendoff."
+      ),
+    ];
   }
 
   const destinations = await ses.getEventDestinations(name);
 
   if (destinations === null) {
-    return check(
-      "fail",
-      "Bounce and complaint tracking",
-      `The SES configuration set "${name}" doesn't exist, and sends that name it will fail. Run setup.`
-    );
+    return [
+      check(
+        "fail",
+        "Bounce and complaint tracking",
+        `The SES configuration set "${name}" doesn't exist, and sends that name it will fail. Run setup.`
+      ),
+    ];
   }
 
-  const wired = destinations.some(
+  const ours = destinations.filter(
     (destination) =>
       destination.enabled &&
       destination.snsTopicArn !== undefined &&
-      destination.snsTopicArn === config.sesEventsTopicArn &&
-      REQUIRED_EVENTS.every((type) => destination.eventTypes.includes(type))
+      destination.snsTopicArn === config.sesEventsTopicArn
   );
 
-  return wired
-    ? check(
-        "pass",
-        "Bounce and complaint tracking",
-        `"${name}" sends bounces and complaints to Sendoff`
-      )
-    : check(
+  const wired = ours.some((destination) =>
+    REQUIRED_EVENTS.every((type) => destination.eventTypes.includes(type))
+  );
+
+  if (!wired) {
+    return [
+      check(
         "warn",
         "Bounce and complaint tracking",
         `"${name}" doesn't send bounces and complaints to Sendoff's SNS topic, so bad addresses won't be suppressed here.`
-      );
+      ),
+    ];
+  }
+
+  const deliveries = ours.some((destination) =>
+    destination.eventTypes.includes("DELIVERY")
+  );
+
+  return [
+    check(
+      "pass",
+      "Bounce and complaint tracking",
+      `"${name}" sends bounces and complaints to Sendoff`
+    ),
+    deliveries
+      ? check(
+          "pass",
+          "Delivery reports",
+          `"${name}" reports deliveries to Sendoff`
+        )
+      : check(
+          "warn",
+          "Delivery reports",
+          `"${name}" doesn't report deliveries to Sendoff, so issue_stats can't count how many emails arrived. Run \`bun run setup\` again to turn them on.`
+        ),
+  ];
 };
 
 export const runDoctor = async ({
@@ -371,16 +402,16 @@ export const runDoctor = async ({
         ),
       ]),
       dmarcCheck(settings.from.email, fetcher),
-      eventsCheck(config, ses).catch((error: Error) =>
+      eventsChecks(config, ses).catch((error: Error) => [
         check(
           "warn",
           "Bounce and complaint tracking",
           `Couldn't check: ${error.message}`
-        )
-      ),
+        ),
+      ]),
     ]);
 
-    checks.push(...sender, dmarc, events);
+    checks.push(...sender, dmarc, ...events);
   }
 
   return {

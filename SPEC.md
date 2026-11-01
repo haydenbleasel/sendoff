@@ -56,6 +56,8 @@ One Worker serves everything:
 | `POST /unsubscribe/:token` | Unsubscribes: the page's button, and RFC 8058 one-click POSTs from mail providers. `?issue=` attributes it to an issue. |
 | `POST /resubscribe/:token` | Undoes an unsubscribe from the same link. |
 | `POST /webhooks/ses` | SNS endpoint for SES events. Verifies the SNS signature and handles `SubscriptionConfirmation`. |
+| `GET /click/:issueId/:token/:signature?url=` | Tracked link: records the click in the background (`waitUntil`) and redirects (302) to `url`. The signature is an HMAC of the issue id and `url`, so it never redirects anywhere the issue didn't link. A bad or test `:token` still redirects but isn't counted; HEAD requests aren't counted. Served before the page security headers. |
+| `GET /open/:issueId/:token` | Open image (a 1×1 GIF, `no-store`), recorded in the background. Served before the page security headers, since `Cross-Origin-Resource-Policy` would block it in webmail. |
 | `GET /preview/:token` | Live preview (`:token` is a signed issue id, so the URL is the only access check). Email/text, desktop/mobile and light/dark toggles; polls `/state` every 1.5 s and fetches `/render` when the draft or settings change. Shows Markdown problems, keeping the last good render dimmed. |
 | `/mcp` | MCP server (official SDK v2, `createMcpHandler`, stateless, JSON responses). The OAuth provider wraps the Worker and protects it: OAuth access tokens (claude.ai, Claude Desktop) or the static `MCP_TOKEN` (Claude Code, Codex). |
 | `GET/POST /authorize`, `POST /authorize/sign-in` | OAuth authorize step: the owner signs in with the admin token (a 15-minute signed `__Host-` session cookie), then sees a consent page (client name, verified domain for CIMD clients, redirect host, loopback warning) and allows or denies. |
@@ -76,7 +78,7 @@ Workers Paid gives 30 s CPU per request (15 min per queue consumer run) and 10,0
 
 - **Render once per issue.** Do string substitution per recipient. Measured with `bun run bench` on an M-series Mac: about 1 ms warm, about 28–32 ms cold. Don't use React Email's `<Tailwind>` component, which compiles CSS on every render; use inline styles.
 - **Send in chunks.** Each queue message carries about 100 recipients, so a chunk finishes in seconds at the SES max send rate. Chunks are the unit of retry and of pacing.
-- **Keep event volume low.** Subscribe SES events to bounce, complaint, reject and click only, not delivery or open. That keeps D1 writes and SNS requests roughly proportional to problems, not to list size.
+- **Keep event writes small.** SES reports bounces, complaints, rejects and deliveries. A delivery is one `UPDATE` of its send row (by message id), not an event row, so a send costs about one SNS request and one write per recipient (6,000 a quarter is well inside SNS's free tier). Clicks and opens are tracked by the Worker itself; opens keep at most one row per person per kind of agent.
 
 ## Data model (D1)
 
@@ -89,17 +91,21 @@ subscribers  id (UUIDv7) PK, email UNIQUE (lowercased), name, status, source,
 
 issues       id PK, slug UNIQUE, subject, preheader, body, version INT,
              status, content_hash, test_sent_hash, test_sent_at,
-             rendered_html, rendered_text, sender JSON, recipient_count,
+             rendered_html, rendered_text, sender JSON, tracking JSON,
+             recipient_count,
              send_started_at, send_heartbeat_at, send_error,
              created_at, updated_at, sent_at, cancelled_at
              status: draft | sending | sent | cancelled
 
-sends        (issue_id, subscriber_id) PK, status, message_id, error, sent_at
+sends        (issue_id, subscriber_id) PK, status, message_id, error, sent_at,
+             delivered_at
              status: queued | sending | sent | failed | skipped
              index on message_id
 
 events       id PK, message_id, issue_id, subscriber_id, type, detail JSON, at
-             type: bounce | complaint | reject | click | unsubscribe
+             type: bounce | complaint | reject | click | open | unsubscribe
+             click detail: { link, agent }; open detail: { agent }, id
+             open:<issue>:<subscriber>:<agent> (first time only)
 
 settings     id = 1 PK, data JSON (validated with a schema), updated_at
 
@@ -124,13 +130,13 @@ Unsubscribe and confirm tokens are `subscriberId.base64url(HMAC-SHA256(TOKEN_SEC
 
 | Group | Tools | Notes |
 | --- | --- | --- |
-| Settings | `get_settings`, `update_settings` | `update_settings` merges a partial update (`null` clears optional fields). It warns, rather than blocks, when the sender's domain isn't verified in SES; sending is blocked until it is. |
-| Setup | `doctor` | Fails (blocks sending): no settings, no active subscribers, SES unreachable, sandbox, sending disabled, account shut down, quota below the list size, sender domain not verified, no DMARC record (looked up over DNS-over-HTTPS, falling back to the parent domain), configuration set missing. Warns: probation, no custom MAIL FROM, bounce/complaint events not wired to Sendoff's SNS topic, account suppression list off. |
+| Settings | `get_settings`, `update_settings` | `update_settings` merges a partial update (`null` clears optional fields), including `tracking: { clicks, opens }`. It warns, rather than blocks, when the sender's domain isn't verified in SES; sending is blocked until it is. |
+| Setup | `doctor` | Fails (blocks sending): no settings, no active subscribers, SES unreachable, sandbox, sending disabled, account shut down, quota below the list size, sender domain not verified, no DMARC record (looked up over DNS-over-HTTPS, falling back to the parent domain), configuration set missing. Warns: probation, no custom MAIL FROM, bounce/complaint events not wired to Sendoff's SNS topic, deliveries not reported, account suppression list off. |
 | Drafts | `create_draft`, `get_draft`, `edit_draft`, `set_draft_meta`, `list_issues`, `preview_draft`, `delete_draft` | `edit_draft` applies exact find/replace edits all-or-nothing (or replaces the body), takes an optional `expectedVersion`, and bumps `version`. Drafts are stored even with Markdown problems; results list them by line. `preview_draft` returns the URL plus the plain-text version so the agent can proofread. Issues are addressed by id or slug. |
 | Sending | `send_test`, `prepare_send`, `confirm_send`, `send_status`, `cancel_send`, `resume_send` | See [Send pipeline](#send-pipeline). `confirm_send` and `cancel_send` are annotated `destructiveHint: true`, and the instructions tell the agent to confirm only after the person explicitly says to send. |
 | Subscribers | `add_subscriber`, `import_csv`, `import_subscribers`, `search_subscribers`, `unsubscribe_subscriber` (`prune` in M6) | `add_subscriber` sends a confirmation email unless `skipConfirmation` (only when the person asked to be added). Imports support `dryRun`, can suppress an existing subscriber but never reactivate one, and treat imported active subscribers as confirmed. `import_csv` reads any provider's CSV export (see [Importing](#importing)); `import_subscribers` takes a short list of addresses. |
 | API keys | `create_api_key`, `list_api_keys`, `revoke_api_key` | Keys are shown once (to the agent, which hands them to the person) and stored hashed. Revoke by id or prefix. |
-| Stats | `issue_stats`, `growth` | Clicks and unsubscribes are the trustworthy signals. Opens are unreliable because of Apple Mail Privacy Protection and aren't tracked by default. |
+| Stats | `issue_stats` (`growth` later) | See [Tracking and stats](#tracking-and-stats). Clicks and unsubscribes are the trustworthy signals. Opens are unreliable because of Apple Mail Privacy Protection, so they're off by default. |
 
 Auth (M5b, MCP authorization 2026-07-28 via `@cloudflare/workers-oauth-provider`):
 
@@ -200,13 +206,13 @@ Implemented in `src/sending.ts`.
    It returns a summary (recipients, sender, estimated time at the SES max send rate, warnings) and a confirmation token: `expiresAt.HMAC(TOKEN_SECRET, "send:" + issueId + fingerprint + expiresAt)`, valid for 15 minutes.
 
 4. **`confirm_send(token)`** recomputes the fingerprint and verifies the token, so any change since preparing invalidates it. Then:
-   - It renders once and stores `rendered_html`/`rendered_text` with an unsubscribe placeholder, and stores `sender` (from and reply-to) so settings changes mid-send don't apply.
+   - It renders once and stores `rendered_html`/`rendered_text` with an unsubscribe placeholder, and stores `sender` (from and reply-to) and `tracking` so settings changes mid-send don't apply. With click tracking on, every web link in the HTML (except Sendoff's own pages) is rewritten to `/click/…` with a recipient-token placeholder; with open tracking on, the open image goes before `</body>`. Plain text is never tracked. Test sends are tracked the same way, with the token `test`.
    - In one D1 transaction, it moves the issue from `draft` to `sending` (guarded on status and version), snapshots active subscribers into `sends` with an `INSERT … SELECT`, and records `recipient_count`.
    - It queues the first chunk message `{ issueId, maxSendRate }`. If queueing fails, the cron picks it up.
 5. **The queue consumer** (`processSendChunk`) handles each message:
    - Exits if the issue isn't `sending` (cancelled, finished, or stopped on an error).
    - Marks queued rows `skipped` for anyone no longer active, then claims up to 50 queued rows in one `UPDATE … RETURNING`. Rows already in `sending` are never reclaimed.
-   - Sends in groups of up to 6 (the Workers connection limit), paced to SES's max send rate. Each email gets its own unsubscribe link (`/unsubscribe/<token>?issue=<id>`), the `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` headers, the configuration set, and an `issue` tag.
+   - Sends in groups of up to 6 (the Workers connection limit), paced to SES's max send rate. Each email gets its own unsubscribe link (`/unsubscribe/<token>?issue=<id>`), its tracking token (`<subscriberId>.HMAC("track:" + subscriberId)`) in tracked links, the `List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click` headers, the configuration set, and an `issue` tag.
    - Outcomes:
      - Success: `sent` with the message ID.
      - Throttled (429): back to `queued`, with a pause.
@@ -215,7 +221,7 @@ Implemented in `src/sending.ts`.
      - Network error with an unknown outcome: `failed`, never retried.
    - Records each group before sending the next, updates `send_heartbeat_at`, and queues the next chunk while queued rows remain.
 6. **Delivery is at-most-once per recipient.** When no queued rows remain, the issue becomes `sent`. Any rows still in `sending` were claimed by a crashed worker, so they're marked `failed` ("unknown outcome") rather than resent. A missed email is better than a duplicate to thousands of people.
-7. **`send_status`** shows counts by state, bounces, complaints, unsubscribes and clicks for the issue, the first few failures, `send_error`, and whether the send has stalled. **`cancel_send`** marks the issue `cancelled` and skips everything still queued. **`resume_send`** reruns `doctor`, clears `send_error` and restarts the chain.
+7. **`send_status`** shows counts by state, deliveries, bounces, complaints and unsubscribes for the issue (engagement is `issue_stats`), the first few failures, `send_error`, and whether the send has stalled. **`cancel_send`** marks the issue `cancelled` and skips everything still queued. **`resume_send`** reruns `doctor`, clears `send_error` and restarts the chain.
 
 At 14 emails per second (a typical new SES limit), 6,000 recipients take about 7 minutes across 120 chunks.
 
@@ -223,12 +229,22 @@ Later optimization: SES `SendBulkEmail` (50 destinations per call) with per-dest
 
 ## SES events
 
-- A configuration set publishes bounce, complaint, reject and click events to an SNS topic, which is subscribed over HTTPS to `/webhooks/ses`.
+- A configuration set publishes bounce, complaint, reject and delivery events to an SNS topic, which is subscribed over HTTPS to `/webhooks/ses`.
 - **Hard bounce:** set the subscriber to `bounced`.
 - **Complaint:** set the subscriber to `complained`.
 - **Soft bounce:** log only.
-- **Click:** update `last_engaged_at`.
+- **Delivery:** set `sends.delivered_at` (from the event's timestamp), once.
 - The SES account-level suppression list is also enabled for bounces and complaints, as a second line of defense.
+- Instances set up before deliveries were added get a `doctor` warning ("Delivery reports") until setup is re-run.
+
+## Tracking and stats
+
+Settings `tracking: { clicks: true, opens: false }` by default, snapshotted onto each issue at confirm time (`issues.tracking`; null for issues sent before tracking existed).
+
+- **Clicks** go through `/click` on Sendoff's own hostname, a subdomain of the sending domain, never a shared tracking domain. The destination stays visible and signed in the link. Every click is stored with `agent` (`browser`, `automated` or `apple`, from the user agent; no IPs or user agents are stored). `issue_stats` counts a click as automated, and leaves it out, if its agent isn't a browser, it came within 60 s of delivery (`delivered_at`, else `sent_at`), or the same person followed different links within 2 s. Those are security scanners, which follow every link as mail arrives.
+- **Opens** (opt-in) come from the `/open` image. A bare `Mozilla/5.0` user agent is Apple Mail Privacy Protection's proxy, which loads every image on arrival; it's counted separately. "Opened" is people with a browser load or a counted click.
+- **Engagement:** a counted click (browser, not within 60 s of delivery) or a browser open sets `subscribers.last_engaged_at`, for prune and re-engagement later.
+- **`issue_stats`** (default: the latest issue with `send_started_at`) reports recipients, sent, delivered, bounces (hard/soft), suppressed, complaints, rejects, failed and skipped; clicks (people, total, automated, and every link by people, the top 10 in the summary); opens (people, Apple-only); unsubscribes; cumulative people who'd clicked and opened at 1 h, 6 h, 1 d, 3 d and 7 d; and the average rates of the last 3 `sent` issues (not cancelled) at the same age. Rates are of delivered (or sent, before deliveries are reported), except bounces, which are of sent less suppressed. Bounces with subtype `OnAccountSuppressionList` or `Suppressed` are SES's suppression lists, which SES never tries and leaves out of its own bounce rate, so they're counted as suppressed instead. It flags bounce rates at 5% and complaint rates at 0.1%, and notes when SES hasn't reported deliveries.
 
 ## Deliverability defaults (all on, not configurable away)
 
@@ -236,7 +252,7 @@ Later optimization: SES `SendBulkEmail` (50 destinations per call) with per-dest
 - RFC 8058 one-click unsubscribe headers, plus a visible unsubscribe link and postal address in every email.
 - Double opt-in for form signups, and Turnstile on the form.
 - Honor unsubscribes immediately. The legal ceilings are 2 days (Gmail/Yahoo) and 10 business days (CAN-SPAM).
-- Click tracking is off by default. If enabled, use a custom tracking domain rather than SES's default.
+- Click tracking is on by default, through Sendoff's own hostname rather than SES's or anyone's shared tracking domain. Open tracking is off by default.
 - Keep the same From domain as the previous provider so domain reputation carries over.
 - Shared SES IPs only. A dedicated IP can't stay warm at quarterly volume.
 - Watch the thresholds:
@@ -257,7 +273,7 @@ Later optimization: SES `SendBulkEmail` (50 destinations per call) with per-dest
    - the domain identity with Easy DKIM, and the custom MAIL FROM `bounce.<domain>`
    - the configuration set `sendoff`
    - the SNS topic `sendoff-events`, with a policy letting only SES (for this configuration set) publish
-   - an event destination for bounces, complaints and rejects (no open or click tracking)
+   - an event destination for bounces, complaints, rejects and deliveries (Sendoff tracks clicks and opens itself)
    - the account-level suppression list
 7. **DNS:** three DKIM CNAMEs, an MX and SPF TXT for the MAIL FROM domain, and DMARC (`p=none`) only if the domain has none. Records that clash with existing ones are left alone and reported. Skipped once SES has verified DKIM and MAIL FROM and the domain has DMARC.
 8. **Deploy:** generates `.sendoff/wrangler.jsonc` from the base config plus the instance ids, applies D1 migrations, and deploys to the custom domain, uploading secrets with the version. Only new secrets are uploaded. `TOKEN_SECRET` is generated once and never rotated, because it signs every unsubscribe link ever sent. `MCP_TOKEN` can't be read back, so if the Worker already has one, setup asks whether to keep it (pasting it lets setup finish the MCP steps) or create a new one. A new token is printed as soon as the deploy succeeds, with the `claude mcp add --scope user` command (user scope, so Sendoff connects from any folder) and connector instructions, so a later failure can't lose it.
@@ -289,7 +305,7 @@ The app stays self-contained (no internal workspace packages) so a Deploy to Clo
 | M5a | Setup | `bun run setup` and `bun run deploy`, with your instance's ids kept out of the repo. Built; the pure parts are tested, the real run is yours. |
 | M5b | OAuth | OAuth 2.1 for claude.ai and Claude Desktop connectors, with the static token kept for Claude Code and Codex. Full flow tested end to end. ✅ |
 | M5c | Docs and deploy button | Docs site content, Deploy to Cloudflare button. |
-| M6 | Extras | Stats, prune and re-engagement, web archive and RSS, R2 image uploads. |
+| M6 | Extras | Stats (`issue_stats` ✅, `growth` to come), prune and re-engagement, web archive and RSS, R2 image uploads. |
 
 ## Open questions
 

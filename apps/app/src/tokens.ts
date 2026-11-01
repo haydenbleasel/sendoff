@@ -1,12 +1,14 @@
-// Signed, stateless tokens for confirm and unsubscribe links:
+// Signed, stateless tokens for confirm, unsubscribe and tracking links:
 // `<subscriberId>.<base64url(HMAC-SHA256(purpose:subscriberId))>`.
-// They never expire, because unsubscribe links must keep working for years.
+// They never expire, because links in sent emails must keep working for years.
 
 export type TokenPurpose =
   | "confirm"
+  | "link"
   | "preview"
   | "send"
   | "session"
+  | "track"
   | "unsubscribe";
 
 const SIGNATURE_BYTES = 16;
@@ -158,4 +160,35 @@ export const verifySendConfirmation = async (
   }
 
   return expiresAt < now ? "expired" : "valid";
+};
+
+/**
+ * Signs a tracked link's destination, so the click redirect only ever sends
+ * people where an issue linked to (it's never an open redirect).
+ */
+export const createLinkSignature = async (
+  secret: string,
+  issueId: string,
+  url: string
+): Promise<string> =>
+  toBase64Url(await sign(secret, "link", `${issueId}:${url}`));
+
+export const verifyLinkSignature = async (
+  secret: string,
+  {
+    issueId,
+    signature,
+    url,
+  }: { issueId: string; signature: string; url: string }
+): Promise<boolean> => {
+  const provided = fromBase64Url(signature);
+
+  if (provided?.length !== SIGNATURE_BYTES) {
+    return false;
+  }
+
+  return crypto.subtle.timingSafeEqual(
+    provided,
+    await sign(secret, "link", `${issueId}:${url}`)
+  );
 };

@@ -6,7 +6,13 @@ import { runDoctor } from "../src/doctor";
 import type { CheckStatus } from "../src/doctor";
 import { saveSettings } from "../src/settings";
 import { importSubscribers } from "../src/subscribers";
-import { HEALTHY_SES, db, mockNetwork, testSettings } from "./helpers";
+import {
+  HEALTHY_SES,
+  TOPIC_ARN,
+  db,
+  mockNetwork,
+  testSettings,
+} from "./helpers";
 import type { NetworkOptions } from "./helpers";
 
 let network: ReturnType<typeof mockNetwork> | undefined;
@@ -38,6 +44,7 @@ describe("runDoctor", () => {
     expect(report.ok).toBe(true);
     expect(report.status("DMARC")).toBe("pass");
     expect(report.status("Bounce and complaint tracking")).toBe("pass");
+    expect(report.status("Delivery reports")).toBe("pass");
   });
 
   it("blocks sending from the SES sandbox, a shut-down account or too small a quota", async () => {
@@ -103,5 +110,24 @@ describe("runDoctor", () => {
     expect(unwired).toMatchObject({ ok: true });
     expect(unwired.status("Bounce and complaint tracking")).toBe("warn");
     expect(gone.status("Bounce and complaint tracking")).toBe("fail");
+  });
+
+  it("warns, without blocking, when SES doesn't report deliveries", async () => {
+    const report = await statuses({
+      ...HEALTHY_SES,
+      // An instance set up before Sendoff counted deliveries.
+      eventDestinations: [
+        {
+          Enabled: true,
+          MatchingEventTypes: ["BOUNCE", "COMPLAINT", "REJECT"],
+          Name: "sendoff",
+          SnsDestination: { TopicArn: TOPIC_ARN },
+        },
+      ],
+    });
+
+    expect(report.ok).toBe(true);
+    expect(report.status("Bounce and complaint tracking")).toBe("pass");
+    expect(report.status("Delivery reports")).toBe("warn");
   });
 });

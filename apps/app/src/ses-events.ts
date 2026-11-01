@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { z } from "zod";
 
@@ -8,7 +8,9 @@ import type { eventTypes } from "./db/schema";
 import { normalizeEmail } from "./subscribers";
 
 // Handles SES events published by the configuration set (via SNS). Hard
-// bounces and complaints suppress the address; clicks count as engagement.
+// bounces and complaints suppress the address; deliveries are noted on the
+// send, for issue stats. Clicks and opens are tracked by Sendoff itself (see
+// tracking.ts), not by SES.
 
 const recipientSchema = z.object({ emailAddress: z.string() });
 
@@ -22,13 +24,13 @@ export const sesEventSchema = z.object({
       ),
     })
     .optional(),
-  click: z.object({ link: z.string() }).optional(),
   complaint: z
     .object({
       complainedRecipients: z.array(recipientSchema),
       complaintFeedbackType: z.string().optional(),
     })
     .optional(),
+  delivery: z.object({ timestamp: z.string().optional() }).optional(),
   // Configuration sets send `eventType`; identity notifications use `notificationType`.
   eventType: z.string().optional(),
   mail: z.object({
@@ -46,7 +48,7 @@ type EventType = (typeof eventTypes)[number];
 
 export interface HandledEvent {
   emails: string[];
-  type: EventType | "ignored";
+  type: EventType | "delivery" | "ignored";
 }
 
 /** SES tags each email with the issue id; confirm it still exists before linking. */
@@ -123,15 +125,32 @@ const classify = (event: SesEvent): Classified => {
     };
   }
 
-  if (kind === "Click" && event.click) {
-    return {
-      detail: { link: event.click.link },
-      emails: event.mail.destination,
-      type: "click",
-    };
-  }
-
   return { detail: {}, emails: [], type: "ignored" };
+};
+
+/** One write per delivery, keyed on the message: no event row. */
+const recordDelivery = async (
+  db: Database,
+  event: SesEvent,
+  now: Date
+): Promise<HandledEvent> => {
+  const reported = new Date(event.delivery?.timestamp ?? "");
+  const at = Number.isNaN(reported.getTime()) ? now : reported;
+
+  const delivered = await db
+    .update(sends)
+    .set({ deliveredAt: at })
+    .where(
+      and(eq(sends.messageId, event.mail.messageId), isNull(sends.deliveredAt))
+    )
+    .returning({ subscriberId: sends.subscriberId });
+
+  return delivered.length > 0
+    ? {
+        emails: event.mail.destination.map((email) => normalizeEmail(email)),
+        type: "delivery",
+      }
+    : { emails: [], type: "ignored" };
 };
 
 /**
@@ -143,6 +162,10 @@ export const handleSesEvent = async (
   event: SesEvent,
   { now = new Date(), snsMessageId }: { now?: Date; snsMessageId: string }
 ): Promise<HandledEvent> => {
+  if ((event.eventType ?? event.notificationType) === "Delivery") {
+    return await recordDelivery(db, event, now);
+  }
+
   const { detail, emails: rawEmails, suppress, type } = classify(event);
 
   if (type === "ignored" || rawEmails.length === 0) {
@@ -203,13 +226,6 @@ export const handleSesEvent = async (
             ne(subscribers.status, "complained")
           )
         )
-    );
-  } else if (type === "click") {
-    statements.push(
-      db
-        .update(subscribers)
-        .set({ lastEngagedAt: now })
-        .where(inArray(subscribers.email, emails))
     );
   }
 

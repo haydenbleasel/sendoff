@@ -267,14 +267,17 @@ export const createAwsSetup = (
       };
     },
 
-    /** Send bounces, complaints and rejects (not opens or clicks) to the topic. */
+    /**
+     * Send bounces, complaints, rejects and deliveries to the topic. Sendoff
+     * tracks clicks and opens itself, on its own domain.
+     */
     ensureEventDestination: async (
       configurationSet: string,
       topicArn: string
     ): Promise<void> => {
       const destination = {
         Enabled: true,
-        MatchingEventTypes: ["BOUNCE", "COMPLAINT", "REJECT"],
+        MatchingEventTypes: ["BOUNCE", "COMPLAINT", "DELIVERY", "REJECT"],
         SnsDestination: { TopicArn: topicArn },
       };
 

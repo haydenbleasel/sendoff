@@ -88,6 +88,7 @@ describe("tools", () => {
       "get_settings",
       "import_csv",
       "import_subscribers",
+      "issue_stats",
       "list_api_keys",
       "list_issues",
       "prepare_send",

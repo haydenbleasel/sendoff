@@ -4,6 +4,7 @@ export default defineMeta({
   pages: [
     "writing",
     "sending",
+    "stats",
     "subscribers",
     "importing",
     "deliverability",

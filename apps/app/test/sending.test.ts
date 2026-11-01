@@ -24,7 +24,10 @@ import {
   importSubscribers,
   unsubscribeSubscriber,
 } from "../src/subscribers";
+import { createToken } from "../src/tokens";
+import { TEST_TRACKING_TOKEN } from "../src/tracking";
 import {
+  BASE_URL,
   HEALTHY_SES,
   db,
   mockNetwork,
@@ -406,5 +409,91 @@ describe("sending", () => {
 
     await drain();
     expect(newsletterEmails()).toHaveLength(2);
+  });
+});
+
+/** Send an issue with one link, test first, all the way through. */
+const sendWithLink = async () => {
+  const draft = await createDraft(db(), {
+    body: "Read [the post](https://example.com/post?a=1&b=2).",
+    subject: "Tracked",
+  });
+
+  await sendTest(deps, draft.id);
+  const prepared = await prepareSend(deps, draft.id);
+  const confirmed = await confirmSend(deps, draft.id, prepared.confirmation);
+  await drain();
+
+  return confirmed.issue;
+};
+
+const clickPath = (issueId: string, token: string) =>
+  `${BASE_URL}/click/${issueId}/${token}/`;
+
+describe("tracking", () => {
+  it("tracks each recipient's clicks and opens in the HTML, never in plain text", async () => {
+    await saveSettings(db(), {
+      ...testSettings,
+      tracking: { clicks: true, opens: true },
+    });
+    await addActive(2);
+
+    const issue = await sendWithLink();
+
+    const test = network.sent.find((email) =>
+      email.subject.startsWith("[Test]")
+    );
+
+    expect(test?.html).toContain(clickPath(issue.id, TEST_TRACKING_TOKEN));
+    expect(test?.html).toContain(
+      `${BASE_URL}/open/${issue.id}/${TEST_TRACKING_TOKEN}"`
+    );
+
+    const sent = newsletterEmails();
+    expect(sent).toHaveLength(2);
+
+    for (const email of sent) {
+      // oxlint-disable-next-line no-await-in-loop -- two recipients
+      const reader = await findSubscriberByEmail(db(), email.to);
+
+      // oxlint-disable-next-line no-await-in-loop -- see above
+      const token = await createToken(
+        env.TOKEN_SECRET,
+        "track",
+        reader?.id ?? ""
+      );
+
+      expect(email.html).toContain(clickPath(issue.id, token));
+      expect(email.html).toContain(
+        `?url=${encodeURIComponent("https://example.com/post?a=1&b=2")}`
+      );
+      expect(email.html).toContain(`${BASE_URL}/open/${issue.id}/${token}"`);
+      expect(email.html).not.toContain("%%sendoff");
+      expect(email.text).toContain("https://example.com/post?a=1&b=2");
+      expect(email.text).not.toContain("/click/");
+    }
+
+    const stored = await db().query.issues.findFirst({
+      where: eq(issues.id, issue.id),
+    });
+
+    expect(stored?.tracking).toStrictEqual({ clicks: true, opens: true });
+  });
+
+  it("leaves links untouched with tracking off", async () => {
+    await saveSettings(db(), {
+      ...testSettings,
+      tracking: { clicks: false, opens: false },
+    });
+    await addActive(1);
+
+    await sendWithLink();
+    const [email] = newsletterEmails();
+
+    expect(email?.html).toContain(
+      'href="https://example.com/post?a=1&amp;b=2"'
+    );
+    expect(email?.html).not.toContain("/click/");
+    expect(email?.html).not.toContain("/open/");
   });
 });

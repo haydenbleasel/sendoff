@@ -6,10 +6,14 @@ import { createSes } from "./config";
 import type { Config } from "./config";
 import type { Database } from "./db/client";
 import { events, issues, sends, subscribers } from "./db/schema";
-import type { IssueSender, sendStatuses } from "./db/schema";
+import type { IssueSender, IssueTracking, sendStatuses } from "./db/schema";
 import { formatChecks, runDoctor } from "./doctor";
 import type { DoctorReport } from "./doctor";
-import { personalize, renderIssue } from "./email/render";
+import {
+  TRACKING_TOKEN_PLACEHOLDER,
+  personalize,
+  renderIssue,
+} from "./email/render";
 import type { RenderedIssue } from "./email/render";
 import { IssueError, requireIssue } from "./issues";
 import type { Issue } from "./issues";
@@ -23,6 +27,7 @@ import {
   createToken,
   verifySendConfirmation,
 } from "./tokens";
+import { TEST_TRACKING_TOKEN, addTracking } from "./tracking";
 
 // Sending an issue: test, prepare, confirm, then a queue works through the
 // recipients in chunks. Delivery is at-most-once per recipient: anything
@@ -121,10 +126,9 @@ const requireSettings = async (db: Database): Promise<Settings> => {
 
 const requireRendered = async (
   issue: Issue,
-  settings: Settings,
-  unsubscribeUrl?: string
+  settings: Settings
 ): Promise<RenderedIssue> => {
-  const rendered = await renderIssue(content(issue), settings, unsubscribeUrl);
+  const rendered = await renderIssue(content(issue), settings);
 
   if (!rendered.ok) {
     throw new IssueError(
@@ -183,11 +187,24 @@ export const sendTest = async (
     throw new IssueError(`Not valid email addresses: ${invalid.join(", ")}`);
   }
 
-  // The unsubscribe link in a test goes nowhere; it isn't anyone's real link.
-  const rendered = await requireRendered(
-    issue,
-    settings,
-    `${config.publicUrl}/unsubscribe/test`
+  const rendered = await requireRendered(issue, settings);
+
+  // Tracked like the real send, but the links aren't anyone's: the unsubscribe
+  // link goes nowhere, and clicks and opens aren't recorded.
+  const email = personalize(
+    {
+      html: await addTracking(rendered.html, {
+        issueId: issue.id,
+        publicUrl: config.publicUrl,
+        secret: config.tokenSecret,
+        tracking: settings.tracking,
+      }),
+      text: rendered.text,
+    },
+    {
+      trackingToken: TEST_TRACKING_TOKEN,
+      unsubscribeUrl: `${config.publicUrl}/unsubscribe/test`,
+    }
   );
 
   const ses = sesFor(deps);
@@ -197,11 +214,11 @@ export const sendTest = async (
     await ses.sendEmail({
       configurationSet: config.sesConfigurationSet,
       from: settings.from,
-      html: rendered.html,
+      html: email.html,
       replyTo: settings.replyTo,
       subject: `[Test] ${issue.subject}`,
       tags: { issue: issue.id, type: "test" },
-      text: rendered.text,
+      text: email.text,
       to: address,
     });
   }
@@ -333,18 +350,28 @@ export const confirmSend = async (
     replyTo: settings.replyTo,
   };
 
+  const tracking: IssueTracking = { ...settings.tracking };
+
+  const renderedHtml = await addTracking(rendered.html, {
+    issueId: issue.id,
+    publicUrl: config.publicUrl,
+    secret: config.tokenSecret,
+    tracking,
+  });
+
   // One transaction: claim the issue, snapshot active subscribers, count them.
   await db.batch([
     db
       .update(issues)
       .set({
-        renderedHtml: rendered.html,
+        renderedHtml,
         renderedText: rendered.text,
         sendError: null,
         sendHeartbeatAt: startedAt,
         sendStartedAt: startedAt,
         sender,
         status: "sending",
+        tracking,
       })
       .where(
         and(
@@ -359,6 +386,7 @@ export const confirmSend = async (
         db
           // Every column of sends, in table order (Drizzle requires it).
           .select({
+            deliveredAt: sql<null>`NULL`.as("delivered_at"),
             error: sql<null>`NULL`.as("error"),
             issueId: sql<string>`${issue.id}`.as("issue_id"),
             messageId: sql<null>`NULL`.as("message_id"),
@@ -537,6 +565,7 @@ export const processSendChunk = async (
   };
 
   const { sender } = issue;
+  const tracked = rendered.html.includes(TRACKING_TOKEN_PLACEHOLDER);
 
   await db.batch([
     db
@@ -614,7 +643,15 @@ export const processSendChunk = async (
       group.map(async (recipient): Promise<Outcome> => {
         try {
           const url = await unsubscribeUrl(config, issue.id, recipient.id);
-          const email = personalize(rendered, { unsubscribeUrl: url });
+
+          const trackingToken = tracked
+            ? await createToken(config.tokenSecret, "track", recipient.id)
+            : "";
+
+          const email = personalize(rendered, {
+            trackingToken,
+            unsubscribeUrl: url,
+          });
 
           const { messageId } = await ses.sendEmail({
             configurationSet: config.sesConfigurationSet,
@@ -750,9 +787,10 @@ export const processSendChunk = async (
 
 export interface SendStatus {
   counts: Record<(typeof sendStatuses)[number], number>;
+  /** Sends SES has reported as accepted by the receiving server. */
+  delivered: number;
   events: {
     bounce: number;
-    click: number;
     complaint: number;
     unsubscribe: number;
   };
@@ -770,7 +808,11 @@ export const sendStatus = async (
 
   const [sendRows, eventRows, failures] = await Promise.all([
     db
-      .select({ status: sends.status, value: count() })
+      .select({
+        delivered: count(sends.deliveredAt),
+        status: sends.status,
+        value: count(),
+      })
       .from(sends)
       .where(eq(sends.issueId, issue.id))
       .groupBy(sends.status),
@@ -788,15 +830,21 @@ export const sendStatus = async (
   ]);
 
   const counts = { failed: 0, queued: 0, sending: 0, sent: 0, skipped: 0 };
+  let delivered = 0;
 
   for (const row of sendRows) {
     counts[row.status] = row.value;
+    delivered += row.delivered;
   }
 
-  const eventCounts = { bounce: 0, click: 0, complaint: 0, unsubscribe: 0 };
+  const eventCounts = { bounce: 0, complaint: 0, unsubscribe: 0 };
 
   for (const row of eventRows) {
-    if (row.type !== "reject") {
+    if (
+      row.type === "bounce" ||
+      row.type === "complaint" ||
+      row.type === "unsubscribe"
+    ) {
       eventCounts[row.type] = row.value;
     }
   }
@@ -805,6 +853,7 @@ export const sendStatus = async (
 
   return {
     counts,
+    delivered,
     events: eventCounts,
     failures,
     issue,

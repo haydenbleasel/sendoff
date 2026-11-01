@@ -169,8 +169,8 @@ export const mockNetwork = (options: NetworkOptions = {}) => {
                   MatchingEventTypes: [
                     "BOUNCE",
                     "COMPLAINT",
+                    "DELIVERY",
                     "REJECT",
-                    "CLICK",
                   ],
                   Name: "sendoff",
                   SnsDestination: { TopicArn: TOPIC_ARN },

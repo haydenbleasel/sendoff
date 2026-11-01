@@ -2,7 +2,8 @@ import { exports } from "cloudflare:workers";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { events } from "../src/db/schema";
+import { events, sends } from "../src/db/schema";
+import { createDraft } from "../src/issues";
 import type { SesEvent } from "../src/ses-events";
 import { verifySnsMessage } from "../src/sns";
 import type { SnsMessage } from "../src/sns";
@@ -42,6 +43,19 @@ const sesNotification = (
     MessageId: messageId,
     Type: "Notification",
   });
+
+/** SES reporting that the "ses-arrived" message reached its recipient. */
+const delivery = async (timestamp: string) =>
+  await post(
+    await sesNotification({
+      delivery: { timestamp },
+      eventType: "Delivery",
+      mail: {
+        destination: ["Arrived@example.com"],
+        messageId: "ses-arrived",
+      },
+    })
+  );
 
 const mail = (to: string) => ({
   destination: [to],
@@ -188,10 +202,9 @@ describe("POST /webhooks/ses", () => {
     expect(await statusOf("full@example.com")).toBe("active");
   });
 
-  it("suppresses complaints and records clicks as engagement", async () => {
+  it("suppresses complaints", async () => {
     await importSubscribers(db(), [
       { email: "angry@example.com", status: "active" },
-      { email: "clicker@example.com", status: "active" },
     ]);
 
     await post(
@@ -203,31 +216,67 @@ describe("POST /webhooks/ses", () => {
         mail: mail("angry@example.com"),
       })
     );
-    await post(
-      await sesNotification({
-        click: { link: "https://example.com/post" },
-        eventType: "Click",
-        mail: mail("clicker@example.com"),
-      })
-    );
 
     expect(await statusOf("angry@example.com")).toBe("complained");
-    const clicker = await findSubscriberByEmail(db(), "clicker@example.com");
+  });
 
-    expect(clicker?.lastEngagedAt).toBeInstanceOf(Date);
+  it("notes deliveries on the send they belong to, once", async () => {
+    await importSubscribers(db(), [
+      { email: "arrived@example.com", status: "active" },
+    ]);
+    const reader = await findSubscriberByEmail(db(), "arrived@example.com");
+    const issue = await createDraft(db(), { body: "Hi", subject: "Arrived" });
+
+    await db()
+      .insert(sends)
+      .values({
+        issueId: issue.id,
+        messageId: "ses-arrived",
+        sentAt: new Date(),
+        status: "sent",
+        subscriberId: reader?.id ?? "",
+      });
+
+    const first = await delivery("2026-10-31T01:02:03.000Z");
+    const again = await delivery("2026-10-31T05:00:00.000Z");
+
+    expect(await first.json()).toStrictEqual({
+      emails: ["arrived@example.com"],
+      type: "delivery",
+    });
+    expect(await again.json()).toStrictEqual({ emails: [], type: "ignored" });
+
+    const [row] = await db()
+      .select()
+      .from(sends)
+      .where(eq(sends.messageId, "ses-arrived"));
+
+    expect(row?.deliveredAt?.toISOString()).toBe("2026-10-31T01:02:03.000Z");
   });
 
   it("acknowledges events it doesn't track", async () => {
-    const response = await post(
-      await sesNotification({
-        eventType: "Delivery",
-        mail: mail("x@example.com"),
-      })
-    );
+    const responses = await Promise.all([
+      post(
+        await sesNotification({
+          eventType: "Open",
+          mail: mail("x@example.com"),
+        })
+      ),
+      // A test send's delivery: no send row to note it on.
+      post(
+        await sesNotification({
+          eventType: "Delivery",
+          mail: mail("x@example.com"),
+        })
+      ),
+    ]);
 
-    expect(await response.json()).toStrictEqual({
-      emails: [],
-      type: "ignored",
-    });
+    for (const response of responses) {
+      // oxlint-disable-next-line no-await-in-loop -- two responses
+      expect(await response.json()).toStrictEqual({
+        emails: [],
+        type: "ignored",
+      });
+    }
   });
 });

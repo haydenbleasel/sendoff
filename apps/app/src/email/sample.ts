@@ -14,6 +14,7 @@ export const sampleSettings: Settings = {
     { label: "GitHub", url: "https://github.com/example" },
   ],
   name: "The Sendoff Quarterly",
+  tracking: { clicks: true, opens: false },
 };
 
 export const sampleIssue: IssueContent = {

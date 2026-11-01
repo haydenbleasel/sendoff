@@ -46,6 +46,9 @@ Ask your agent to "run doctor" at any time. `prepare_send` runs the same checks,
   <AccordionItem title="Bounce and complaint tracking">
     **Warns** when bounces and complaints won't reach Sendoff, so bad addresses won't be suppressed. **Fails** when the configuration set is missing, since sends that name it fail. Run `bun run setup` again.
   </AccordionItem>
+  <AccordionItem title="Delivery reports">
+    **Warns** when SES doesn't report deliveries to Sendoff, so [issue stats](/docs/guides/stats) can't count how many emails arrived. Instances set up before Sendoff counted deliveries need it. Run `bun run setup` again to turn them on.
+  </AccordionItem>
 </Accordion>
 
 ## Common problems

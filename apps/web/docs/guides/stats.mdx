@@ -1,0 +1,72 @@
+---
+title: Issue stats
+description: Ask your agent how an issue is doing. Sendoff counts deliveries, clicks and unsubscribes in people, and keeps scanners out of the numbers.
+sidebar:
+  icon: chart-column
+---
+
+There's no dashboard. After a send, ask your agent:
+
+> How's my latest send doing?
+
+It calls `issue_stats`, which reports on the latest issue sent, or any issue you name:
+
+- **Delivered, bounced and complaints**, as SES reports them, with hard and soft bounces apart
+- **Suppressed:** addresses on SES's suppression list, which SES didn't try to deliver to. They're not counted as bounces, matching how SES works out your bounce rate.
+- **Clicks:** how many people clicked, how many clicks in all, and the people and clicks for every link
+- **Opens**, if you've [turned them on](#opens)
+- **Unsubscribes**
+- **How fast people engaged:** how many had clicked an hour, six hours, a day, three days and a week after sending
+- **How it compares with your last three issues** at the same point after sending, so an issue two hours in isn't measured against one that's had a month
+
+Rates are of emails delivered, except bounces, which are of emails sent (less any suppressed). The agent also hears about a bounce or complaint rate near the levels where SES reviews an account. A report reads something like this:
+
+```text
+"Spring update" went to 5,674 subscribers 2 days ago (2026-04-02 09:00 UTC).
+
+Delivered: 5,612 (98.9%), bounced: 41 (0.72%; 38 hard, 3 soft), complaints: 1 (0.02%).
+
+Clicks: 412 people clicked (7.3% of delivered), 1,034 clicks in all. 63 automated clicks from link scanners and checkers aren't counted.
+
+Unsubscribes: 9 (0.16%).
+
+Compared with the 3 issues before (on average) at the same point, 2 days after sending: clicks 7.3% vs 5.9%, unsubscribes 0.16% vs 0.21%, bounces 0.72% vs 0.65%, complaints 0.02% vs 0.03%.
+```
+
+While an issue is still going out, `send_status` shows its progress: sent, failed, skipped and still to go.
+
+## Clicks
+
+Click tracking is on by default. Each web link in the HTML email, in the body and the footer, points at your Sendoff domain, like `https://news.example.com/click/…?url=https%3A%2F%2Fexample.com`. Opening it records the click and redirects straight on.
+
+- **It's your own domain.** Links go through a subdomain of the domain you send from, not a shared tracking domain, so they match the rest of your email.
+- **The destination stays visible** in the link, and it's signed, so the redirect only ever goes where your issue linked. Nobody can use it to send people somewhere else.
+- **Some links aren't tracked:** the plain-text version, the unsubscribe link, `mailto:` links and links to your Sendoff pages.
+- **Scanners are left out.** Many companies' email security follows every link as a message arrives. A click within a minute of delivery, different links followed within a couple of seconds, or a click from a bot or script counts as automated. The report says how many there were, and keeps them out of everything else.
+
+Clicks are the number to watch. People clicking means they read it.
+
+## Opens
+
+Open tracking is off by default. Opens come from a tiny image in the email, and since 2021, Apple Mail loads every image as soon as the email arrives, whether or not anyone reads it. So an open rate is an estimate at best. If you want one anyway, ask your agent to turn on open tracking.
+
+With it on, Sendoff adds a 1×1 image to the HTML email, and counts two groups:
+
+- **Opened:** people whose email app loaded the image the way a reader's does, plus everyone who clicked.
+- **Loaded by Apple Mail:** people whose only sign is Apple's automatic load. Some of them read it, but there's no telling which.
+
+Compare open rates between your own issues, not with other newsletters, which count opens in different ways.
+
+## Turning tracking on or off
+
+Ask your agent, such as "turn off click tracking" or "track opens". It changes [`tracking`](/docs/reference/settings) in your settings, which applies to issues sent afterwards; each issue keeps what it was sent with. A change means sending a new test, as with any setting.
+
+## Delivery reports
+
+SES reports each delivery to Sendoff, along with bounces and complaints. Instances set up before Sendoff counted deliveries don't get those reports: `doctor` warns about **Delivery reports**, and `issue_stats` says so. Run `bun run setup` again to turn them on.
+
+## Privacy
+
+Sendoff records which subscriber clicked which link and when, and, with open tracking on, when they first opened an issue. It's kept in your own D1 database with everything else, and isn't sent anywhere. It doesn't store IP addresses or user agents, only whether each one looked like a person, a scanner or Apple's proxy.
+
+If you have subscribers in the EU or UK, mention tracking in your privacy policy, or turn it off.

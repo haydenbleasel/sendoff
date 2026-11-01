@@ -14,6 +14,9 @@ import { createTheme } from "./theme";
  */
 export const UNSUBSCRIBE_URL_PLACEHOLDER = "%%sendoff_unsubscribe_url%%";
 
+/** The recipient's token in tracked links and the open image (see tracking.ts). */
+export const TRACKING_TOKEN_PLACEHOLDER = "%%sendoff_tracking_token%%";
+
 export interface IssueContent {
   body: string;
   preheader?: string | undefined;
@@ -64,14 +67,16 @@ export const renderIssue = async (
 const escapeAttribute = (value: string): string =>
   value.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
 
-/** Fill a once-rendered issue in for one recipient. */
+/** Fill a once-rendered issue in for one recipient. Plain text is never tracked. */
 export const personalize = (
   rendered: RenderedIssue,
-  { unsubscribeUrl }: { unsubscribeUrl: string }
+  {
+    trackingToken = "",
+    unsubscribeUrl,
+  }: { trackingToken?: string; unsubscribeUrl: string }
 ): RenderedIssue => ({
-  html: rendered.html.replaceAll(
-    UNSUBSCRIBE_URL_PLACEHOLDER,
-    escapeAttribute(unsubscribeUrl)
-  ),
+  html: rendered.html
+    .replaceAll(UNSUBSCRIBE_URL_PLACEHOLDER, escapeAttribute(unsubscribeUrl))
+    .replaceAll(TRACKING_TOKEN_PLACEHOLDER, escapeAttribute(trackingToken)),
   text: rendered.text.replaceAll(UNSUBSCRIBE_URL_PLACEHOLDER, unsubscribeUrl),
 });

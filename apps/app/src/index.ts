@@ -12,6 +12,7 @@ import { authorizeRoutes } from "./routes/authorize";
 import { handleMcp } from "./routes/mcp";
 import { previewRoutes } from "./routes/preview";
 import { publicRoutes } from "./routes/public";
+import { trackingRoutes } from "./routes/tracking";
 import { webhookRoutes } from "./routes/webhooks";
 import {
   processSendChunk,
@@ -45,6 +46,10 @@ app.get("/preview/sample", async (c) => {
 app.route("/", webhookRoutes);
 
 app.route("/", apiRoutes);
+
+// Before the page headers: email clients load the open image from other
+// origins, and redirects shouldn't change the referrer.
+app.route("/", trackingRoutes);
 
 // Pages people visit: lock down framing and referrers (URLs carry tokens),
 // and don't cache anything personal.
