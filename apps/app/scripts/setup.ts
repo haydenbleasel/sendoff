@@ -942,6 +942,13 @@ const mcpClient = async (publicUrl: string, token: string) => {
   return client;
 };
 
+/** How get_settings starts its answer when nothing is configured yet. */
+const SETTINGS_NOT_SET_UP = "Sendoff isn't set up yet";
+
+const currentSenderSchema = z.object({
+  from: z.object({ email: z.string() }),
+});
+
 const toolText = (result: Awaited<ReturnType<Client["callTool"]>>): string =>
   (Array.isArray(result.content) ? result.content : [])
     .flatMap((block) => (block.type === "text" ? [block.text] : []))
@@ -1052,8 +1059,39 @@ const finishSetup = async ({
     settings.replyTo = newsletter.replyTo;
   }
 
-  await client.callTool({ arguments: settings, name: "update_settings" });
-  log.success("Saved your settings.");
+  const current = toolText(
+    await client.callTool({ arguments: {}, name: "get_settings" })
+  );
+
+  // Setup fills in the first settings only. After that they're the agent's
+  // to change, and saving these answers again would undo its edits, such as
+  // footer links (update_settings replaces the whole list).
+  if (current.startsWith(SETTINGS_NOT_SET_UP)) {
+    const saved = await client.callTool({
+      arguments: settings,
+      name: "update_settings",
+    });
+
+    if (saved.isError) {
+      log.warn(
+        `Couldn't save your settings: ${toolText(saved)}\nYour agent can set them with update_settings.`
+      );
+    } else {
+      log.success("Saved your settings.");
+    }
+  } else {
+    const sender = parseJsonWith(
+      currentSenderSchema,
+      current.slice(Math.max(0, current.indexOf("{")))
+    );
+
+    log.info(
+      sender.success && sender.data.from.email !== newsletter.fromEmail
+        ? `Kept your current settings, which send from ${sender.data.from.email}. To send from ${newsletter.fromEmail} instead, ask your agent to change the sender.`
+        : "Kept your current settings. Ask your agent to change them."
+    );
+  }
+
   note(
     toolText(await client.callTool({ arguments: {}, name: "doctor" })),
     "Preflight checks"
