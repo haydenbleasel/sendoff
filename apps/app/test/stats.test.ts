@@ -259,7 +259,8 @@ describe("issueReport", () => {
     expect(text).toContain(
       "Compared with the issue before at the same point, 26 hours after sending: clicks 37.5% vs 10.0%, unsubscribes 12.5% vs 10.0%"
     );
-    expect(text).toContain("Bounces are at 22.2%");
+    // SES's review threshold counts hard bounces only: 1 of the 9 tried.
+    expect(text).toContain("Hard bounces are at 11.1%");
     expect(text).toContain("Complaints are at 12.5%");
   });
 

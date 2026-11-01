@@ -234,9 +234,14 @@ const notes = (stats: IssueStats): string[] => {
     );
   }
 
-  if ((stats.rates.bounce ?? 0) >= SES_BOUNCE_REVIEW) {
+  // SES's bounce rate counts hard bounces only: a full mailbox or an
+  // out-of-office reply doesn't count against the account.
+  const attempted = stats.sent - stats.suppressed;
+  const hardBounces = attempted > 0 ? stats.bounced.hard / attempted : 0;
+
+  if (hardBounces >= SES_BOUNCE_REVIEW) {
     list.push(
-      `Bounces are at ${percent(stats.rates.bounce)}. SES reviews accounts at about 5% and pauses sending at about 10%, so the list may need cleaning.`
+      `Hard bounces are at ${percent(hardBounces)}. SES reviews accounts at about 5% and pauses sending at about 10%, so the list may need cleaning.`
     );
   }
 

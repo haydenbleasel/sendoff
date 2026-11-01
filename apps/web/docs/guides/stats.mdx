@@ -19,7 +19,7 @@ It calls `issue_stats`, which reports on the latest issue sent, or any issue you
 - **How fast people engaged:** how many had clicked an hour, six hours, a day, three days and a week after sending
 - **How it compares with your last three issues** at the same point after sending, so an issue two hours in isn't measured against one that's had a month
 
-Rates are of emails delivered, except bounces, which are of emails sent (less any suppressed). The agent also hears about a bounce or complaint rate near the levels where SES reviews an account. A report reads something like this:
+Rates are of emails delivered, except bounces, which are of emails sent (less any suppressed). The agent also hears about a hard bounce or complaint rate near the levels where SES reviews an account (SES doesn't count soft bounces, like a full mailbox). A report reads something like this:
 
 ```text
 "Spring update" went to 5,674 subscribers 2 days ago (2026-04-02 09:00 UTC).
