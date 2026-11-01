@@ -281,4 +281,25 @@ describe("authorize", () => {
     expect(callback.searchParams.get("error")).toBe("access_denied");
     expect(callback.searchParams.get("state")).toBe("state-123");
   });
+
+  it("sends request errors back to the client instead of failing, and never caches", async () => {
+    const jar = createJar();
+    const clientId = await registerClient();
+    const { challenge } = await pkce();
+    const url = authorizeUrl(clientId, challenge);
+
+    const { consent } = await reachConsent(jar, url);
+    expect(consent.headers.get("cache-control")).toBe("no-store");
+
+    url.searchParams.set("resource", "https://elsewhere.example.com/mcp");
+
+    const rejected = await workerFetch(url, {
+      headers: { cookie: jar.header() },
+    });
+
+    const callback = new URL(rejected.headers.get("location") ?? "");
+
+    expect(rejected.status).toBe(302);
+    expect(callback.searchParams.get("error")).toBe("invalid_target");
+  });
 });

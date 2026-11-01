@@ -55,10 +55,13 @@ app.route("/", trackingRoutes);
 // and don't cache anything personal.
 app.use("*", secureHeaders());
 
-app.use("*", (c, next) => {
+app.use("*", async (c, next) => {
+  // oxlint-disable-next-line node/callback-return -- the header goes on after the handler
+  await next();
+  // After the handler, so it also covers Responses a handler built itself.
+  // Setting a header copies a finished Response first, which also makes an
+  // immutable one (Response.redirect) writable for secureHeaders.
   c.header("Cache-Control", "no-store");
-
-  return next();
 });
 
 app.route("/", authorizeRoutes);
