@@ -6,7 +6,8 @@ on:
   pull_request:
     branches:
       - main
-  # Maintainer commits go straight to main, so run there too.
+  # Maintainer commits go straight to main, so run there too: the Windows
+  # tests otherwise only run on the next pull request.
   push:
     branches:
       - main
@@ -17,22 +18,41 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  validate:
-    name: ${{ matrix.task }}
+  # create-sendoff is the CLI `bun create sendoff` runs, with Node unless
+  # Bun is asked to. Build it, then start the built file on every runtime its
+  # engines field allows: each supported Node line's latest release, the
+  # lowest version allowed, and Bun. That catches a dependency a runtime
+  # can't load, which the tests (always on Bun) wouldn't.
+  build:
+    name: build (${{ matrix.runtime }})
     runs-on: ubuntu-24.04
 
     strategy:
       fail-fast: false
       matrix:
-        # Each is a root script: lint and format, typecheck, tests (the
-        # Worker's run inside workerd), and the docs site and create-sendoff.
-        task: [check, types, test, build]
+        runtime: [node-20-floor, node-22, node-24, node-26, bun]
+        include:
+          # The lowest version packages/create-sendoff/package.json allows.
+          - runtime: node-20-floor
+            node-version: 20.12.0
+          - runtime: node-22
+            node-version: 22.x
+          - runtime: node-24
+            node-version: 24.x
+          - runtime: node-26
+            node-version: 26.x
 
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        if: matrix.node-version
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node-version }}
 
       - name: Install Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -43,5 +63,180 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Run ${{ matrix.task }}
-        run: bun run ${{ matrix.task }}
+      - name: Build create-sendoff
+        run: bun run build --filter create-sendoff
+
+      - name: Run the built CLI
+        run: ${{ matrix.runtime == 'bun' && 'bun' || 'node' }} packages/create-sendoff/dist/index.js --help
+
+  # Vitest (the Worker's tests, inside workerd) runs on Node, so cover each
+  # supported Node line. create-sendoff's tests run on Bun with a 100%
+  # coverage threshold.
+  test:
+    name: test (${{ matrix.runtime }})
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [node-22, node-24, node-26]
+        include:
+          - runtime: node-22
+            node-version: 22.x
+          - runtime: node-24
+            node-version: 24.x
+          - runtime: node-26
+            node-version: 26.x
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tests
+        run: bun run test
+
+  # create-sendoff spawns git and bun, and setup runs on people's own
+  # machines, so spawn and path behavior differs on Windows (.exe and .cmd
+  # shims, drive letters, no POSIX signals). Run everything there too.
+  test-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Use Node.js 24.x
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.x
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tests
+        run: bun run test
+
+      - name: Build create-sendoff
+        run: bun run build --filter create-sendoff
+
+      - name: Run the built CLI
+        run: node packages/create-sendoff/dist/index.js --help
+
+  check:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check linting and formatting
+        run: bun run check
+
+  types:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      # Also fails if worker-configuration.d.ts is stale against wrangler.jsonc.
+      - name: Check types
+        run: bun run types
+
+  build-docs:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build docs
+        run: bun run build --filter web
+
+  # The Worker deploys from people's own clones, so check it bundles (a
+  # Wrangler dry run, with no Cloudflare account) and that the committed
+  # migrations match the Drizzle schema.
+  worker:
+    runs-on: ubuntu-24.04
+
+    defaults:
+      run:
+        working-directory: apps/app
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Bundle the Worker
+        run: bun run build
+
+      - name: Check migrations match the schema
+        run: |
+          bun run db:generate
+          if [ -n "$(git status --porcelain migrations)" ]; then
+            echo "::error::src/db/schema.ts changed without a migration. Run bun run db:generate in apps/app and commit it."
+            git status --porcelain migrations
+            exit 1
+          fi

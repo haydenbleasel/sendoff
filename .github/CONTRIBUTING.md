@@ -55,9 +55,17 @@ From the repo root:
 | `bun run check` | Lints and checks formatting |
 | `bun run types` | Typechecks with tsgo |
 | `bun run test` | Runs the tests: the Worker's inside workerd (the Workers runtime), and `create-sendoff`'s with `bun test`, which fails below 100% coverage |
-| `bun run build` | Builds the docs site and `create-sendoff` |
+| `bun run build` | Builds the docs site and `create-sendoff`, and bundles the Worker (a Wrangler dry run) |
 
-The pre-commit hook runs `bun run fix` on staged files, and CI runs `check`, `types`, `test` and `build` on every pull request.
+The pre-commit hook fixes your staged files with Ultracite, then runs `check`, `types`, the `create-sendoff` build and `test`, and stops the commit if any fail. Turbo caches results, so packages you didn't touch are skipped.
+
+CI runs on every pull request and push to `main`:
+
+- **build:** builds `create-sendoff` and starts the built CLI on Node 20.12 (the lowest its `engines` allows), the latest Node 22, 24 and 26, and Bun
+- **test:** the full test suite on Node 22, 24 and 26
+- **test-windows:** the tests and the built CLI on Windows
+- **check**, **types** and **build-docs**
+- **worker:** bundles the Worker and fails if `src/db/schema.ts` changed without a migration
 
 ## Making changes
 

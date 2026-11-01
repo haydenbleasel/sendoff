@@ -3,6 +3,8 @@ import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { z } from "zod/mini";
+
 import { handOff, installed, run } from "../src/run";
 
 // Real processes: Bun itself stands in for git and bun, so these run anywhere.
@@ -41,11 +43,20 @@ describe("run", () => {
   it("runs in a folder with extra environment variables", async () => {
     const result = await run(
       BUN,
-      ["-e", "console.log(process.env.SENDOFF_TEST, process.cwd())"],
+      [
+        "-e",
+        "console.log(JSON.stringify([process.env.SENDOFF_TEST, process.cwd()]))",
+      ],
       { cwd: dir, env: { SENDOFF_TEST: "yes" } }
     );
 
-    expect(result.stdout).toBe(`yes ${dir}\n`);
+    const [value, cwd] = z
+      .tuple([z.string(), z.string()])
+      .parse(JSON.parse(result.stdout));
+
+    expect(value).toBe("yes");
+    // Windows can spell the same folder differently (short names, case).
+    expect(realpathSync.native(cwd)).toBe(realpathSync.native(dir));
   });
 
   it("reports a failing command", async () => {

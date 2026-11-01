@@ -42,3 +42,11 @@ else
   echo "✨ Files formatted by Ultracite"
 fi
 # ultracite end
+
+# Then the same gates as CI, so a commit that breaks the build doesn't reach
+# main. Husky runs this with `sh -e`, so the first failure stops the commit.
+# Turbo caches each package's results, so unchanged packages are skipped.
+bun run check
+bun run types
+bun run build --filter create-sendoff
+bun run test
