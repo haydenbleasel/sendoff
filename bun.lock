@@ -59,7 +59,7 @@
     },
     "packages/create-sendoff": {
       "name": "create-sendoff",
-      "version": "0.0.0",
+      "version": "1.0.0",
       "bin": {
         "create-sendoff": "./dist/index.js",
       },
