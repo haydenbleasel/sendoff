@@ -1,6 +1,6 @@
 ---
 title: Deliverability
-description: What Sendoff sets up so your newsletter reaches the inbox, and what's still up to you.
+description: What Sendoff sets up so your email reaches the inbox, and what's still up to you.
 sidebar:
   icon: shield-check
 ---
@@ -21,7 +21,7 @@ Gmail, Yahoo and Outlook require all three for anyone sending in bulk. Setup won
 
 ## Production access
 
-Every new SES account starts in the sandbox, where it can only send to addresses you've verified. Setup offers to request production access, with a description of your newsletter that covers what AWS reviewers look for: how people subscribe, how unsubscribes work, and how bounces and complaints are handled. It also names your website, which reviewers check.
+Every new SES account starts in the sandbox, where it can only send to addresses you've verified. Setup offers to request production access, with a description of what you send that covers what AWS reviewers look for: how people subscribe, how unsubscribes work, and how bounces and complaints are handled. It also names your website, which reviewers check.
 
 Approval usually takes about a day. AWS sometimes asks follow-up questions by email. Answer them plainly, and mention double opt-in and one-click unsubscribe.
 
@@ -43,7 +43,7 @@ Once you're approved, check your quota with `doctor`. New accounts often start a
 - **Watch the numbers after each send.** SES reviews an account at about a 5% bounce rate or 0.1% complaint rate, and may pause sending at about 10% or 0.5%. Gmail wants spam complaints under 0.3%. [`issue_stats`](/docs/guides/stats) shows both rates for each issue, and flags them when they get close.
 - **Decide on tracking.** Click tracking is on, and goes through your own domain rather than a shared tracking domain, which some spam filters distrust. Open tracking is off, because Apple Mail loads every image automatically, which makes open rates unreliable. You can change either. See [Issue stats](/docs/guides/stats).
 
-SES uses shared IP addresses, which is the right choice at newsletter volume: a dedicated IP needs steady daily sending to stay warm.
+SES uses shared IP addresses, which is the right choice for a list that sends every few weeks: a dedicated IP needs steady daily sending to stay warm.
 
 ## Tightening DMARC
 

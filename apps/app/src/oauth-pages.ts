@@ -85,7 +85,7 @@ export const consentPage = (
 
   return page(
     `Allow ${details.clientName}`,
-    `<h1>Allow ${name} to run your newsletter?</h1>
+    `<h1>Allow ${name} to run your Sendoff?</h1>
 <p>${origin} Access goes to <strong>${escapeHtml(details.redirectHost)}</strong>.</p>
 ${loopback}
 <p class="muted">It will be able to draft and edit issues, manage subscribers and settings, and send to your list once you confirm a send.</p>

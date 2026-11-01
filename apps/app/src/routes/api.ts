@@ -126,7 +126,7 @@ apiRoutes.post(
         c,
         HTTP_UNAVAILABLE,
         "not_configured",
-        "The newsletter isn't set up yet."
+        "Sendoff isn't set up yet."
       );
     }
 

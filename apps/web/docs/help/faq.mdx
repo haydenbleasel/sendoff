@@ -8,8 +8,8 @@ sidebar:
 <Accordion>
   <AccordionItem title="Why Amazon SES, and not Cloudflare's own email service?">
     Cloudflare's Email Service is for transactional email, like receipts and
-    password resets, so it doesn't allow newsletters. SES does, and it's about
-    as cheap as sending gets: $0.10 per thousand emails.
+    password resets, so it doesn't allow newsletters or announcements. SES does,
+    and it's about as cheap as sending gets: $0.10 per thousand emails.
   </AccordionItem>
   <AccordionItem title="Why does it need Workers Paid?">
     Rendering an email takes about 30 ms of CPU when a Worker starts cold, and
@@ -42,9 +42,8 @@ sidebar:
     Gmail, Apple Mail, Outlook and dark mode, so there's no template to
     maintain.
   </AccordionItem>
-  <AccordionItem title="Can I run more than one newsletter?">
-    One deployment runs one newsletter with one list. There are no segments or
-    tags.
+  <AccordionItem title="Can I have more than one list?">
+    One deployment sends to one list. There are no segments or tags.
   </AccordionItem>
   <AccordionItem title="Where do my subscribers' details live?">
     In a D1 database in your Cloudflare account. Nothing goes to a third party

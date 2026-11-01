@@ -1,15 +1,15 @@
 ---
 title: Introduction
-description: Sendoff is a self-hosted newsletter you run from Claude or Codex, on your own Cloudflare and AWS accounts.
+description: Sendoff emails your list (newsletters, launches, announcements) from your own Cloudflare and AWS accounts, run from Claude or Codex.
 sidebar:
   icon: house
 ---
 
-Sendoff is a newsletter with no dashboard. You deploy it into your own Cloudflare and AWS accounts, connect it to Claude or Codex, and run the newsletter by asking: "draft the next issue from these notes", "make the intro shorter", "send it".
+Sendoff emails your list, with no dashboard: newsletters, product launches, announcements. You deploy it into your own Cloudflare and AWS accounts, connect it to Claude or Codex, and run it by asking: "draft the next issue from these notes", "make the intro shorter", "send it".
 
 ## How it works
 
-- **Your agent writes the issues.** It drafts and edits them through Sendoff's MCP server. Issues are Markdown poured into one fixed, carefully designed email layout, so there's no template to build or maintain.
+- **Your agent writes the issues.** Everything you send is an issue, whether it's a newsletter, a launch or an announcement. The agent drafts and edits them through Sendoff's MCP server. Issues are Markdown poured into one fixed, carefully designed email layout, so there's no template to build or maintain.
 - **You watch a live preview.** The agent shares a link that updates as it edits, with toggles for desktop and mobile, light and dark mode, and the plain-text version.
 - **Amazon SES sends the email** from your own domain, at $0.10 per thousand.
 - **Cloudflare runs everything else.** One Worker serves the signup page, unsubscribe links, the MCP server and a small REST API. D1 stores subscribers and issues, and Queues spread a send out over a few minutes.
@@ -30,7 +30,7 @@ Workers Paid is required because rendering an email takes about 30 ms of CPU on 
 
 ## What it doesn't do
 
-Sendoff runs one newsletter with one list. It doesn't send transactional email, and there are no segments, automations, A/B tests, visual editor or team accounts.
+Sendoff sends to one list. It doesn't send transactional email, and there are no segments, automations, A/B tests, visual editor or team accounts.
 
 <CardGroup cols={2}>
   <Card title="Quickstart" href="/docs/quickstart" icon="rocket">

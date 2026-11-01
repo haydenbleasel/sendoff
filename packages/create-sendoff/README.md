@@ -1,6 +1,6 @@
 # create-sendoff
 
-Deploy [Sendoff](https://sendoff.dev), the newsletter you run from Claude or Codex, into your own Cloudflare and AWS accounts.
+Deploy [Sendoff](https://sendoff.dev), which emails your list (newsletters, launches, announcements) from Claude or Codex, into your own Cloudflare and AWS accounts.
 
 ```bash
 bun create sendoff

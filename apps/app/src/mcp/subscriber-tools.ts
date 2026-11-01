@@ -133,7 +133,7 @@ export const registerSubscriberTools = (
 
         if (!settings) {
           return failure(
-            "Set up the newsletter with update_settings before adding subscribers."
+            "Set up Sendoff with update_settings before adding subscribers."
           );
         }
 

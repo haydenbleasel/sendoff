@@ -4,7 +4,7 @@
 
 **Say “send it.” Sendoff handles the rest.**
 
-Sendoff is a newsletter with no dashboard. You deploy it into your own Cloudflare and AWS accounts, connect it to Claude or Codex, and run the newsletter by asking: "draft the next issue from these notes", "make the intro shorter", "send it".
+Sendoff emails your list, with no dashboard: newsletters, product launches, announcements. You deploy it into your own Cloudflare and AWS accounts, connect it to Claude or Codex, and run it by asking: "draft the next issue from these notes", "make the intro shorter", "send it".
 
 [![Validate](https://github.com/haydenbleasel/sendoff/actions/workflows/validate.yml/badge.svg)](https://github.com/haydenbleasel/sendoff/actions/workflows/validate.yml) [![MIT license](https://img.shields.io/badge/license-MIT-171717)](license.md)
 
@@ -60,7 +60,7 @@ Four issues a year to 6,000 subscribers is 24,000 emails, or $2.40 a year in SES
 
 ## What it doesn't do
 
-Sendoff runs one newsletter with one list. It doesn't send transactional email, and there are no segments, automations, A/B tests, visual editor or team accounts.
+Sendoff sends to one list. It doesn't send transactional email, and there are no segments, automations, A/B tests, visual editor or team accounts.
 
 ## Repository
 

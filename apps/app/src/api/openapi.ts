@@ -81,7 +81,7 @@ export const openApiDocument = (publicUrl: string) => ({
           401: error("Missing, invalid or revoked API key."),
           403: error("The API key doesn't have the subscribers:write scope."),
           502: error("The confirmation email couldn't be sent. Safe to retry."),
-          503: error("The newsletter isn't set up yet."),
+          503: error("Sendoff isn't set up yet."),
         },
         summary: "Subscribe an email address",
         tags: ["Subscribers"],

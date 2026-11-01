@@ -118,7 +118,7 @@ const requireSettings = async (db: Database): Promise<Settings> => {
   const settings = await getSettings(db);
 
   if (!settings) {
-    throw new IssueError("Set up the newsletter with update_settings first.");
+    throw new IssueError("Set up Sendoff with update_settings first.");
   }
 
   return settings;

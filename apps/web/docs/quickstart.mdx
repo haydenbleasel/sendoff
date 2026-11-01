@@ -37,7 +37,7 @@ Any CLI login works: `aws login`, `aws sso login`, or a profile. Check it with `
 bun create sendoff
 ```
 
-It clones Sendoff into `./sendoff` (add a folder name to use another), installs it and starts setup. Setup asks for your newsletter's name, the sender name and address, an optional reply-to, the postal address for the footer, your website, the hostname for Sendoff and an SES region. Then it does the rest. See [Setup](/docs/reference/setup) for every step.
+It clones Sendoff into `./sendoff` (add a folder name to use another), installs it and starts setup. Setup asks for a name (your newsletter's or your brand's), the sender name and address, an optional reply-to, the postal address for the footer, your website, the hostname for Sendoff and an SES region. Then it does the rest. See [Setup](/docs/reference/setup) for every step.
 
 Keep the folder. It holds your instance's settings, and it's where you [ship updates](/docs/guides/updating) from.
 
@@ -49,7 +49,7 @@ Right after the deploy, setup shows an MCP token along with the commands to conn
   </Step>
   <Step title="Request production access">
 
-At the end, setup shows a description of your newsletter and asks before submitting it to AWS. Approval usually takes about a day, and AWS may follow up by email. Until then, SES only delivers to addresses you've verified, so you can test but not send to your list.
+At the end, setup shows a description of what you send and asks before submitting it to AWS. Approval usually takes about a day, and AWS may follow up by email. Until then, SES only delivers to addresses you've verified, so you can test but not send to your list.
 
   </Step>
 </Steps>

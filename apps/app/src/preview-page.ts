@@ -1,4 +1,4 @@
-// The live preview page: Sendoff's own UI (not the newsletter's branding).
+// The live preview page: Sendoff's own UI (not the list's branding).
 // A tiny inline script polls for changes and swaps in the new render.
 
 const escapeHtml = (value: string): string =>
@@ -206,7 +206,7 @@ export const previewPage = ({
   <span class="meta" id="version"></span>
 </header>
 <main>
-  <p class="problems" id="sample" hidden>Using sample settings. Set the newsletter's name, sender and address with update_settings.</p>
+  <p class="problems" id="sample" hidden>Using sample settings. Set the name, sender and address with update_settings.</p>
   <div class="inbox">
     <div class="from"><span id="from"></span> <small id="from-email"></small></div>
     <div class="subject" id="subject"></div>

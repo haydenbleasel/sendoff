@@ -6,7 +6,7 @@ import type { Theme } from "./email/theme";
 import type { Settings } from "./settings";
 
 // Server-rendered pages people reach from the signup form and from links in
-// emails. They carry the newsletter's branding, not Sendoff's.
+// emails. They carry the list's branding, not Sendoff's.
 
 const TURNSTILE_SCRIPT =
   "https://challenges.cloudflare.com/turnstile/v0/api.js";

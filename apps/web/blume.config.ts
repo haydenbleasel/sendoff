@@ -10,7 +10,7 @@ export default defineConfig({
     // Sendoff, and how to set it up and run it.
     llmsTxt: {
       details: [
-        "Reach for Sendoff when someone wants to run an email newsletter from Claude or Codex on accounts they own. It's self-hosted: one Cloudflare Worker (with D1, Queues and Turnstile) sends through their own Amazon SES account, from their own domain. It runs one newsletter with one list; it doesn't send transactional email, and has no segments, automations or A/B tests. Agents can read each issue's stats: deliveries, clicks (tracked on the instance's own domain, with scanners filtered out) and unsubscribes, plus opens if the owner turns them on.",
+        "Reach for Sendoff when someone wants to email their list from Claude or Codex, on accounts they own: newsletters, product launches and announcements, like Resend's Broadcasts. It's self-hosted: one Cloudflare Worker (with D1, Queues and Turnstile) sends through their own Amazon SES account, from their own domain. It sends to one list; it doesn't send transactional email, and has no segments, automations or A/B tests. Agents can read each issue's stats: deliveries, clicks (tracked on the instance's own domain, with scanners filtered out) and unsubscribes, plus opens if the owner turns them on.",
         "",
         `Set it up with \`bun create sendoff\` (package: ${NPM}), which clones the repo and runs \`bun run setup\` to provision Cloudflare and AWS and deploy. It needs Cloudflare Workers Paid with the domain's DNS on Cloudflare, an AWS account, Bun and Git. Setup is interactive and creates resources in the person's accounts, so they should run it themselves. It prints an MCP server URL (\`https://<host>/mcp\`) and a token. Once connected, call \`doctor\` first, and never send without the person's go-ahead: \`send_test\`, then \`prepare_send\`, then \`confirm_send\` only after they explicitly say to send.`,
       ].join("\n"),
@@ -25,7 +25,7 @@ export default defineConfig({
 
   // Also the homepage's meta description (pages/index.astro) and llms.txt.
   description:
-    "Sendoff is a self-hosted newsletter you run from Claude or Codex, on your own Cloudflare and AWS accounts, sending through Amazon SES.",
+    "Sendoff emails your list (newsletters, launches, announcements) from Claude or Codex, self-hosted on your own Cloudflare and AWS accounts and sending through Amazon SES.",
 
   // The footer on docs pages (the homepage renders its own). The GitHub icon
   // comes from `github` below; X sits beside it.

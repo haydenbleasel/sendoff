@@ -1,19 +1,19 @@
 # Sendoff spec
 
-A self-hosted, newsletter-only email tool that you drive from an agent. You deploy it into your own Cloudflare and AWS accounts, connect its MCP server to Claude or Codex, and say "help me draft the next issue" and then "send it".
+A self-hosted email tool for one list (newsletters, product launches, announcements: an alternative to Resend's Broadcasts) that you drive from an agent. You deploy it into your own Cloudflare and AWS accounts, connect its MCP server to Claude or Codex, and say "help me draft the next issue" and then "send it".
 
 ## Decisions
 
 | Area | Decision |
 | --- | --- |
 | Hosting model | Self-hosted. Every user deploys into their own Cloudflare and AWS accounts, so each sender owns its reputation and AWS handles abuse. |
-| Sending | Amazon SES. Cloudflare Email Sending is transactional-only, so it can't send newsletters. |
+| Sending | Amazon SES. Cloudflare Email Sending is transactional-only, so it can't send newsletters or announcements. |
 | Everything else | Cloudflare: Workers, D1, Queues, Turnstile, Email Routing, DNS. |
 | Plan | Workers Paid ($5/mo) is required. Cold React Email renders take ~30 ms of CPU, about 3× the free plan's 10 ms limit. Total cost is about $62/yr (Workers $60 + SES $2.40 at 6K × 4 sends). |
 | Email rendering | React Email, with one fixed, well-designed layout that looks good with no design work. Users fill in the middle. |
 | Content | Markdown plus two directives (`::button`, `:::callout`). The agent never writes TSX. |
 | Interface | A remote MCP server (Streamable HTTP) on the same Worker, plus a small REST API for servers (e.g. a website's signup form). There's no admin UI beyond preview and public pages. |
-| Scope | One newsletter, one list. No transactional email, segments, automations, A/B tests, visual editor, teams or dedicated IPs. |
+| Scope | One list, for any kind of broadcast: newsletters, launches, announcements. No transactional email, segments, automations, A/B tests, visual editor, teams or dedicated IPs. |
 
 ## Deployment and settings
 
@@ -277,7 +277,7 @@ Settings `tracking: { clicks: true, opens: false }` by default, snapshotted onto
 `bun run setup` (in `scripts/setup.ts`) connects Sendoff to your accounts and deploys it. Every step checks what already exists, so it's safe to re-run; progress (including the newsletter answers, which pre-fill the prompts) is kept in the gitignored `apps/app/.sendoff/instance.json`. If a step after the deploy fails, setup says so and stops; running it again skips what's done.
 
 1. **Cloudflare account:** read from `wrangler whoami` (runs `wrangler login` if needed, asks which account if there are several). It confirms the account is on Workers Paid, which can't be checked through Wrangler.
-2. **Newsletter details:** name, sender, reply-to, postal address. Then the hostname (default `news.<sender domain>`), which must be on a Cloudflare zone in the account. Links on your own domain also keep emails away from shared `workers.dev` URLs, which spam filters distrust. Then the SES region.
+2. **Details:** name (a newsletter or brand name), sender, reply-to, postal address. Then the hostname (default `news.<sender domain>`), which must be on a Cloudflare zone in the account. Links on your own domain also keep emails away from shared `workers.dev` URLs, which spam filters distrust. Then the SES region.
 3. **AWS access:** if the AWS CLI is logged in, setup offers to use that login (`aws configure export-credentials`, including short-lived SSO or `aws login` sessions) to provision SES and SNS. It then creates a dedicated `sendoff` IAM user with a send-only inline policy (`ses:SendEmail`, `GetAccount`, `GetEmailIdentity`, `GetConfigurationSetEventDestinations`) and an access key: the only AWS credential the Worker holds, so it can't create or change AWS resources. Re-runs reuse that key while the Worker has its secret, and only ever delete the one key setup recorded. Without the CLI, setup writes the full provisioning policy to `.sendoff/iam-policy.json` and asks for keys, which then serve both purposes.
 4. **Optional Cloudflare API token** (Zone DNS Edit, Zone Read, Account Turnstile Edit). It's used during setup and not stored, and only asked for if the Turnstile or DNS step still has work to do. With it, setup writes the DNS records and creates the Turnstile widget. Without it, setup prints the records and asks for Turnstile keys made in the dashboard.
 5. **Resources:** the D1 database `sendoff`, the KV namespace `sendoff-oauth` and the queue `sendoff-send` through Wrangler, and a Turnstile widget for the hostname (skipped once the Worker has its secret).

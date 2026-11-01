@@ -19,7 +19,7 @@ Ask the agent "how many subscribers do I have?" or "is jane@example.com subscrib
 
 ## The signup page
 
-Your hostname's home page, like `https://news.example.com`, is a signup form showing your newsletter's name and description. Link to it from your site and social profiles.
+Your hostname's home page, like `https://news.example.com`, is a signup form showing the name and description from your settings. Link to it from your site and social profiles.
 
 It uses double opt-in: a new address gets a confirmation email and becomes active only after clicking the link in it. Cloudflare Turnstile and a hidden field keep bots out. The form always says "check your inbox", whether the address is new, pending or already subscribed, so it can't be used to find out who's on your list. A confirmation goes to the same address at most once every 10 minutes.
 
@@ -54,7 +54,7 @@ The API does double opt-in too, and returns `202` for every valid address, just 
 
 ## Adding someone yourself
 
-> Add jane@example.com to the newsletter.
+> Add jane@example.com to my list.
 
 The agent calls `add_subscriber`, which sends Jane a confirmation email. Only if someone asked you directly to be added should the agent skip the confirmation. Nobody who unsubscribed, bounced or complained is re-added this way. People who unsubscribed can sign up again from the signup page; bounced and complained addresses can't.
 

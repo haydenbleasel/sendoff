@@ -51,7 +51,7 @@ const load = async (c: AppContext): Promise<Loaded | Response> => {
   const settings = await getSettings(db);
 
   if (!settings) {
-    return c.text("This newsletter isn't set up yet.", HTTP_UNAVAILABLE);
+    return c.text("This list isn't set up yet.", HTTP_UNAVAILABLE);
   }
 
   return { config, db, settings };

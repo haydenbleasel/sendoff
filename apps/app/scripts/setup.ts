@@ -202,10 +202,10 @@ const newsletterDetails = async (
 ): Promise<Newsletter> => {
   note(
     "These go in every email's header and footer. Change them later by asking your agent.",
-    "Your newsletter"
+    "Your list"
   );
 
-  const name = await ask("Newsletter name", {
+  const name = await ask("Name (a newsletter or brand name)", {
     initial: previous?.name,
     placeholder: "The Weekly Thing",
     validate: required("A name"),
@@ -764,7 +764,7 @@ const requestProductionAccess = async (
   }
 
   const useCase = [
-    `${newsletter.name} is an opt-in email newsletter sent a few times a year by ${newsletter.fromName}.`,
+    `${newsletter.name} is an opt-in email list run by ${newsletter.fromName}: a newsletter and occasional announcements, sent a few times a year.`,
     "People subscribe through a double opt-in form, or were imported from a previous provider with unsubscribes preserved.",
     "Every email has a one-click unsubscribe (List-Unsubscribe and List-Unsubscribe-Post headers) and a visible unsubscribe link, honored immediately.",
     "Bounces and complaints are received through SES event publishing to SNS and suppressed automatically, and the account-level suppression list is enabled.",
@@ -828,7 +828,7 @@ const finishSetup = async ({
 
   if (!token) {
     log.warn(
-      "Skipped saving the newsletter settings (no MCP token). Your agent can set them with update_settings."
+      "Skipped saving your settings (no MCP token). Your agent can set them with update_settings."
     );
 
     return;
@@ -848,7 +848,7 @@ const finishSetup = async ({
   }
 
   await client.callTool({ arguments: settings, name: "update_settings" });
-  log.success("Saved the newsletter settings.");
+  log.success("Saved your settings.");
   note(
     toolText(await client.callTool({ arguments: {}, name: "doctor" })),
     "Preflight checks"

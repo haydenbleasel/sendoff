@@ -364,7 +364,7 @@ export const runDoctor = async ({
       : check(
           "fail",
           "Settings",
-          "The newsletter isn't set up. Call update_settings."
+          "There are no settings yet. Call update_settings."
         ),
     counts.active > 0
       ? check(

@@ -4,13 +4,12 @@ Thanks for helping out. Bug reports, fixes and docs improvements are all welcome
 
 ## Scope
 
-Sendoff does one thing on purpose: it runs one newsletter with one list, from an agent. These are out of scope, so pull requests that add them won't be merged:
+Sendoff does one thing on purpose: it emails one list, from an agent. These are out of scope, so pull requests that add them won't be merged:
 
 - Transactional email
 - Segments, automations and A/B tests
-- Open tracking
 - A visual editor, custom email templates or an admin dashboard. There's one fixed layout, and brand settings (like the accent color) live in the database, edited through MCP.
-- Team accounts, multiple newsletters or multiple lists
+- Team accounts or multiple lists
 - Dedicated IPs
 
 ## The codebase

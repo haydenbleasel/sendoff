@@ -1,7 +1,7 @@
 import type { Config } from "./config";
 import { createToken, verifyToken } from "./tokens";
 
-// The newsletter has one owner, who proves it with the admin token (the
+// Sendoff has one owner, who proves it with the admin token (the
 // MCP_TOKEN secret from setup): directly as a bearer token for Claude Code
 // and Codex, or once on /authorize to connect claude.ai or Claude Desktop.
 

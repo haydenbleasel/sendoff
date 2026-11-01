@@ -47,7 +47,12 @@ const updateSchema = z.object({
     .describe(
       "https logo with its display size in pixels. null shows the name instead."
     ),
-  name: z.string().optional().describe("The newsletter's name."),
+  name: z
+    .string()
+    .optional()
+    .describe(
+      "The name in every email's header and on the signup page, like a newsletter or brand name."
+    ),
   replyTo: z
     .string()
     .nullable()
@@ -143,7 +148,7 @@ export const registerSettingsTools = (
     {
       annotations: READ_ONLY,
       description:
-        "Get the newsletter's settings: name, sender, postal address, accent color, logo, footer links, and whether clicks and opens are tracked. Returns a setup hint if nothing is configured yet.",
+        "Get Sendoff's settings: name, sender, postal address, accent color, logo, footer links, and whether clicks and opens are tracked. Returns a setup hint if nothing is configured yet.",
       inputSchema: z.object({}),
       title: "Get settings",
     },
@@ -153,7 +158,7 @@ export const registerSettingsTools = (
 
         if (!settings) {
           return result(
-            "The newsletter isn't set up yet. Ask for its name, the sender's name and email, and a postal address, then call update_settings."
+            "Sendoff isn't set up yet. Ask for a name (a newsletter or brand name, shown in every email's header), the sender's name and email, and a postal address, then call update_settings."
           );
         }
 
@@ -166,7 +171,7 @@ export const registerSettingsTools = (
     {
       annotations: { idempotentHint: true },
       description:
-        "Update the newsletter's settings. Pass only the fields to change; the first call must include name, from and address. Changes apply to the preview immediately and to every email sent afterwards.",
+        "Update Sendoff's settings. Pass only the fields to change; the first call must include name, from and address. Changes apply to the preview immediately and to every email sent afterwards.",
       inputSchema: updateSchema,
       title: "Update settings",
     },
