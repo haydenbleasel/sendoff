@@ -194,7 +194,10 @@ describe("cloning and setup", () => {
     expect(run.events).toContain("outro: Starting setup");
     expect(run.output.stdout).toContain("Sendoff lives in ./sendoff.");
     expect(run.output.stdout).toContain(
-      "Run setup again   cd sendoff && bun run setup"
+      "Run setup again   bun run --cwd sendoff setup"
+    );
+    expect(run.output.stdout).toContain(
+      "Ship an update    bun run --cwd sendoff update"
     );
   });
 
@@ -243,6 +246,6 @@ describe("cloning and setup", () => {
 
     expect(await main(run.deps)).toBe(2);
     expect(run.output.stdout).toContain("Setup didn't finish.");
-    expect(run.output.stdout).toContain("cd sendoff && bun run setup");
+    expect(run.output.stdout).toContain("bun run --cwd sendoff setup");
   });
 });

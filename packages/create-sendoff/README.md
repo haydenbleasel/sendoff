@@ -18,7 +18,7 @@ You need a Cloudflare account on Workers Paid with your domain on it, an AWS acc
 | `--repo <url>` | Clone from another repo, such as your fork.    |
 | `-h`, `--help` | Show help.                                     |
 
-Keep the folder: `apps/app/.sendoff/` holds your instance's config, and updates (`git pull && bun install && bun run deploy`) deploy from it.
+Keep the folder: `apps/app/.sendoff/` holds your instance's config, and updates (`bun run update`) deploy from it.
 
 ## License
 

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { commandIn, displayPath, inspectTarget } from "../src/target";
+import { bunRunIn, displayPath, inspectTarget } from "../src/target";
 
 let root = "";
 
@@ -67,15 +67,21 @@ describe("paths shown to people", () => {
     expect(displayPath("/home/me", "/home/me/..news")).toBe("./..news");
   });
 
-  it("prefixes commands with the cd to get there", () => {
-    expect(commandIn("/home/me", "/home/me/sendoff", "bun run setup")).toBe(
-      "cd sendoff && bun run setup"
+  it("runs scripts in the folder with --cwd, which any shell can run", () => {
+    expect(bunRunIn("/home/me", "/home/me/sendoff", "setup", "darwin")).toBe(
+      "bun run --cwd sendoff setup"
     );
-    expect(commandIn("/home/me", "/home/me", "bun run setup")).toBe(
+    expect(bunRunIn("/home/me", "/home/me", "setup", "darwin")).toBe(
       "bun run setup"
     );
-    expect(commandIn("/home/me", "/home/me/my news", "bun run setup")).toBe(
-      "cd 'my news' && bun run setup"
+    expect(bunRunIn("/home/me", "/home/me/my news", "setup", "darwin")).toBe(
+      "bun run --cwd 'my news' setup"
+    );
+  });
+
+  it("quotes for cmd and PowerShell on Windows", () => {
+    expect(bunRunIn("/home/me", "/home/me/my news", "update", "win32")).toBe(
+      'bun run --cwd "my news" update'
     );
   });
 });

@@ -1,6 +1,6 @@
 // `bun create sendoff [folder]`: clone Sendoff, install it, and hand off to
 // `bun run setup`, which deploys it into your Cloudflare and AWS accounts.
-// A clone (not a copy) keeps `git pull` working for updates.
+// A clone (not a copy) is what `bun run update` moves to each new release.
 //
 // Everything that touches the outside world comes in through `Deps`, so
 // tests can run the whole flow; index.ts wires it to the real process.
@@ -12,7 +12,7 @@ import type { cancel, intro, log, outro, spinner } from "@clack/prompts";
 import type { awsLogin } from "./aws";
 import { USAGE, parseCommand } from "./cli";
 import type { handOff, installed, run } from "./run";
-import { commandIn, displayPath, inspectTarget } from "./target";
+import { bunRunIn, displayPath, inspectTarget } from "./target";
 
 export interface Deps {
   argv: string[];
@@ -138,8 +138,8 @@ const finished = (cwd: string, dir: string, shown: string) =>
     `Sendoff lives in ${shown}. Keep that folder: apps/app/.sendoff holds your`,
     "instance's config, and updates deploy from it.",
     "",
-    `  Run setup again   ${commandIn(cwd, dir, "bun run setup")}`,
-    `  Ship an update    ${commandIn(cwd, dir, "git pull && bun install && bun run deploy")}`,
+    `  Run setup again   ${bunRunIn(cwd, dir, "setup")}`,
+    `  Ship an update    ${bunRunIn(cwd, dir, "update")}`,
     "",
     `More: ${UPDATING_DOCS}`,
     "",
@@ -150,7 +150,7 @@ const stopped = (cwd: string, dir: string) =>
     "",
     "Setup didn't finish. Pick up where it stopped with:",
     "",
-    `  ${commandIn(cwd, dir, "bun run setup")}`,
+    `  ${bunRunIn(cwd, dir, "setup")}`,
     "",
   ].join("\n");
 
