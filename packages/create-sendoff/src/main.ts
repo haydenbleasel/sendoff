@@ -214,7 +214,8 @@ export const main = async (deps: Deps): Promise<number> => {
         start: `Cloning Sendoff into ${shown}`,
       },
       "git",
-      ["clone", command.repo, dir],
+      // `--` so a --repo that starts with a dash can't pass git an option.
+      ["clone", "--", command.repo, dir],
       // Fail with git's message instead of prompting for a password under the spinner.
       { env: { GIT_TERMINAL_PROMPT: "0" } }
     );

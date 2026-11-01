@@ -182,7 +182,7 @@ describe("cloning and setup", () => {
     expect(run.events).toContain(`done: AWS CLI logged in as ${ARN}`);
     expect(run.runs).toStrictEqual([
       {
-        args: ["clone", DEFAULT_REPO, dir],
+        args: ["clone", "--", DEFAULT_REPO, dir],
         command: "git",
         options: { env: { GIT_TERMINAL_PROMPT: "0" } },
       },
