@@ -1,0 +1,63 @@
+---
+title: MCP tools
+description: Every tool Sendoff's MCP server gives your agent, grouped by what it's for.
+sidebar:
+  icon: wrench
+---
+
+You don't call these yourself: your agent picks them from what you ask. This page is for knowing what's possible, and for reading what the agent did. Issues are addressed by id or slug, and every tool that changes data returns a summary the agent can relay.
+
+## Settings
+
+| Tool | What it does |
+| --- | --- |
+| `get_settings` | Shows the newsletter's name, sender, postal address, accent color, logo and footer links. |
+| `update_settings` | Changes any of them. Pass only the fields to change; `null` clears an optional one. See [Settings](/docs/reference/settings). |
+| `doctor` | Runs the [preflight checks](/docs/help/troubleshooting): settings, SES access and quota, domain verification, DMARC, bounce tracking and subscribers. |
+
+## Drafts
+
+| Tool | What it does |
+| --- | --- |
+| `create_draft` | Starts an issue from a subject, optional preheader and Markdown body, and returns the live preview URL. |
+| `get_draft` | Returns an issue's subject, preheader, body, version and preview URL. |
+| `edit_draft` | Applies exact find-and-replace edits, in order and all or nothing, or replaces the whole body. Takes an optional `expectedVersion` so two agents can't overwrite each other. |
+| `set_draft_meta` | Changes the subject, preheader or slug. |
+| `list_issues` | Lists issues, most recently updated first, optionally by status (`draft`, `sending`, `sent`, `cancelled`). |
+| `preview_draft` | Returns the preview URL and the plain-text version, so the agent can proofread. |
+| `delete_draft` | Deletes a draft. Sent issues can't be deleted. |
+
+Drafts are saved even when the Markdown has problems; each result lists them by line so the agent can fix them.
+
+## Sending
+
+| Tool | What it does |
+| --- | --- |
+| `send_test` | Emails the current version, with `[Test]` in the subject, to the reply-to address, the sender, or up to five addresses. |
+| `prepare_send` | Checks the draft is ready to go, without sending: it renders, the last test matches this exact version, and `doctor` passes. Returns a summary and a confirmation that expires in 15 minutes. |
+| `confirm_send` | Sends to every active subscriber. Agents are told to call it only after you've seen the summary and said to send. |
+| `send_status` | Shows a send's progress (sent, failed, skipped, remaining), bounces, complaints, unsubscribes, and why it stopped, if it did. |
+| `cancel_send` | Stops a send in progress. Everyone not yet sent to is skipped. |
+| `resume_send` | Continues a send that stopped on an error, after rerunning the preflight checks. |
+
+See [Sending an issue](/docs/guides/sending) for how these fit together.
+
+## Subscribers
+
+| Tool | What it does |
+| --- | --- |
+| `search_subscribers` | Counts subscribers by status, and lists them newest first, filtered by part of an address or by status. |
+| `add_subscriber` | Adds one person and sends them a confirmation email, unless `skipConfirmation` is set because they asked to be added. |
+| `import_csv` | Imports a CSV export from any provider, with `dryRun` and an optional status for the whole file. See [Importing your list](/docs/guides/importing). |
+| `import_subscribers` | Imports up to 5,000 subscribers given as a list, each with an optional status. |
+| `unsubscribe_subscriber` | Unsubscribes someone, such as when they reply asking to be removed. |
+
+Imports never reactivate anyone who unsubscribed, bounced or complained, and no tool re-adds them.
+
+## API keys
+
+| Tool | What it does |
+| --- | --- |
+| `create_api_key` | Creates a [REST API](/docs/reference/rest-api) key with a name and scopes. The key is shown once. |
+| `list_api_keys` | Lists keys by name, prefix and scopes, with when each was last used. |
+| `revoke_api_key` | Revokes a key by id or prefix. Anything using it stops working immediately. |

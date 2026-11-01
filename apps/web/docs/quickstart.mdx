@@ -1,0 +1,76 @@
+---
+title: Quickstart
+description: Deploy Sendoff into your Cloudflare and AWS accounts with one command, then connect your agent.
+sidebar:
+  icon: rocket
+---
+
+`bun run setup` does the whole deployment: it creates the database and queue, sets up SES, writes your DNS records, deploys the Worker and asks AWS for production access. It takes about ten minutes, most of it waiting for DNS.
+
+## Before you start
+
+You need:
+
+- **A Cloudflare account on [Workers Paid](https://dash.cloudflare.com/?to=/:account/workers/plans)** ($5 a month), with your domain's DNS on Cloudflare. Sendoff lives on a subdomain of it, like `news.example.com`.
+- **An AWS account** for SES. A new account starts in the SES sandbox; setup asks AWS to move it out.
+- **An address on that domain to send from**, like `hello@example.com`. If you're moving from another provider, keep the same domain, so its sending reputation carries over.
+- **[Bun](https://bun.sh) and Git.**
+- **The [AWS CLI](https://aws.amazon.com/cli/), logged in** (recommended). Setup uses your login to provision SES, and gives the Worker its own send-only key. Without the CLI, it asks you to create an IAM user by hand.
+
+:::tip[Optional: a Cloudflare API token]
+
+With a token, setup writes the DNS records and creates the Turnstile widget for you. Create one at [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) with **Zone › DNS › Edit** and **Zone › Zone › Read** for your domain, and **Account › Turnstile › Edit**. It's only used during setup and isn't stored. Without it, setup prints the records to add and asks for Turnstile keys you make in the dashboard.
+
+:::
+
+## Deploy
+
+<Steps>
+  <Step title="Clone and install">
+
+```bash
+git clone https://github.com/haydenbleasel/sendoff.git
+cd sendoff
+bun install
+```
+
+  </Step>
+  <Step title="Log in to AWS">
+
+Any CLI login works: `aws login`, `aws sso login`, or a profile. Check it with `aws sts get-caller-identity`.
+
+  </Step>
+  <Step title="Run setup">
+
+```bash
+bun run setup
+```
+
+It asks for your newsletter's name, the sender name and address, an optional reply-to, the postal address for the footer, your website, the hostname for Sendoff and an SES region. Then it does the rest. See [Setup](/docs/reference/setup) for every step.
+
+  </Step>
+  <Step title="Save your MCP token">
+
+Right after the deploy, setup shows an MCP token along with the commands to connect Claude Code, Codex and claude.ai. It's shown once, so save it in your password manager.
+
+  </Step>
+  <Step title="Request production access">
+
+At the end, setup shows a description of your newsletter and asks before submitting it to AWS. Approval usually takes about a day, and AWS may follow up by email. Until then, SES only delivers to addresses you've verified, so you can test but not send to your list.
+
+  </Step>
+</Steps>
+
+If anything fails, run `bun run setup` again. It skips the steps that are already done and picks up where it stopped.
+
+## Connect and write
+
+[Connect your agent](/docs/connect) with the token, then ask it:
+
+> Run Sendoff's doctor.
+
+That runs the [preflight checks](/docs/help/troubleshooting) and shows anything still blocking a send, such as production access or an empty list. Then [import your list](/docs/guides/importing) and ask for a first draft:
+
+> Help me draft the first issue. Here are my notes: …
+
+The agent shares a preview link. Open it, ask for changes, and when you're happy, follow [Sending an issue](/docs/guides/sending).

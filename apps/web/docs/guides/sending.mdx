@@ -1,0 +1,59 @@
+---
+title: Sending an issue
+description: Test, prepare, confirm, then watch the send go out. Every step is there so nothing reaches your list by accident.
+sidebar:
+  icon: send
+---
+
+Sending takes four steps, and the agent can't skip any of them. Ask "send a test" when the draft looks right, and it walks you through the rest.
+
+<Steps>
+  <Step title="Test">
+    `send_test` emails the current version to your reply-to address (or the
+    sender, or up to five addresses you name), with `[Test]` in the subject.
+    Check it in your real inbox, on your phone too. Its unsubscribe link is a
+    placeholder.
+  </Step>
+  <Step title="Prepare">
+    `prepare_send` checks that the draft renders, that your last test was of
+    this exact version, and that the [preflight
+    checks](/docs/help/troubleshooting) pass. It sends nothing. It returns a
+    summary to show you: how many people it'll go to, from which address, and
+    roughly how long it'll take.
+  </Step>
+  <Step title="Confirm">
+    Read the summary, then tell the agent to send. `confirm_send` takes the
+    confirmation from the prepare step, which expires after 15 minutes.
+  </Step>
+  <Step title="Watch">
+    `send_status` shows how many emails are sent, failed, skipped and still to
+    go, plus bounces, complaints and unsubscribes so far.
+  </Step>
+</Steps>
+
+Any change to the draft or your settings after the test (even fixing a typo or changing the accent color) means testing again. A change after preparing invalidates the confirmation. What you test is always what your list gets.
+
+## While it sends
+
+Sendoff snapshots your active subscribers the moment you confirm, then works through them in batches of 50 at your SES sending rate. At 14 emails a second, a common limit for a new SES account, 6,000 subscribers take about seven minutes. You can close the conversation; the send carries on without it.
+
+Each email gets:
+
+- its own unsubscribe link in the footer
+- `List-Unsubscribe` and `List-Unsubscribe-Post` headers, which give Gmail, Apple Mail and Yahoo their one-click unsubscribe button
+- your postal address
+
+Anyone who unsubscribes, bounces or complains during the send is skipped if they haven't been sent to yet.
+
+## When something goes wrong
+
+- **SES slows you down.** Throttled emails go back in the queue and are retried after a pause.
+- **SES rejects one address.** That email is marked failed with the reason, and the send carries on.
+- **The account can't send** (sending paused, daily quota used up, bad credentials). The send stops, and `send_status` says why. Fix the cause, then ask the agent to resume; `resume_send` runs the preflight checks again before continuing.
+- **A batch gets lost**, such as when a Worker restarts mid-send. A check every five minutes restarts any send with no activity.
+
+Sendoff sends each person **at most once**. If a Worker stops mid-batch and it can't tell whether an email went out, it marks it failed instead of sending it again. One missed email is better than a duplicate to thousands of people.
+
+## Cancelling
+
+Ask the agent to cancel a send in progress. Emails already sent can't be recalled, everyone not yet sent to is skipped, and a cancelled issue can't be sent again. To send it later, ask for a new draft with the same content.

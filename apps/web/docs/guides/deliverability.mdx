@@ -1,0 +1,50 @@
+---
+title: Deliverability
+description: What Sendoff sets up so your newsletter reaches the inbox, and what's still up to you.
+sidebar:
+  icon: shield-check
+---
+
+Inbox providers decide where your email lands based on whether it's authenticated, whether people want it, and how your domain has behaved before. Setup handles the first, and Sendoff's defaults protect the second.
+
+## Authentication
+
+Setup verifies your domain in SES and adds these DNS records, or prints them if you skipped the Cloudflare API token:
+
+| Record | Purpose |
+| --- | --- |
+| Three DKIM `CNAME`s | Sign every email with your domain (SES Easy DKIM) |
+| `MX` and SPF `TXT` on `bounce.<your domain>` | A custom MAIL FROM, so SPF passes and aligns with your domain |
+| `TXT` at `_dmarc.<your domain>`, `v=DMARC1; p=none` | Only added if you don't have a DMARC record already |
+
+Gmail, Yahoo and Outlook require all three for anyone sending in bulk. Setup won't touch records that clash with ones you already have; it lists them for you to fix.
+
+## Production access
+
+Every new SES account starts in the sandbox, where it can only send to addresses you've verified. Setup offers to request production access, with a description of your newsletter that covers what AWS reviewers look for: how people subscribe, how unsubscribes work, and how bounces and complaints are handled. It also names your website, which reviewers check.
+
+Approval usually takes about a day. AWS sometimes asks follow-up questions by email. Answer them plainly, and mention double opt-in and one-click unsubscribe.
+
+Once you're approved, check your quota with `doctor`. New accounts often start at 50,000 emails a day and 14 a second, and `doctor` blocks a send if the day's remaining quota is smaller than your list.
+
+## Defaults you can't turn off
+
+- **One-click unsubscribe** headers ([RFC 8058](https://www.rfc-editor.org/rfc/rfc8058)) and a visible unsubscribe link in every email, honored immediately
+- **Your postal address** in every footer
+- **Double opt-in** for signups, with Turnstile on the form
+- **Bounces and complaints** suppressed automatically, plus SES's account-wide suppression list
+- **No open or click tracking.** Tracking pixels and rewritten links can count against you with spam filters, and Apple Mail Privacy Protection makes open rates unreliable anyway.
+
+## What's up to you
+
+- **Keep your From domain.** If you're moving from another provider, send from the same domain. Its reputation comes with it; a new domain starts from nothing.
+- **Import your suppressions.** Bring over unsubscribes and bounces from your old provider, so you don't email them again. See [Importing your list](/docs/guides/importing).
+- **Send what people signed up for.** A list that hasn't heard from you in a year will complain more. If it's been a while, say so at the top of the issue and make unsubscribing easy.
+- **Use a real postal address.** US law (CAN-SPAM) requires a street address, PO box or private mailbox, not just a city.
+- **Watch the numbers after each send.** SES reviews an account at about a 5% bounce rate or 0.1% complaint rate, and may pause sending at about 10% or 0.5%. Gmail wants spam complaints under 0.3%. `send_status` shows bounces and complaints for each issue.
+
+SES uses shared IP addresses, which is the right choice at newsletter volume: a dedicated IP needs steady daily sending to stay warm.
+
+## Tightening DMARC
+
+`p=none` monitors without affecting delivery. Once your sends pass DKIM and SPF reliably, you can move to `p=quarantine` or `p=reject` to stop others from spoofing your domain. Do it gradually, and only once every service that sends as your domain is authenticated.

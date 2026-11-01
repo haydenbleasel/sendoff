@@ -1,6 +1,47 @@
 ---
 title: Introduction
-description: Get started with Sendoff.
+description: Sendoff is a self-hosted newsletter you run from Claude or Codex, on your own Cloudflare and AWS accounts.
+sidebar:
+  icon: house
 ---
 
-Welcome to the Sendoff docs.
+Sendoff is a newsletter with no dashboard. You deploy it into your own Cloudflare and AWS accounts, connect it to Claude or Codex, and run the newsletter by asking: "draft the next issue from these notes", "make the intro shorter", "send it".
+
+## How it works
+
+- **Your agent writes the issues.** It drafts and edits them through Sendoff's MCP server. Issues are Markdown poured into one fixed, carefully designed email layout, so there's no template to build or maintain.
+- **You watch a live preview.** The agent shares a link that updates as it edits, with toggles for desktop and mobile, light and dark mode, and the plain-text version.
+- **Amazon SES sends the email** from your own domain, at $0.10 per thousand.
+- **Cloudflare runs everything else.** One Worker serves the signup page, unsubscribe links, the MCP server and a small REST API. D1 stores subscribers and issues, and Queues spread a send out over a few minutes.
+
+Nothing reaches your list without you. Before a send, the agent has to email you a test of the exact version you're sending, show you a summary, and get your go-ahead in the conversation.
+
+## What it costs
+
+| Service                 | Price                  |
+| ----------------------- | ---------------------- |
+| Cloudflare Workers Paid | $5 a month             |
+| Amazon SES              | $0.10 per 1,000 emails |
+
+Four issues a year to 6,000 subscribers is 24,000 emails, or $2.40 a year in SES. With Workers, that's about $62 a year in total, paid straight to Cloudflare and AWS.
+
+Workers Paid is required because rendering an email takes about 30 ms of CPU on a cold start, and the free plan allows 10 ms per request.
+
+## What it doesn't do
+
+Sendoff runs one newsletter with one list. It doesn't send transactional email, and there are no segments, automations, A/B tests, open tracking, visual editor or team accounts.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" href="/docs/quickstart" icon="rocket">
+    Deploy Sendoff and send yourself a test issue.
+  </Card>
+  <Card title="Connect your agent" href="/docs/connect" icon="plug">
+    Claude Code, Codex, claude.ai and Claude Desktop.
+  </Card>
+  <Card title="Writing issues" href="/docs/guides/writing" icon="pen-line">
+    The draft and preview loop, and the Markdown it supports.
+  </Card>
+  <Card title="Importing your list" href="/docs/guides/importing" icon="upload">
+    Bring subscribers over from any provider's CSV export.
+  </Card>
+</CardGroup>

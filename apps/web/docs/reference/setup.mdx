@@ -1,0 +1,89 @@
+---
+title: Setup
+description: Everything `bun run setup` creates in your Cloudflare and AWS accounts, step by step.
+sidebar:
+  icon: terminal
+---
+
+`bun run setup` connects Sendoff to your accounts and deploys it. Every step checks what already exists first, so it's safe to run again: after a failure, it skips what's done and carries on. Your answers and resource IDs are saved in the gitignored `apps/app/.sendoff/instance.json`, and pre-fill the prompts next time.
+
+## Steps
+
+<Steps>
+  <Step title="Cloudflare account">
+    Reads your account from `wrangler whoami`, opening a browser to log in if
+    needed, and asks which account if you have several. It asks you to confirm
+    the account is on Workers Paid, which Wrangler can't check.
+  </Step>
+  <Step title="Your newsletter">
+    The name, sender name and address, an optional reply-to, the postal address
+    for the footer, and your website. Then the hostname for Sendoff (by default
+    `news.` plus your sender's domain), which must be on a Cloudflare zone in
+    the account, and the SES region.
+  </Step>
+  <Step title="AWS access">
+    If the AWS CLI is logged in, setup uses that login (including short-lived
+    SSO sessions) for its own AWS calls. It creates an IAM user called `sendoff`
+    with a send-only policy and gives the Worker that user's key, so the Worker
+    can send email and read its own SES status but can't change anything in your
+    account. Without the CLI, it writes the IAM policy it needs to
+    `.sendoff/iam-policy.json` and asks for keys.
+  </Step>
+  <Step title="Cloudflare resources">
+    A D1 database (`sendoff`), a KV namespace for OAuth grants
+    (`sendoff-oauth`), a queue (`sendoff-send`), and a Turnstile widget for your
+    hostname. The [Cloudflare API token](/docs/quickstart#before-you-start) is
+    only asked for here, and only if the Turnstile widget or DNS records still
+    need creating.
+  </Step>
+  <Step title="SES and SNS">
+    Your domain as an SES identity with Easy DKIM, a custom MAIL FROM domain
+    (`bounce.` plus your domain), a configuration set (`sendoff`), an SNS topic
+    (`sendoff-events`) that only SES can publish to, an event destination for
+    bounces, complaints and rejections, and SES's account-level suppression
+    list.
+  </Step>
+  <Step title="DNS">
+    Three DKIM `CNAME` records, an `MX` and SPF `TXT` record for the MAIL FROM
+    domain, and a DMARC record if your domain doesn't have one. Records that
+    clash with existing ones are reported, not changed. Skipped once SES has
+    verified the domain and it has DMARC.
+  </Step>
+  <Step title="Deploy">
+    Generates `.sendoff/wrangler.jsonc`, applies the database migrations, and
+    deploys the Worker to your hostname with its secrets. If the Worker already
+    has an MCP token, setup asks whether to keep it or create a new one, and
+    shows any new token straight after the deploy.
+  </Step>
+  <Step title="Wire up events">
+    Waits for your hostname to answer (a new custom domain takes a few minutes
+    to get its certificate), subscribes `/webhooks/ses` to the SNS topic, and
+    waits for the Worker to confirm it. Then it waits for SES to verify your
+    domain.
+  </Step>
+  <Step title="Production access">
+    Shows a description of your newsletter for AWS's review and submits it only
+    if you say yes. See
+    [Deliverability](/docs/guides/deliverability#production-access).
+  </Step>
+  <Step title="Finish">
+    Saves your newsletter's settings and runs the preflight checks.
+  </Step>
+</Steps>
+
+## What the Worker holds
+
+Secrets, uploaded with the deploy:
+
+| Secret | Purpose |
+| --- | --- |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | The `sendoff` IAM user's send-only key |
+| `MCP_TOKEN` | Authenticates Claude Code and Codex, and signs you in when connecting claude.ai |
+| `TOKEN_SECRET` | Signs confirmation and unsubscribe links. Generated once and never rotated, because rotating it would break every unsubscribe link already sent. |
+| `TURNSTILE_SECRET_KEY` | Verifies the signup form's Turnstile challenge |
+
+Variables, in the generated config: `PUBLIC_URL`, `SES_REGION`, `SES_CONFIGURATION_SET`, `SES_EVENTS_TOPIC_ARN` and `TURNSTILE_SITE_KEY`.
+
+## SES regions
+
+Setup offers `us-east-1`, `us-east-2`, `us-west-2`, `eu-west-1`, `eu-central-1` and `ap-southeast-2`. Production access, quotas and identities are per region, so pick one and stay in it.

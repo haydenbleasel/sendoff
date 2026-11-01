@@ -1,0 +1,63 @@
+---
+title: Troubleshooting
+description: What each preflight check means, and how to fix the ones that fail.
+sidebar:
+  icon: life-buoy
+---
+
+Ask your agent to "run doctor" at any time. `prepare_send` runs the same checks, and a failing check blocks a send. A warning doesn't block it, but is worth fixing.
+
+## Preflight checks
+
+<Accordion>
+  <AccordionItem title="Settings">
+    **Fails** when the newsletter has no settings yet. Ask the agent to set the name, sender and postal address, or run `bun run setup` again.
+  </AccordionItem>
+  <AccordionItem title="Subscribers">
+    **Fails** when nobody is active. [Import your list](/docs/guides/importing), or share your signup page.
+  </AccordionItem>
+  <AccordionItem title="SES account">
+    **Fails** when Sendoff can't reach SES at all, usually because the Worker's AWS key was deleted or the region is wrong. Run `bun run setup` again to recreate the key.
+  </AccordionItem>
+  <AccordionItem title="SES production access">
+    **Fails** while the account is in the SES sandbox, where it can only send to verified addresses. Request production access (setup offers to) and wait for AWS to approve it, which usually takes about a day.
+  </AccordionItem>
+  <AccordionItem title="SES sending">
+    **Fails** when sending is disabled for the account. Check the SES console and any email from AWS about it.
+  </AccordionItem>
+  <AccordionItem title="SES account health">
+    **Warns** when AWS has put the account on probation because of bounces or complaints, and **fails** when it has shut sending down. Look at the bounce and complaint rates in the SES console's reputation dashboard, clean the list, and reply to AWS's email.
+  </AccordionItem>
+  <AccordionItem title="Sending quota">
+    **Fails** when there are more active subscribers than emails left in today's SES quota. Wait for the quota to reset, or ask AWS for a higher one in the SES console.
+  </AccordionItem>
+  <AccordionItem title="Suppression list">
+    **Warns** when SES's account-level suppression list is off. Setup turns it on; it's a second line of defense against emailing bad addresses.
+  </AccordionItem>
+  <AccordionItem title="Sender identity">
+    **Fails** when the sender's domain isn't in SES, or isn't verified yet. Check that the DKIM records exist in DNS. Run `bun run setup` again to see which are missing.
+  </AccordionItem>
+  <AccordionItem title="Custom MAIL FROM">
+    **Warns** when the MAIL FROM domain isn't set up or verified. Without it, SPF doesn't align with your domain. Check the `MX` and `TXT` records on `bounce.<your domain>`.
+  </AccordionItem>
+  <AccordionItem title="DMARC">
+    **Fails** when your domain has no DMARC record. Gmail, Yahoo and Outlook require one for bulk mail. Add a `TXT` record at `_dmarc.<your domain>` with `v=DMARC1; p=none`.
+  </AccordionItem>
+  <AccordionItem title="Bounce and complaint tracking">
+    **Warns** when bounces and complaints won't reach Sendoff, so bad addresses won't be suppressed. **Fails** when the configuration set is missing, since sends that name it fail. Run `bun run setup` again.
+  </AccordionItem>
+</Accordion>
+
+## Common problems
+
+**Setup stopped partway.** Run `bun run setup` again. It skips everything that's done and continues from the step that failed.
+
+**The agent can't connect.** Check the URL ends in `/mcp` and the header is `Authorization: Bearer <token>`, with a space after `Bearer`. If you've lost the token, [replace it](/docs/connect#keep-the-token-safe).
+
+**A test email didn't arrive.** Check spam. While the account is in the SES sandbox, tests only reach addresses verified in SES, which your sender domain counts as. If SES refused it, the agent saw the reason when it sent the test; `doctor` shows anything else in the way.
+
+**Sending stopped.** Ask for `send_status`, which says why it stopped. Fix the cause, such as a raised quota or a re-enabled account, then ask the agent to resume.
+
+**The preview shows an old version, dimmed.** The latest edit has a Markdown problem. The preview lists it with a line number, and the agent can fix it.
+
+**"Send a test first" when preparing.** Something changed since the last test: the draft, or a setting like the accent color. Send another test of the current version.

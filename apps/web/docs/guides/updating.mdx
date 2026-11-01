@@ -1,0 +1,59 @@
+---
+title: Updating and running
+description: Ship new versions, keep your instance's files safe, and run Sendoff locally.
+sidebar:
+  icon: refresh-cw
+---
+
+Sendoff has no published package. Your copy is a clone of the repo, and your newsletter's settings live in its database, not in code, so updating is just pulling and redeploying.
+
+## Updating
+
+```bash
+git pull
+bun install
+bun run deploy
+```
+
+`bun run deploy` applies any new database migrations first, then deploys the Worker with your instance's settings. It doesn't touch your secrets, DNS or SES setup.
+
+## Your instance's files
+
+Setup records your instance in `apps/app/.sendoff/`, which git ignores:
+
+- `instance.json`: your Cloudflare account, hostname, and the IDs of the database, KV namespace, queue, Turnstile widget and SES resources
+- `wrangler.jsonc`: the deploy config generated from it
+
+`bun run deploy` needs them. If you lose them, or move to another machine, run `bun run setup` again: it finds the resources that already exist instead of creating new ones.
+
+The repo's own `apps/app/wrangler.jsonc` stays generic, so pulling updates never conflicts with your instance.
+
+## Running setup again
+
+Setup is safe to re-run at any time. It checks every step and skips what's already done. Run it to:
+
+- **Finish an interrupted setup**, such as when DNS took too long
+- **Replace the MCP token**, by choosing **create a new one** when it asks
+- **Recreate the Worker's AWS key**, if you deleted it
+
+It never rotates `TOKEN_SECRET`, which signs the unsubscribe link in every email you've ever sent. Changing it would break all of them.
+
+## Running locally
+
+```bash
+cd apps/app
+cp .dev.vars.example .dev.vars
+bun run db:migrate
+bun run dev
+```
+
+That serves the Worker at `http://localhost:8787` with a local database and Turnstile's test keys. Fill in real AWS keys in `.dev.vars` to send test emails. Open `/preview/sample` to see the layout with sample content.
+
+Other commands, from the repo root:
+
+| Command | What it does |
+| --- | --- |
+| `bun run test` | Runs the tests inside workerd, the Workers runtime |
+| `bun run types` | Typechecks |
+| `bun run check` | Lints and checks formatting |
+| `cd apps/app && bun run bench` | Measures render CPU time against the Workers limit |

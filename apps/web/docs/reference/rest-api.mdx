@@ -1,0 +1,160 @@
+---
+title: REST API
+description: Subscribe addresses from your site's server and import CSV files, with scoped API keys.
+sidebar:
+  icon: code
+---
+
+The REST API is for servers: your website's signup form, or a script. It lives under `/api/v1` on your hostname, and a machine-readable [OpenAPI 3.1](https://spec.openapis.org/oas/v3.1.0) description is at `/api/v1/openapi.json`.
+
+## Authentication
+
+Send an API key as a bearer token:
+
+```http
+Authorization: Bearer sendoff_…
+```
+
+Ask your agent to create one ("create an API key for my website's signup form"). Keys are shown once and stored hashed, so save it straight away. Each key has one or more scopes:
+
+| Scope | Allows |
+| --- | --- |
+| `subscribers:write` | `POST /subscribers`. The default, for signup forms. |
+| `subscribers:import` | `POST /subscribers/import`. It adds people without confirmation emails, so create it for one import and revoke it afterwards. |
+
+Keep keys in server-side secrets. The API sends no CORS headers, so browsers can't call it.
+
+## Subscribe an address
+
+```http
+POST /api/v1/subscribers
+```
+
+Starts double opt-in: a new address gets a confirmation email and becomes active once it's confirmed.
+
+<ParamField body="email" type="string" required>
+  The address to subscribe.
+</ParamField>
+
+<ParamField body="name" type="string">
+  An optional display name, up to 100 characters.
+</ParamField>
+
+```bash
+curl https://news.example.com/api/v1/subscribers \
+  -H "Authorization: Bearer $SENDOFF_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "jane@example.com"}'
+```
+
+It returns `202 {"status": "accepted"}` whether the address is new, pending or already subscribed, so responses can't reveal who's on your list. Addresses that bounced or complained are accepted but never emailed.
+
+| Status | Code | When |
+| --- | --- | --- |
+| `400` | `invalid_request` | The body isn't JSON, or the email is invalid |
+| `401` | `invalid_api_key` | The key is missing, wrong or revoked |
+| `403` | `insufficient_scope` | The key doesn't have `subscribers:write` |
+| `502` | `confirmation_failed` | SES couldn't send the confirmation. Safe to retry. |
+| `503` | `not_configured` | The newsletter's settings aren't set up yet |
+
+## Import subscribers
+
+```http
+POST /api/v1/subscribers/import
+```
+
+Imports a CSV export. Send the file as the request body, or as a multipart field named `file`. Up to 10 MB and 25,000 rows per request. See [Importing your list](/docs/guides/importing) for how columns are detected.
+
+<ParamField query="dryRun" type="string">
+  `true` reports what would happen without writing anything.
+</ParamField>
+
+<ParamField query="status" type="string">
+  `unsubscribed`, `bounced` or `complained`: marks every row with this status,
+  for a file that only lists suppressed addresses.
+</ParamField>
+
+```bash
+curl --data-binary @subscribers.csv \
+  -H "Authorization: Bearer $SENDOFF_IMPORT_KEY" \
+  -H "Content-Type: text/csv" \
+  "https://news.example.com/api/v1/subscribers/import?dryRun=true"
+```
+
+Use `--data-binary`, not `-d`, which strips the line breaks. The response is a report:
+
+```json
+{
+  "columns": {
+    "email": "Email Address",
+    "name": ["First Name", "Last Name"],
+    "status": ["UNSUB_TIME"]
+  },
+  "counts": {
+    "active": 5812,
+    "unsubscribed": 176,
+    "bounced": 0,
+    "complained": 0
+  },
+  "created": 5988,
+  "dryRun": true,
+  "invalid": [],
+  "invalidCount": 0,
+  "skipped": {
+    "noEmail": 0,
+    "unconfirmed": 12,
+    "unrecognized": 0,
+    "unrecognizedValues": []
+  },
+  "suppressed": 0,
+  "total": 6000,
+  "unchanged": 0
+}
+```
+
+<ResponseField name="columns" type="object">
+  The headers the email, name and status were read from.
+</ResponseField>
+
+<ResponseField name="counts" type="object">
+  Rows by the status they're imported with.
+</ResponseField>
+
+<ResponseField name="created" type="integer">
+  New subscribers.
+</ResponseField>
+
+<ResponseField name="suppressed" type="integer">
+  Existing subscribers newly unsubscribed, bounced or complained by this file.
+</ResponseField>
+
+<ResponseField name="unchanged" type="integer">
+  Addresses already on the list. Imports never reactivate anyone.
+</ResponseField>
+
+<ResponseField name="skipped" type="object">
+  Rows left out: `noEmail`, `unconfirmed` (pending or inactive), and
+  `unrecognized`, with the most common unrecognized status values in
+  `unrecognizedValues`.
+</ResponseField>
+
+<ResponseField name="invalid" type="string[]">
+  Up to 20 invalid addresses; `invalidCount` has the total.
+</ResponseField>
+
+| Status | Code | When |
+| --- | --- | --- |
+| `400` | `invalid_request` | No email column, too many rows, or a bad query value |
+| `401` | `invalid_api_key` | The key is missing, wrong or revoked |
+| `403` | `insufficient_scope` | The key doesn't have `subscribers:import` |
+| `413` | `too_large` | The file is over 10 MB |
+
+## Errors
+
+Every error has the same shape:
+
+```json
+{ "error": { "code": "invalid_request", "message": "…" } }
+```
+
+The `message` is written for people; branch on `code`.

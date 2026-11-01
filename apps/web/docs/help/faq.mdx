@@ -1,0 +1,56 @@
+---
+title: FAQ
+description: Why Sendoff is built the way it is, and what it does and doesn't do.
+sidebar:
+  icon: circle-help
+---
+
+<Accordion>
+  <AccordionItem title="Why Amazon SES, and not Cloudflare's own email service?">
+    Cloudflare's Email Service is for transactional email, like receipts and
+    password resets, so it doesn't allow newsletters. SES does, and it's about
+    as cheap as sending gets: $0.10 per thousand emails.
+  </AccordionItem>
+  <AccordionItem title="Why does it need Workers Paid?">
+    Rendering an email takes about 30 ms of CPU when a Worker starts cold, and
+    the free plan allows 10 ms per request. Sendoff renders each issue once and
+    fills in each person's unsubscribe link, so sending stays cheap, but the
+    render itself needs the headroom.
+  </AccordionItem>
+  <AccordionItem title="Can I use it without an agent?">
+    Mostly no, on purpose. There's no admin dashboard: you draft, send and
+    manage subscribers by talking to Claude or Codex. Any MCP client works, and
+    the [REST API](/docs/reference/rest-api) covers signups and imports from
+    your own code.
+  </AccordionItem>
+  <AccordionItem title="Can the agent send without asking me?">
+    Sendoff makes it hard to send by accident. A send needs a test of the exact
+    version, then a prepare step that returns a summary and a confirmation that
+    expires in 15 minutes, and the agent is told to confirm only after you
+    explicitly say to send. Keep the MCP token private: anyone with it can do
+    what your agent can.
+  </AccordionItem>
+  <AccordionItem title="Does it track opens and clicks?">
+    No. Apple Mail Privacy Protection makes open rates unreliable, and tracking
+    can count against you with spam filters. `send_status` shows what's
+    dependable: bounces, complaints and unsubscribes.
+  </AccordionItem>
+  <AccordionItem title="Can I customize the email design?">
+    You set the name or logo, the accent color, the footer links and the postal
+    address. The layout itself is fixed and built to render consistently across
+    Gmail, Apple Mail, Outlook and dark mode, so there's no template to
+    maintain.
+  </AccordionItem>
+  <AccordionItem title="Can I run more than one newsletter?">
+    One deployment runs one newsletter with one list. There are no segments or
+    tags.
+  </AccordionItem>
+  <AccordionItem title="Where do my subscribers' details live?">
+    In a D1 database in your Cloudflare account. Nothing goes to a third party
+    except what SES needs to deliver each email. To leave, ask the agent to list
+    your subscribers, or export the database with `wrangler d1 export`.
+  </AccordionItem>
+  <AccordionItem title="Is there a web archive of past issues?">
+    Not yet. A web archive, RSS, image uploads and per-issue stats are planned.
+  </AccordionItem>
+</Accordion>

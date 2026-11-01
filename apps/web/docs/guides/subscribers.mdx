@@ -1,0 +1,84 @@
+---
+title: Subscribers
+description: How people join and leave, how bounces and complaints are handled, and how to add a signup form to your own site.
+sidebar:
+  icon: users
+---
+
+Every subscriber has one of five statuses:
+
+| Status | Meaning | Gets email |
+| --- | --- | --- |
+| `pending` | Signed up, hasn't clicked the confirmation link yet | No |
+| `active` | Confirmed, or imported from another provider | Yes |
+| `unsubscribed` | Unsubscribed. They can resubscribe from the same link. | No |
+| `bounced` | Their address hard-bounced | Never again |
+| `complained` | They marked an email as spam | Never again |
+
+Ask the agent "how many subscribers do I have?" or "is jane@example.com subscribed?" to see counts or look someone up.
+
+## The signup page
+
+Your hostname's home page, like `https://news.example.com`, is a signup form showing your newsletter's name and description. Link to it from your site and social profiles.
+
+It uses double opt-in: a new address gets a confirmation email and becomes active only after clicking the link in it. Cloudflare Turnstile and a hidden field keep bots out. The form always says "check your inbox", whether the address is new, pending or already subscribed, so it can't be used to find out who's on your list. A confirmation goes to the same address at most once every 10 minutes.
+
+## A form on your own site
+
+To keep your existing signup form, have your site's server call Sendoff's [REST API](/docs/reference/rest-api). Ask the agent for a key:
+
+> Create an API key for my website's signup form.
+
+Store it as a server-side secret, like `SENDOFF_API_KEY`, then subscribe addresses from your server. In a Next.js server action:
+
+```ts title="app/actions.ts"
+"use server";
+
+export const subscribe = async (email: string) => {
+  const response = await fetch("https://news.example.com/api/v1/subscribers", {
+    body: JSON.stringify({ email }),
+    headers: {
+      Authorization: `Bearer ${process.env.SENDOFF_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+
+  if (!response.ok) {
+    throw new Error("Couldn't subscribe. Please try again.");
+  }
+};
+```
+
+The API does double opt-in too, and returns `202` for every valid address, just like the signup page. Never put the key in browser code: the API sends no CORS headers, so browsers can't call it anyway.
+
+## Adding someone yourself
+
+> Add jane@example.com to the newsletter.
+
+The agent calls `add_subscriber`, which sends Jane a confirmation email. Only if someone asked you directly to be added should the agent skip the confirmation. Nobody who unsubscribed, bounced or complained is re-added this way. People who unsubscribed can sign up again from the signup page; bounced and complained addresses can't.
+
+To bring over a whole list, see [Importing your list](/docs/guides/importing).
+
+## Unsubscribes
+
+There are two ways out, and both take effect immediately:
+
+- **The link in the footer** opens a page with an unsubscribe button. The link itself doesn't unsubscribe anyone, because email security scanners open every link in an email. The same page lets people resubscribe if they clicked by mistake.
+- **The one-click unsubscribe** that Gmail, Apple Mail and Yahoo show near the top of the email works without opening a page.
+
+If someone replies asking to be removed, ask the agent to unsubscribe them.
+
+## Bounces and complaints
+
+SES reports bounces and complaints to Sendoff through an SNS topic that setup wires up:
+
+- A **hard bounce** (the address doesn't exist) marks the subscriber `bounced`.
+- A **complaint** (marked as spam) marks them `complained`.
+- A **soft bounce** (a full mailbox, a temporary failure) is logged, and the subscriber stays active.
+
+Bounced and complained subscribers are never emailed again. SES's account-wide suppression list, which setup turns on, blocks the same addresses as a second line of defense.
+
+## Replies
+
+Replies go to your reply-to address, or to the sender if you haven't set one. They're ordinary email: Sendoff doesn't receive or store them.

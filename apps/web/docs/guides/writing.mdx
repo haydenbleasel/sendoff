@@ -1,0 +1,109 @@
+---
+title: Writing issues
+description: Draft with your agent, watch the live preview, and use the Markdown the email layout supports.
+sidebar:
+  icon: pen-line
+---
+
+An issue is a subject, an optional preheader and a Markdown body. Sendoff pours the body into a fixed layout with your masthead, footer, unsubscribe link and postal address, so the agent only ever writes the middle.
+
+## The loop
+
+<Steps>
+  <Step title="Ask for a draft">
+    Give the agent your notes, links or an outline: "Draft the next issue. Lead
+    with the launch, then three links I've been reading." It calls
+    `create_draft` and shares a preview link.
+  </Step>
+  <Step title="Open the preview">
+    Keep it open beside the conversation. It updates about a second and a half
+    after each change.
+  </Step>
+  <Step title="Ask for changes">
+    "Shorter intro." "Swap the second and third links." "Add a button to the
+    launch post." The agent edits with exact find-and-replace, so the parts you
+    didn't mention stay exactly as they were.
+  </Step>
+</Steps>
+
+Drafts are saved on every change, so you can stop and pick up later, from the same agent or another one. Ask "what drafts do I have?" to find them.
+
+## The preview
+
+The preview page shows the email as it'll arrive, with toggles for:
+
+- **Email or plain text.** Every email includes a plain-text version, generated from the Markdown rather than scraped from the HTML.
+- **Desktop or mobile** width.
+- **Light or dark** mode. Apple Mail and others that support dark mode get the dark version; other clients show the light one.
+
+If the Markdown has a problem, the preview lists it with a line number and keeps showing the last version that worked, dimmed. The agent gets the same list, so it can fix the draft itself.
+
+:::note
+
+The preview link is the only access check: anyone with it can read the draft. Share it the way you'd share an unlisted doc.
+
+:::
+
+## Subject and preheader
+
+The subject is required. The preheader is the preview text most inboxes show after the subject; without one, inboxes show the start of the body. Both are separate from the body, so don't put them in the Markdown. Ask for changes the same way: "Give me five subject options", then "Use the third."
+
+## Markdown
+
+Sendoff supports a deliberately small subset of Markdown, chosen to render consistently in Gmail, Apple Mail and Outlook:
+
+````md
+## A section heading
+
+A paragraph with **bold**, _italic_, `inline code` and a [link](https://example.com).
+
+- A bulleted list
+- With a second item
+
+1. A numbered list
+2. With a second item
+
+> A quote.
+
+![A screenshot of the new dashboard](https://example.com/dashboard.png)
+
+::button[Read the launch post]{href="https://example.com/launch"}
+
+:::callout[Heads up]
+
+Callouts stand out from the text, tinted with your accent color.
+
+:::
+
+```js
+console.log("Code blocks keep their formatting.");
+```
+
+---
+````
+
+| Supported                                       | Not supported         |
+| ----------------------------------------------- | --------------------- |
+| `#`, `##` and `###` headings                    | `####` and deeper     |
+| Paragraphs, bold, italic, inline code           | Raw HTML              |
+| Bulleted and numbered lists, blockquotes, `---` | Tables, footnotes     |
+| Links to `https`, `http` and `mailto`           | Reference-style links |
+| Images from `https` URLs, with alt text         | Frontmatter           |
+| Code blocks, buttons, callouts                  |                       |
+
+A few details:
+
+- **Images** need alt text, and an image on a line of its own spans the full width. Host images anywhere public over HTTPS; Sendoff doesn't host them yet.
+- **Buttons** go on a line of their own: `::button[Label]{href="https://…"}`.
+- **Callouts** start with `:::callout` (with an optional title in brackets) and end with a line containing just `:::`.
+
+## Look and feel
+
+The layout is fixed, but your settings fill it in. Ask the agent to change any of them:
+
+- **Name** in the masthead, or a **logo** in its place: "Use my logo at https://example.com/logo.png, 120 by 32", with an optional dark-mode version.
+- **Accent color** for links, buttons and callouts: "Make the accent #ff0066". Sendoff adjusts it where needed so text stays readable, in light and dark mode.
+- **Footer links**: "Add my GitHub and X links."
+- **Description** for the signup page.
+
+Changes show in the preview straight away. See [Settings](/docs/reference/settings) for every field.

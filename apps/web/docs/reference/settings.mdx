@@ -1,0 +1,70 @@
+---
+title: Settings
+description: The fields that fill in Sendoff's email layout and signup page.
+sidebar:
+  icon: settings
+---
+
+Settings live in Sendoff's database, not in code, so you change them by asking your agent ("make the accent color #ff0066", "add my GitHub link"), and updating Sendoff never overwrites them. Setup fills in the first few. Changes show in the preview straight away and apply to every email sent afterwards.
+
+```json
+{
+  "name": "The Weekly Thing",
+  "description": "A short letter about building things, every few months.",
+  "from": { "name": "Jane Doe", "email": "hello@example.com" },
+  "replyTo": "jane@example.com",
+  "address": "1 Example St, Sydney NSW 2000, Australia",
+  "accent": "#ff0066",
+  "logo": {
+    "url": "https://example.com/logo.png",
+    "darkUrl": "https://example.com/logo-dark.png",
+    "width": 120,
+    "height": 32
+  },
+  "links": [
+    { "label": "Website", "url": "https://example.com" },
+    { "label": "X", "url": "https://x.com/example" }
+  ]
+}
+```
+
+<ResponseField name="name" type="string" required>
+  The newsletter's name, shown in the masthead (unless there's a logo), the
+  footer and the signup page.
+</ResponseField>
+
+<ResponseField name="from" type="object" required>
+  The sender's `name` and `email`. The email's domain must be verified in SES
+  before you can send; setup does this for the address you give it.
+</ResponseField>
+
+<ResponseField name="address" type="string" required>
+  The postal address in every footer. Anti-spam laws require one: in the US, a
+  street address, PO box or private mailbox.
+</ResponseField>
+
+<ResponseField name="replyTo" type="string">
+  Where replies go, if not the sender. Tests go here by default too.
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  One or two sentences for the signup page.
+</ResponseField>
+
+<ResponseField name="accent" type="string">
+  A `#rrggbb` color for links, buttons and callouts. Where text in it would be
+  hard to read, Sendoff adjusts it to meet WCAG AA contrast, in light and dark
+  mode.
+</ResponseField>
+
+<ResponseField name="logo" type="object">
+  An `https` image `url` with its display `width` and `height` in pixels, which
+  email clients need up front. `darkUrl` is an optional version for dark mode.
+  Without a logo, the masthead shows the name.
+</ResponseField>
+
+<ResponseField name="links" type="object[]">
+  Footer links, each a `label` and `url`. Setting them replaces the whole list.
+</ResponseField>
+
+`null` clears an optional field, such as `"logo": null` to go back to showing the name.

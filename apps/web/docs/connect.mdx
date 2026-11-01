@@ -1,0 +1,56 @@
+---
+title: Connect your agent
+description: Add Sendoff's MCP server to Claude Code, Codex, claude.ai or Claude Desktop.
+sidebar:
+  icon: plug
+---
+
+Sendoff's MCP server is at `/mcp` on your hostname, like `https://news.example.com/mcp`. Claude Code and Codex send the MCP token from setup with every request. claude.ai and Claude Desktop sign in with OAuth instead, and you approve each connection with the same token.
+
+<Tabs>
+  <Tab title="Claude Code">
+
+```bash
+claude mcp add --transport http sendoff https://news.example.com/mcp \
+  --header "Authorization: Bearer <your MCP token>"
+```
+
+Add `--scope user` to use Sendoff from any project. Restart Claude Code, then check `/mcp` lists `sendoff` as connected.
+
+  </Tab>
+  <Tab title="Codex">
+
+Add a custom MCP server:
+
+- **Type:** Streamable HTTP
+- **URL:** `https://news.example.com/mcp`
+- **Headers:** `Authorization` with the value `Bearer <your MCP token>`
+
+Leave **Bearer token env var** empty: it takes the name of an environment variable, not the token itself.
+
+  </Tab>
+  <Tab title="claude.ai and Claude Desktop">
+
+1. Open **Settings › Connectors** and choose **Add custom connector**.
+2. Enter `https://news.example.com/mcp` as the URL.
+3. When Claude sends you to Sendoff to sign in, paste your MCP token.
+4. Check the app's name on the consent page and choose **Allow**.
+
+Sendoff asks for consent on every new connection, so only you can connect an app. The sign-in lasts 15 minutes; the connection itself stays signed in and refreshes on its own.
+
+  </Tab>
+</Tabs>
+
+## Check it works
+
+Ask your agent:
+
+> What's the state of my Sendoff newsletter?
+
+It should call `get_settings` and `doctor` and tell you what's set up. The agent also gets Sendoff's instructions when it connects: how drafting works, what Markdown is supported, and that it must never send without your explicit go-ahead.
+
+## Keep the token safe
+
+The MCP token can do anything an agent can: edit drafts, change settings, manage subscribers and send to your list. Agents are told to send only when you say so, but the token itself doesn't check. Treat it like a password.
+
+To replace it, run `bun run setup` again and choose **create a new one** when it asks about the MCP token. The old token stops working as soon as the new one is deployed, so update Claude Code and Codex afterwards. Existing claude.ai and Claude Desktop connections keep working; the token is only used to sign in.

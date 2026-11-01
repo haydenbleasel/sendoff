@@ -1,0 +1,77 @@
+---
+title: Importing your list
+description: Bring subscribers over from any provider's CSV export, keeping unsubscribes, bounces and complaints.
+sidebar:
+  icon: upload
+---
+
+Every newsletter provider can export its subscribers as a CSV. Sendoff reads that file, works out which column is which, and shows you exactly what it'll do before it writes anything.
+
+## Export everything
+
+Export your **whole** list, not just active subscribers: unsubscribes, bounces and spam complaints too. Importing them is what stops Sendoff from emailing people who already asked to leave, which is the one mistake an import mustn't make.
+
+Some providers put each status in its own file, or leave bounces out of the main export. Import each file; Sendoff merges them, and an unsubscribe or bounce in any file wins.
+
+## Import
+
+Give the agent the file and ask:
+
+> Import my subscribers from ~/Downloads/subscribers.csv into Sendoff.
+
+It runs a **dry run** first and shows you the report:
+
+- **The columns it used** for the email, the name and the status
+- **How many rows** will be active, unsubscribed, bounced and complained
+- **What it skipped**, and why
+- **What would change**: new subscribers, existing subscribers who'd be suppressed, and addresses already there
+
+Check the report, then tell the agent to import for real.
+
+### Big files
+
+For a file of more than about a thousand rows, the agent doesn't copy the addresses into the conversation, which would be slow and could introduce typos. If it can run commands (Claude Code, Codex), it creates a temporary API key with the `subscribers:import` scope, uploads the file with `curl`, and revokes the key when it's done. You can run the same command yourself:
+
+```bash
+curl --data-binary @subscribers.csv \
+  -H "Authorization: Bearer $SENDOFF_IMPORT_KEY" \
+  -H "Content-Type: text/csv" \
+  "https://news.example.com/api/v1/subscribers/import?dryRun=true"
+```
+
+Drop `dryRun=true` to import. Each import takes up to 25,000 rows and 10 MB; split bigger files. See the [REST API](/docs/reference/rest-api#import-subscribers) for the full response.
+
+## How columns are found
+
+Sendoff matches columns by their header, ignoring case, spaces and punctuation, so `Email Address`, `email_address` and `EMAIL` are all the same.
+
+| Field | Headers it recognizes |
+| --- | --- |
+| Email | `email`, `email address`, `e-mail`, `mail`, or any other header containing "email". A file with no header row works too, if it's just a list of addresses. |
+| Name | `name`, `full name`, `display name`, or `first name` and `last name` together |
+| Status | `status`, `state`, `subscription status`, `subscriber type` and similar |
+| Flags | `unsubscribed`, `bounced`, `complained`, `email disabled`, `do not email`, and timestamps like `unsubscribed at` or Mailchimp's `UNSUB_TIME` and `CLEAN_TIME`. Any value other than false or empty marks the row. |
+| Opt-in flags | `subscribed`, `opted in`, `accepts marketing`. False marks the row unsubscribed. |
+
+Status values it understands include active, subscribed and confirmed; unsubscribed, cancelled and removed; bounced, cleaned and invalid; complained and spam. When a row has more than one signal, the most serious wins: complained, then bounced, then unsubscribed, then active.
+
+Commas, semicolons and tabs all work as separators, and quoted values can contain commas and line breaks.
+
+## What gets skipped
+
+Sendoff would rather leave someone out than email them by mistake, so it skips and reports:
+
+- **Unconfirmed rows**, marked pending, unconfirmed or inactive. They never finished signing up.
+- **Statuses it doesn't recognize**, listed with how many rows had each one. If a value means something specific, like "lapsed", edit the column to a status Sendoff knows and import again.
+- **Rows without an email**, and **invalid addresses**.
+
+If it can't find an email column at all, it lists the headers it saw. Rename the right one to `email` and try again.
+
+## What imports never do
+
+- **Send email.** Imported active subscribers count as already confirmed and get no confirmation email. Only import people who signed up for your newsletter.
+- **Reactivate anyone.** An import can unsubscribe or suppress an existing subscriber, but it never moves someone back to active.
+
+## A file of only unsubscribes or bounces
+
+Some exports are just a list of suppressed addresses, with no status column. Tell the agent what the file is ("these are all bounces") and it imports every row with that status. With `curl`, add `&status=bounced` (or `unsubscribed`, or `complained`).
