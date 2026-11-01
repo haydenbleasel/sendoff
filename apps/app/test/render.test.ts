@@ -13,6 +13,14 @@ const FULL_WIDTH = /[;"]width:100%/u;
 const COLUMN_PADDING_ON_CELL = /<td[^>]*style="[^"]*padding:48px 24px 56px/u;
 const COLUMN_PADDING_ON_TABLE = /<table[^>]*style="[^"]*padding:48px/u;
 
+const QUOTE_ON_CELL =
+  /<td[^>]*style="[^"]*border-left:3px solid[^"]*padding-left:16px/u;
+
+const CODE_ON_CELL = /<td[^>]*style="[^"]*padding:14px 16px/u;
+
+const PADDED_BLOCK_ELEMENT =
+  /<(?:blockquote|pre|table)[^>]*style="[^"]*padding/u;
+
 const render = async (body: string, settings = sampleSettings) => {
   const result = await renderIssue(
     { body, preheader: "Preheader text", subject: "Subject line" },
@@ -111,6 +119,16 @@ describe("Outlook for Windows", () => {
 
     expect(html).toMatch(COLUMN_PADDING_ON_CELL);
     expect(html).not.toMatch(COLUMN_PADDING_ON_TABLE);
+  });
+
+  it("gives quotes and code blocks their bar, background and padding on a cell too", async () => {
+    const { html } = await render("> Quoted\n\n```\nconst a = 1;\n```");
+
+    expect(html).toMatch(QUOTE_ON_CELL);
+    expect(html).toMatch(CODE_ON_CELL);
+    expect(html).not.toMatch(PADDED_BLOCK_ELEMENT);
+    expect(html).toContain("<blockquote");
+    expect(html).toContain("const a = 1;");
   });
 });
 

@@ -311,44 +311,58 @@ const renderList = (node: List, theme: Theme, placement: Placement) => {
   );
 };
 
+// Outlook for Windows only pads table cells, so quotes and code blocks put
+// their bar, background and padding on one (as callouts do), and keep the
+// <blockquote> or <pre> inside for its meaning.
+
 const renderBlockquote = (
   node: Blockquote,
   theme: Theme,
   placement: Placement
 ) => (
-  <blockquote
-    className={darkClass.border}
-    key={keyOf(node)}
-    style={{
-      ...spacing(placement, 0),
-      borderLeft: `3px solid ${light.border}`,
-      paddingLeft: 16,
-    }}
-  >
-    {/* eslint-disable-next-line no-use-before-define -- blockquotes nest blocks */}
-    {renderBlocks(node.children, theme)}
-  </blockquote>
+  <Section key={keyOf(node)} style={spacing(placement, 0)}>
+    <Row>
+      <Column
+        className={darkClass.border}
+        style={{ borderLeft: `3px solid ${light.border}`, paddingLeft: 16 }}
+      >
+        <blockquote style={{ margin: 0 }}>
+          {/* eslint-disable-next-line no-use-before-define -- blockquotes nest blocks */}
+          {renderBlocks(node.children, theme)}
+        </blockquote>
+      </Column>
+    </Row>
+  </Section>
 );
 
 const renderCode = (node: Code, placement: Placement) => (
-  <pre
-    className={`${darkClass.subtle} ${darkClass.text}`}
-    key={keyOf(node)}
-    style={{
-      ...spacing(placement, 0),
-      backgroundColor: light.subtle,
-      borderRadius: RADIUS,
-      color: light.text,
-      fontFamily: fonts.mono,
-      fontSize: 13,
-      lineHeight: "20px",
-      overflowWrap: "anywhere",
-      padding: "14px 16px",
-      whiteSpace: "pre-wrap",
-    }}
-  >
-    <code>{node.value}</code>
-  </pre>
+  <Section key={keyOf(node)} style={spacing(placement, 0)}>
+    <Row>
+      <Column
+        className={darkClass.subtle}
+        style={{
+          backgroundColor: light.subtle,
+          borderRadius: RADIUS,
+          padding: "14px 16px",
+        }}
+      >
+        <pre
+          className={darkClass.text}
+          style={{
+            color: light.text,
+            fontFamily: fonts.mono,
+            fontSize: 13,
+            lineHeight: "20px",
+            margin: 0,
+            overflowWrap: "anywhere",
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          <code>{node.value}</code>
+        </pre>
+      </Column>
+    </Row>
+  </Section>
 );
 
 export const buttonStyle = (theme: Theme): CSSProperties => ({
