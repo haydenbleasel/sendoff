@@ -1172,6 +1172,11 @@ const main = async () => {
   const accountId = await cloudflareAccount(draft);
   save({ accountId });
 
+  // Every Wrangler command from here on uses the chosen account. With its
+  // output piped, Wrangler can't ask, so with several accounts it would
+  // refuse, or use the one it last cached.
+  process.env.CLOUDFLARE_ACCOUNT_ID = accountId;
+
   const newsletter = await newsletterDetails(draft.newsletter);
 
   save({ newsletter });

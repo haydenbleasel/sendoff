@@ -55,6 +55,8 @@ export const deployConfig = (
 
   return {
     ...rest,
+    // So `bun run deploy` reaches this account even when the login has several.
+    account_id: instance.accountId,
     d1_databases: [
       {
         binding: "DB",

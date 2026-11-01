@@ -82,6 +82,7 @@ describe("deployConfig", () => {
     );
 
     expect(config).toMatchObject({
+      account_id: "acct",
       compatibility_date: "2026-10-01",
       d1_databases: [
         {
