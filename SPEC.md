@@ -262,7 +262,7 @@ Settings `tracking: { clicks: true, opens: false }` by default, snapshotted onto
 
 ## Deliverability defaults (all on, not configurable away)
 
-- DKIM (SES Easy DKIM), a custom MAIL FROM subdomain for SPF alignment, and DMARC (`p=none` with `rua` reporting to start).
+- DKIM (SES Easy DKIM), a custom MAIL FROM subdomain for SPF alignment, and DMARC (`p=none` to start). Setup adds one only when neither the sender's domain nor a parent domain has a DMARC record.
 - RFC 8058 one-click unsubscribe headers and a visible unsubscribe link in every email.
 - The postal address is optional, because US (CAN-SPAM) and Canadian (CASL) law require it only in commercial email. With one, it's in every footer. Without one, `doctor` warns and `prepare_send` runs the promotion check (see [Send pipeline](#send-pipeline)).
 - Double opt-in for form signups, and Turnstile on the form.

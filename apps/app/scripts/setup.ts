@@ -76,6 +76,9 @@ const POLL_ATTEMPTS = 24;
 /** Certificates for a new custom domain can take a few minutes. */
 const REACHABLE_ATTEMPTS = 60;
 
+/** example.com: DMARC lookups stop before a bare TLD. */
+const MIN_DOMAIN_LABELS = 2;
+
 const REGIONS = [
   "us-east-1",
   "us-east-2",
@@ -705,10 +708,27 @@ const lookup = async (name: string, type: "CNAME" | "TXT"): Promise<string> => {
   return body.toLowerCase();
 };
 
+/**
+ * DMARC on the domain or a parent, from the most specific up (as doctor
+ * checks it): mail from a subdomain falls back to its parent's policy, and a
+ * new `p=none` record on the subdomain would weaken a stricter parent's.
+ */
 const hasDmarc = async (domain: string): Promise<boolean> => {
-  const records = await lookup(`_dmarc.${domain}`, "TXT");
+  const labels = domain.split(".");
 
-  return records.includes("v=dmarc1");
+  for (let start = 0; labels.length - start >= MIN_DOMAIN_LABELS; start += 1) {
+    // oxlint-disable-next-line no-await-in-loop -- most specific first, and usually one lookup
+    const records = await lookup(
+      `_dmarc.${labels.slice(start).join(".")}`,
+      "TXT"
+    );
+
+    if (records.includes("v=dmarc1")) {
+      return true;
+    }
+  }
+
+  return false;
 };
 
 const hasCname = async (hostname: string, target: string): Promise<boolean> => {
