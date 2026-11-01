@@ -203,7 +203,7 @@ export const registerDraftTools = (
     "set_draft_meta",
     {
       description:
-        "Change a draft's subject, preheader (null clears it) or slug (used in its web address later).",
+        "Change a draft's subject, preheader (null clears it) or slug (used in its web address later). An imported issue's slug can change too; its subject and preheader stay as they were sent.",
       inputSchema: z.object({
         issue: issueRef,
         preheader: z.string().max(MAX_SUBJECT).nullable().optional(),

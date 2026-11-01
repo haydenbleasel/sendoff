@@ -148,14 +148,17 @@ export const requireIssue = async (
   return issue;
 };
 
-const requireDraft = async (db: Database, ref: string): Promise<Issue> => {
-  const issue = await requireIssue(db, ref);
-
+const assertDraft = (issue: Issue): void => {
   if (issue.status !== "draft") {
     throw new IssueError(
       `"${issue.subject}" is ${issue.status}, so it can't be edited. Create a new draft instead.`
     );
   }
+};
+
+const requireDraft = async (db: Database, ref: string): Promise<Issue> => {
+  const issue = await requireIssue(db, ref);
+  assertDraft(issue);
 
   return issue;
 };
@@ -348,7 +351,22 @@ export const setDraftMeta = async (
   },
   now: Date = new Date()
 ): Promise<Issue> => {
-  const issue = await requireDraft(db, ref);
+  const issue = await requireIssue(db, ref);
+
+  // An imported issue keeps its subject and preview text as they were sent,
+  // but its slug (its future web address) can still be tidied.
+  const imported = issue.importedAt !== null;
+
+  if (imported && (subject !== undefined || preheader !== undefined)) {
+    throw new IssueError(
+      `"${issue.subject}" was imported, so only its slug can change. Its subject and preview text stay as they were sent.`
+    );
+  }
+
+  if (!imported) {
+    assertDraft(issue);
+  }
+
   const changes: Partial<Pick<Issue, "preheader" | "slug" | "subject">> = {};
 
   if (subject !== undefined) {
@@ -377,6 +395,17 @@ export const setDraftMeta = async (
     }
 
     changes.slug = slug;
+  }
+
+  if (imported) {
+    // No version bump or updated_at change: it sits at its send date.
+    const [renamed] = await db
+      .update(issues)
+      .set(changes)
+      .where(eq(issues.id, issue.id))
+      .returning();
+
+    return renamed ?? issue;
   }
 
   return await saveContent(db, issue, changes, now);

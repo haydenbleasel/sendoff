@@ -12,7 +12,7 @@ import {
   importedIssueSchema,
   parseSentAt,
 } from "../src/importers/issues";
-import { createDraft, deleteDraft } from "../src/issues";
+import { createDraft, deleteDraft, setDraftMeta } from "../src/issues";
 import { sendStatus } from "../src/sending";
 import { issueReport } from "../src/stats";
 import { createToken } from "../src/tokens";
@@ -310,5 +310,29 @@ describe("POST /api/v1/issues/import", () => {
     expect(responses.map((response) => response.status)).toStrictEqual([
       400, 400, 400,
     ]);
+  });
+});
+
+describe("renaming an imported issue", () => {
+  it("changes only the slug, and keeps it at its send date", async () => {
+    const { issue } = await importIssue(db(), input());
+
+    const renamed = await setDraftMeta(db(), issue.id, {
+      slug: "spring-2025",
+    });
+
+    expect(renamed).toMatchObject({
+      slug: "spring-2025",
+      subject: "Spring update",
+      version: issue.version,
+    });
+    expect(renamed.updatedAt.toISOString()).toBe(SENT_AT);
+
+    await expect(
+      setDraftMeta(db(), issue.id, { subject: "Renamed" })
+    ).rejects.toThrow("only its slug can change");
+    await expect(
+      setDraftMeta(db(), issue.id, { slug: "Not OK" })
+    ).rejects.toThrow("isn't a valid slug");
   });
 });

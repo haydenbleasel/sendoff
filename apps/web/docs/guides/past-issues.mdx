@@ -25,6 +25,8 @@ If the agent can run commands (Claude Code, Codex), it creates a temporary Sendo
 
 Importing the same subject and send date again replaces the earlier copy, so it's safe to run again. To start over, ask the agent to delete an imported issue.
 
+Each issue gets a slug from its subject, which will be its web address once there's an archive. To tidy one, ask the agent: "make the slug for the Ultracite v5 issue just ultracite-v5". The subject and preview text stay as they were sent.
+
 ## Merge tags
 
 Your old provider filled in placeholders like `{{{contact.first_name|there}}}` or `*|FNAME|*` for each reader. They're kept as they were, so they'd show in the archived copy, and the import lists any it finds. Ask the agent to replace them with what readers saw, such as the fallback after the `|`, and import again.

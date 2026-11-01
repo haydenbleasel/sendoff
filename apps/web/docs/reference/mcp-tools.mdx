@@ -22,7 +22,7 @@ You don't call these yourself: your agent picks them from what you ask. This pag
 | `create_draft` | Starts an issue from a subject, optional preheader and Markdown body, and returns the live preview URL. |
 | `get_draft` | Returns an issue's subject, preheader, body, version and preview URL. For an imported issue, it returns the plain-text version. |
 | `edit_draft` | Applies exact find-and-replace edits, in order and all or nothing, or replaces the whole body. Takes an optional `expectedVersion` so two agents can't overwrite each other. |
-| `set_draft_meta` | Changes the subject, preheader or slug. |
+| `set_draft_meta` | Changes the subject, preheader or slug. An imported issue's slug can change too. |
 | `list_issues` | Lists issues, most recently updated first, optionally by status (`draft`, `sending`, `sent`, `cancelled`). |
 | `preview_draft` | Returns the preview URL and the plain-text version, so the agent can proofread. |
 | `delete_draft` | Deletes a draft, or an imported issue. Issues sent with Sendoff can't be deleted. |
