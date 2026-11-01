@@ -22,4 +22,4 @@ Workflow:
 
 ${MARKDOWN_GUIDE}
 
-Subscribers: search_subscribers shows counts by status. To move a list from another provider, ask for its CSV export (including unsubscribes and bounces) and use import_csv, with dryRun first. Imports never reactivate anyone who unsubscribed, bounced or complained. Never add someone as active without their consent: add_subscriber sends a confirmation email unless the person explicitly asked to be added.`;
+Subscribers: search_subscribers shows counts by status. To move a list from another provider, ask for its CSV export (including unsubscribes and bounces) and use import_csv: run a dry run, show the person the report, and import only after they confirm. Imports never reactivate anyone who unsubscribed, bounced or complained. Never add someone as active without their consent: add_subscriber sends a confirmation email unless the person explicitly asked to be added.`;

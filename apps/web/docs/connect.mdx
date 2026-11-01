@@ -11,11 +11,11 @@ Sendoff's MCP server is at `/mcp` on your hostname, like `https://news.example.c
   <Tab title="Claude Code">
 
 ```bash
-claude mcp add --transport http sendoff https://news.example.com/mcp \
+claude mcp add --scope user --transport http sendoff https://news.example.com/mcp \
   --header "Authorization: Bearer <your MCP token>"
 ```
 
-Add `--scope user` to use Sendoff from any project. Restart Claude Code, then check `/mcp` lists `sendoff` as connected.
+`--scope user` makes Sendoff available wherever you start Claude Code. Without it, Claude Code only connects Sendoff in the folder you ran the command from. Restart Claude Code, then check `/mcp` lists `sendoff` as connected.
 
   </Tab>
   <Tab title="Codex">
