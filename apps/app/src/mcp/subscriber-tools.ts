@@ -112,10 +112,17 @@ export const registerSubscriberTools = (
         const existing = await findSubscriberByEmail(db, normalized);
 
         if (existing && existing.status !== "pending") {
+          // Only an unsubscribe can be undone: the subscribe page won't email
+          // an address that bounced or complained.
+          const again =
+            existing.status === "unsubscribed"
+              ? " They can sign up again from the subscribe page."
+              : "";
+
           return result(
             existing.status === "active"
               ? `${normalized} is already subscribed.`
-              : `${normalized} is ${existing.status}, so they won't be re-added. They can sign up again from the subscribe page.`
+              : `${normalized} is ${existing.status}, so they won't be re-added.${again}`
           );
         }
 
