@@ -1,0 +1,23 @@
+---
+// A compared service's mark (from logos.ts), drawn in the current text colour.
+import type { ProviderId } from "./prices.ts";
+import { logos } from "./logos.ts";
+
+interface Props {
+  id: ProviderId;
+  size?: number;
+}
+
+const { id, size = 16 } = Astro.props;
+const logo = logos[id];
+---
+
+<svg
+  aria-hidden="true"
+  class="block shrink-0 fill-current"
+  height={Math.round(size * logo.height)}
+  viewBox={logo.viewBox}
+  width={Math.round(size * logo.width)}
+>
+  <path d={logo.d}></path>
+</svg>

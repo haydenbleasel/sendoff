@@ -54,23 +54,58 @@ const emailChat = [
   { from: "agent", messages: [{ text: "Added two bullets after the callout." }] },
 ] as const;
 
-// The live preview's toggles (apps/app/src/preview-page.ts), on their defaults.
-// Options with an icon (Lucide, via Blume) show it instead of the label.
+// The live preview's toggles (apps/app/src/preview-page.ts). The first option
+// in each is the default. A click sets `data-<key>` on the mock to the option's
+// value, and its group-data variants restyle it. Options with an icon (Lucide,
+// via Blume) show it instead of the label.
 const previewControls = [
-  { options: [{ label: "Email" }, { label: "Text" }] },
   {
+    key: "view",
+    label: "View",
     options: [
-      { icon: "monitor", label: "Desktop" },
-      { icon: "smartphone", label: "Mobile" },
+      { label: "Email", value: "email" },
+      { label: "Text", value: "text" },
     ],
   },
   {
+    key: "width",
+    label: "Width",
     options: [
-      { icon: "sun", label: "Light" },
-      { icon: "moon", label: "Dark" },
+      { icon: "monitor", label: "Desktop", value: "desktop" },
+      { icon: "smartphone", label: "Mobile", value: "mobile" },
+    ],
+  },
+  {
+    key: "scheme",
+    label: "Theme",
+    options: [
+      { icon: "sun", label: "Light", value: "light" },
+      { icon: "moon", label: "Dark", value: "dark" },
     ],
   },
 ];
+
+// The plain-text version of issue 24, laid out the way apps/app/src/email/text.ts
+// writes it from the Markdown.
+const issueText = `Shipping in public
+==================
+
+Three months of building in the open, and what I’d do differently next time.
+
+Read the full post: https://example.com/shipping-in-public
+
+The short version
+
+Ship small, write it down and reply to everyone.
+
+- Why I post unfinished work
+- The tools I use every week
+
+--
+
+You're receiving this because you subscribed to The Sendoff Quarterly.
+
+Unsubscribe: https://news.example.com/unsubscribe/5mXq8R`;
 
 const previewFeatures = [
   {
@@ -340,10 +375,13 @@ const inlineLink =
         </dl>
       </div>
       <figure
-        class="rounded-4xl bg-muted p-3 sm:p-6 [--reveal-delay:120ms]"
-        role="img"
-        aria-label="The live preview of issue 24 at desktop width in light mode"
+        class="group/preview rounded-4xl bg-muted p-3 sm:p-6 [--reveal-delay:120ms]"
+        aria-label="The live preview of issue 24"
+        data-preview
         data-reveal
+        data-scheme="light"
+        data-view="email"
+        data-width="desktop"
       >
         <div
           class="overflow-hidden rounded-2xl bg-background ring-1 ring-black/5 dark:bg-white/5 dark:ring-white/10"
@@ -359,17 +397,26 @@ const inlineLink =
             <div class="flex gap-2">
               {
                 previewControls.map((control) => (
-                  <div class="inline-flex rounded-lg p-0.5 ring-1 ring-border ring-inset">
+                  <div
+                    aria-label={control.label}
+                    class="inline-flex rounded-lg p-0.5 ring-1 ring-border ring-inset"
+                    role="group"
+                  >
                     {control.options.map((option, index) => (
-                      <span
+                      <button
+                        aria-label={option.icon ? option.label : undefined}
+                        aria-pressed={index === 0 ? "true" : "false"}
                         class:list={[
-                          "grid h-7 place-items-center rounded-md text-[0.8125rem]",
+                          "grid h-7 cursor-pointer place-items-center rounded-md text-[0.8125rem] text-muted-foreground hover:text-foreground aria-pressed:bg-foreground aria-pressed:text-background",
                           option.icon ? "w-7" : "px-2.5",
-                          index === 0 ? "bg-foreground text-background" : "text-muted-foreground",
                         ]}
+                        data-preview-key={control.key}
+                        data-preview-value={option.value}
+                        title={option.icon ? option.label : undefined}
+                        type="button"
                       >
                         {option.icon ? <Icon name={option.icon} size={16} /> : option.label}
-                      </span>
+                      </button>
                     ))}
                   </div>
                 ))
@@ -377,27 +424,47 @@ const inlineLink =
             </div>
           </div>
           <div class="bg-muted/60 p-3 sm:p-5 dark:bg-black/20">
+            {/* Mobile narrows the frame toward a phone's width, as the real preview does. */}
             <div
-              class="h-96 overflow-hidden rounded-xl bg-white ring-1 ring-black/5 mask-b-from-80% sm:h-104"
+              class="mx-auto h-96 max-w-full overflow-hidden rounded-xl bg-white ring-1 ring-black/5 mask-b-from-80% transition-[max-width] duration-150 ease-out group-data-[scheme=dark]/preview:bg-zinc-950 group-data-[scheme=dark]/preview:ring-white/10 group-data-[width=mobile]/preview:max-w-80 motion-reduce:transition-none sm:h-104"
             >
-              <div class="flex flex-col gap-3 border-b border-zinc-200 px-6 pt-5 pb-4 sm:px-8">
-                <p class="text-lg font-semibold text-zinc-950">Shipping in public</p>
+              <div
+                class="flex flex-col gap-3 border-b border-zinc-200 px-6 pt-5 pb-4 group-data-[scheme=dark]/preview:border-zinc-800 sm:px-8"
+              >
+                <p
+                  class="text-lg font-semibold text-zinc-950 group-data-[scheme=dark]/preview:text-zinc-50"
+                >
+                  Shipping in public
+                </p>
                 <div class="flex items-center gap-3 text-sm">
                   <span
-                    class="grid size-9 shrink-0 place-items-center rounded-full bg-zinc-900 font-semibold text-white"
+                    class="grid size-9 shrink-0 place-items-center rounded-full bg-zinc-900 font-semibold text-white group-data-[scheme=dark]/preview:bg-zinc-100 group-data-[scheme=dark]/preview:text-zinc-900"
                     >S</span
                   >
                   <div class="min-w-0 flex-1">
-                    <p class="truncate text-zinc-500">
-                      <span class="font-semibold text-zinc-950">The Sendoff Quarterly</span>{" "}
+                    <p class="truncate text-zinc-500 group-data-[scheme=dark]/preview:text-zinc-400">
+                      <span
+                        class="font-semibold text-zinc-950 group-data-[scheme=dark]/preview:text-zinc-50"
+                        >The Sendoff Quarterly</span
+                      >{" "}
                       &lt;hello@example.com&gt;
                     </p>
-                    <p class="text-zinc-500">to you</p>
+                    <p class="text-zinc-500 group-data-[scheme=dark]/preview:text-zinc-400">
+                      to you
+                    </p>
                   </div>
-                  <p class="text-zinc-500 tabular-nums">09:00</p>
+                  <p
+                    class="text-zinc-500 tabular-nums group-data-[scheme=dark]/preview:text-zinc-400"
+                  >
+                    09:00
+                  </p>
                 </div>
               </div>
-              <Email full scheme="light" />
+              <div class="group-data-[view=text]/preview:hidden">
+                <Email full scheme="preview" />
+              </div>
+              <pre
+                class="hidden px-6 py-5 font-mono text-[0.8125rem]/6 whitespace-pre-wrap text-zinc-700 group-data-[scheme=dark]/preview:text-zinc-300 group-data-[view=text]/preview:block sm:px-8">{issueText}</pre>
             </div>
           </div>
         </div>
@@ -409,7 +476,8 @@ const inlineLink =
         <h2 class={sectionHeading}>Host it yourself. Skip the subscription.</h2>
         <p class:list={[lead, "mt-6"]}>
           Sendoff runs in your own Cloudflare account and sends through your own Amazon SES, so you
-          pay them directly and nobody else. Move the sliders to see how that compares with Resend.
+          pay them directly and nobody else. Pick the service you’re on now and move the sliders to see
+          how the bills compare.
         </p>
       </div>
       <div class="[--reveal-delay:120ms]" data-reveal>
@@ -465,8 +533,13 @@ const inlineLink =
                       class="text-emerald-600 dark:text-emerald-400"
                     />
                   </span>
-                  <p class="flex-1 text-base font-medium">{check.label}</p>
-                  <p class="text-right font-mono text-sm text-muted-foreground">{check.detail}</p>
+                  {/* Phones stack the detail under the label; wider, they share a row. */}
+                  <div class="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                    <p class="text-base font-medium">{check.label}</p>
+                    <p class="font-mono text-sm text-muted-foreground sm:text-right">
+                      {check.detail}
+                    </p>
+                  </div>
                 </li>
               ))
             }
@@ -483,67 +556,113 @@ const inlineLink =
           and complaints come off the list on their own.
         </p>
       </div>
-      <div
-        class="-mx-5 -my-2 overflow-x-auto whitespace-nowrap [--reveal-delay:120ms] sm:-mx-8 lg:-mx-12"
-        data-reveal
-      >
-        <div class="inline-block min-w-full px-5 py-2 align-middle sm:px-8 lg:px-12">
-          <table class="w-full border-collapse text-base">
-            <thead>
-              <tr class="text-left font-mono text-sm text-muted-foreground sm:text-xs">
-                <th class="border-b border-foreground pr-6 pb-3.5 font-normal">Date</th>
-                <th class="border-b border-foreground pr-6 pb-3.5 font-normal">Issue</th>
-                <th class="border-b border-foreground pr-6 pb-3.5 text-right font-normal">Sent</th>
-                <th class="border-b border-foreground pr-6 pb-3.5 text-right font-normal">
-                  Bounced
-                </th>
-                <th class="border-b border-foreground pr-6 pb-3.5 text-right font-normal">
-                  Unsubscribed
-                </th>
-                <th class="border-b border-foreground pb-3.5 text-right font-normal">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {
-                issues.map((issue) => (
-                  <tr>
-                    <td class="border-b border-border py-5.5 pr-6 font-mono text-base text-muted-foreground tabular-nums sm:text-sm">
-                      <time datetime={issue.sentAt}>{formatSentAt(issue.sentAt)}</time>
-                    </td>
-                    <td class="border-b border-border py-5.5 pr-6 font-medium">
-                      {issue.title}{" "}
-                      <span class="font-normal text-muted-foreground">· No. {issue.number}</span>
-                    </td>
-                    <td class="border-b border-border py-5.5 pr-6 text-right tabular-nums">
-                      {issue.live ? (
-                        <>
-                          {formatCount(issue.sent)}{" "}
-                          <span class="text-muted-foreground">
-                            of {formatCount(issue.recipients)}
-                          </span>
-                        </>
-                      ) : (
-                        formatCount(issue.sent)
+      {/* The table needs about 900px, so narrower screens get a stacked list of the same sends. */}
+      <div class="[--reveal-delay:120ms]" data-reveal>
+        <ul role="list" class="border-t border-foreground lg:hidden">
+          {
+            issues.map((issue) => (
+              <li class="flex flex-col gap-3 border-b border-border py-5">
+                <div class="flex min-h-6.25 items-center justify-between gap-4">
+                  <time
+                    class="font-mono text-sm text-muted-foreground tabular-nums"
+                    datetime={issue.sentAt}
+                  >
+                    {formatSentAt(issue.sentAt)}
+                  </time>
+                  {issue.live ? (
+                    <Flaps text="SENDING" label="Sending" live size="sm" delay={400} />
+                  ) : (
+                    <span class="text-muted-foreground">Sent</span>
+                  )}
+                </div>
+                <p class="text-base font-medium text-pretty">
+                  {issue.title}{" "}
+                  <span class="font-normal text-nowrap text-muted-foreground">
+                    · No. {issue.number}
+                  </span>
+                </p>
+                <dl class="grid max-w-md grid-cols-[1.3fr_1fr_auto] gap-x-4">
+                  <div class="flex flex-col gap-1">
+                    <dt class="font-mono text-sm text-muted-foreground">Sent</dt>
+                    <dd class="tabular-nums">
+                      {formatCount(issue.sent)}
+                      {issue.live && (
+                        <span class="text-muted-foreground"> of {formatCount(issue.recipients)}</span>
                       )}
-                    </td>
-                    <td class="border-b border-border py-5.5 pr-6 text-right tabular-nums">
-                      {formatCount(issue.bounced)}
-                    </td>
-                    <td class="border-b border-border py-5.5 pr-6 text-right tabular-nums">
-                      {formatCount(issue.unsubscribed)}
-                    </td>
-                    <td class="border-b border-border py-5.5 text-right">
-                      {issue.live ? (
-                        <Flaps text="SENDING" label="Sending" live size="sm" delay={400} />
-                      ) : (
-                        <span class="text-muted-foreground">Sent</span>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              }
-            </tbody>
-          </table>
+                    </dd>
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <dt class="font-mono text-sm text-muted-foreground">Bounced</dt>
+                    <dd class="tabular-nums">{formatCount(issue.bounced)}</dd>
+                  </div>
+                  <div class="flex flex-col gap-1">
+                    <dt class="font-mono text-sm text-muted-foreground">Unsubscribed</dt>
+                    <dd class="tabular-nums">{formatCount(issue.unsubscribed)}</dd>
+                  </div>
+                </dl>
+              </li>
+            ))
+          }
+        </ul>
+        <div class="-mx-5 -my-2 hidden overflow-x-auto whitespace-nowrap sm:-mx-8 lg:-mx-12 lg:block">
+          <div class="inline-block min-w-full px-5 py-2 align-middle sm:px-8 lg:px-12">
+            <table class="w-full border-collapse text-base">
+              <thead>
+                <tr class="text-left font-mono text-sm text-muted-foreground sm:text-xs">
+                  <th class="border-b border-foreground pr-6 pb-3.5 font-normal">Date</th>
+                  <th class="border-b border-foreground pr-6 pb-3.5 font-normal">Issue</th>
+                  <th class="border-b border-foreground pr-6 pb-3.5 text-right font-normal">Sent</th>
+                  <th class="border-b border-foreground pr-6 pb-3.5 text-right font-normal">
+                    Bounced
+                  </th>
+                  <th class="border-b border-foreground pr-6 pb-3.5 text-right font-normal">
+                    Unsubscribed
+                  </th>
+                  <th class="border-b border-foreground pb-3.5 text-right font-normal">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {
+                  issues.map((issue) => (
+                    <tr>
+                      <td class="border-b border-border py-5.5 pr-6 font-mono text-base text-muted-foreground tabular-nums sm:text-sm">
+                        <time datetime={issue.sentAt}>{formatSentAt(issue.sentAt)}</time>
+                      </td>
+                      <td class="border-b border-border py-5.5 pr-6 font-medium">
+                        {issue.title}{" "}
+                        <span class="font-normal text-muted-foreground">· No. {issue.number}</span>
+                      </td>
+                      <td class="border-b border-border py-5.5 pr-6 text-right tabular-nums">
+                        {issue.live ? (
+                          <>
+                            {formatCount(issue.sent)}{" "}
+                            <span class="text-muted-foreground">
+                              of {formatCount(issue.recipients)}
+                            </span>
+                          </>
+                        ) : (
+                          formatCount(issue.sent)
+                        )}
+                      </td>
+                      <td class="border-b border-border py-5.5 pr-6 text-right tabular-nums">
+                        {formatCount(issue.bounced)}
+                      </td>
+                      <td class="border-b border-border py-5.5 pr-6 text-right tabular-nums">
+                        {formatCount(issue.unsubscribed)}
+                      </td>
+                      <td class="border-b border-border py-5.5 text-right">
+                        {issue.live ? (
+                          <Flaps text="SENDING" label="Sending" live size="sm" delay={400} />
+                        ) : (
+                          <span class="text-muted-foreground">Sent</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                }
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </section>
@@ -662,4 +781,35 @@ const inlineLink =
   init();
 
   document.addEventListener("astro:page-load", init);
+</script>
+
+<script>
+  // The live preview mock's toggles. A click presses its button, unpresses the
+  // others in its group, and sets data-<key> on the mock for its group-data
+  // variants. Bundled scripts run once per session, so this delegates from
+  // `document` and works on every visit to the page.
+  document.addEventListener("click", (event) => {
+    const button =
+      event.target instanceof Element
+        ? event.target.closest<HTMLElement>("[data-preview-key]")
+        : null;
+
+    const preview = button?.closest<HTMLElement>("[data-preview]");
+
+    if (!(button && preview)) {
+      return;
+    }
+
+    const { previewKey: key, previewValue: value } = button.dataset;
+
+    if (!(key && value)) {
+      return;
+    }
+
+    preview.dataset[key] = value;
+
+    for (const option of preview.querySelectorAll(`[data-preview-key="${key}"]`)) {
+      option.setAttribute("aria-pressed", String(option === button));
+    }
+  });
 </script>

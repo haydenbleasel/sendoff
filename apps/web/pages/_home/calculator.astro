@@ -1,23 +1,38 @@
 ---
-// The cost calculator: the inputs on the left (three starting points and a
-// slider per field) and, on a muted panel, two receipts on the right: Resend's
-// monthly bill and Sendoff's, itemized, with the yearly difference beneath.
-// The page renders the middle preset, so the numbers are in the HTML for
-// readers without script and for agents; the script only re-runs `estimate`
-// (inlined from prices.ts as `estimateSource`, so both sides share one
-// implementation) and refills the receipts from the line <template>. Astro's
+// The cost calculator: the inputs on the left (the service you're moving from,
+// three starting points and a slider per field) and, on a muted panel, two
+// receipts on the right: that service's monthly bill and Sendoff's, itemized,
+// with the yearly difference beneath. The page renders Resend at the middle
+// preset, so the numbers are in the HTML for readers without script and for
+// agents; the script only re-runs `estimate` (inlined from prices.ts as
+// `estimateSource`, so both sides share one implementation), refills the
+// receipts from the line <template>, and swaps the first receipt's name, logo,
+// footnote and source to the chosen service (a wordmark logo, like Kit's,
+// stands in for the name, which stays for screen readers). Astro's
 // ClientRouter runs an inline script once per session, so this delegates from
 // `document`, guarded by a global flag, and refreshes on every
 // `astro:page-load` in case the browser restored the sliders to other positions.
 import Mark from "./mark.astro";
 import type { PricingInput } from "./prices.ts";
-import { checked, estimate, estimateSource, fields, presets, prices, sources } from "./prices.ts";
+import {
+  checked,
+  estimate,
+  estimateSource,
+  fields,
+  presets,
+  prices,
+  providerIds,
+  sources,
+} from "./prices.ts";
+import { logos } from "./logos.ts";
+import ProviderLogo from "./provider-logo.astro";
 import Receipt from "./receipt.astro";
 import ReceiptLine from "./receipt-line.astro";
-import ResendLogo from "./resend-logo.astro";
 
 const [, initial] = presets;
-const result = estimate(initial.input, prices);
+const [from] = providerIds;
+const provider = prices.providers[from];
+const result = estimate(initial.input, from, prices);
 
 const sliders = fields.map((field) => ({
   ...field,
@@ -28,13 +43,37 @@ const sliders = fields.map((field) => ({
 const positions = (input: PricingInput) =>
   Object.fromEntries(fields.map((field) => [field.key, field.steps.indexOf(input[field.key])]));
 
-const assumptions = `Estimates, not quotes, checked ${checked}. Resend is priced on its Marketing plans, which are billed monthly by contact count with unlimited sends, and quoted individually above 150,000 contacts. Sendoff is priced on Cloudflare Workers Paid, whose included usage covers its database and queue at these volumes, and Amazon SES at $0.10 per 1,000 emails, before any AWS free tier. Bounce and click notifications through Amazon SNS add cents at most. A domain costs the same either way.`;
+const sourceLink =
+  "text-foreground underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground";
 
-const pricingScript = `(()=>{if(window.__sendoffPricing){return;}window.__sendoffPricing=true;${estimateSource}const prices=${JSON.stringify(prices)};const read=(root)=>{const input={};for(const range of root.querySelectorAll("[data-field]")){const i=Number(range.value);const label=JSON.parse(range.dataset.labels)[i];input[range.dataset.field]=JSON.parse(range.dataset.steps)[i];range.style.setProperty("--pricing-progress",String(i/Number(range.max)));range.setAttribute("aria-valuetext",label);root.querySelector('[data-value-for="'+range.dataset.field+'"]').textContent=label;}return input;};const fill=(root,side,receipt)=>{const card=root.querySelector('[data-receipt="'+side+'"]');const row=root.querySelector("[data-line-template]").content.firstElementChild;card.querySelector("[data-lines]").replaceChildren(...receipt.lines.map((line)=>{const li=row.cloneNode(true);li.querySelector("[data-line-label]").textContent=line.label;li.querySelector("[data-line-amount]").textContent=line.amount;const note=li.querySelector("[data-line-note]");note.textContent=line.note;note.hidden=!line.note;return li;}));card.querySelector("[data-total]").textContent=receipt.total;card.querySelector("[data-yearly]").textContent=receipt.yearly;};const update=(root)=>{const result=estimate(read(root),prices);fill(root,"resend",result.resend);fill(root,"sendoff",result.sendoff);root.querySelector("[data-difference]").textContent=result.difference;};const refresh=()=>{for(const root of document.querySelectorAll("[data-pricing]")){update(root);}};document.addEventListener("input",(e)=>{const root=e.target instanceof Element&&e.target.closest("[data-pricing]");if(!root){return;}for(const b of root.querySelectorAll("[data-preset]")){b.setAttribute("aria-pressed","false");}update(root);});document.addEventListener("click",(e)=>{const button=e.target instanceof Element&&e.target.closest("[data-preset]");const root=button&&button.closest("[data-pricing]");if(!root){return;}const state=JSON.parse(button.dataset.preset);for(const range of root.querySelectorAll("[data-field]")){range.value=String(state[range.dataset.field]);}for(const b of root.querySelectorAll("[data-preset]")){b.setAttribute("aria-pressed",String(b===button));}update(root);});refresh();document.addEventListener("astro:page-load",refresh);})();`;
+const sendoffAssumptions = `Sendoff is priced on Cloudflare Workers Paid, whose included usage covers its database and queue at these volumes, and Amazon SES at $0.10 per 1,000 emails, before any AWS free tier. Bounce and click notifications through Amazon SNS add cents at most. A domain costs the same either way.`;
+
+const pricingScript = `(()=>{if(window.__sendoffPricing){return;}window.__sendoffPricing=true;${estimateSource}const prices=${JSON.stringify(prices)};const read=(root)=>{const input={};for(const range of root.querySelectorAll("[data-field]")){const i=Number(range.value);const label=JSON.parse(range.dataset.labels)[i];input[range.dataset.field]=JSON.parse(range.dataset.steps)[i];range.style.setProperty("--pricing-progress",String(i/Number(range.max)));range.setAttribute("aria-valuetext",label);root.querySelector('[data-value-for="'+range.dataset.field+'"]').textContent=label;}return input;};const fill=(root,side,receipt)=>{const card=root.querySelector('[data-receipt="'+side+'"]');const row=root.querySelector("[data-line-template]").content.firstElementChild;card.querySelector("[data-lines]").replaceChildren(...receipt.lines.map((line)=>{const li=row.cloneNode(true);li.querySelector("[data-line-label]").textContent=line.label;li.querySelector("[data-line-amount]").textContent=line.amount;const note=li.querySelector("[data-line-note]");note.textContent=line.note;note.hidden=!line.note;return li;}));card.querySelector("[data-total]").textContent=receipt.total;card.querySelector("[data-yearly]").textContent=receipt.yearly;};const update=(root)=>{const from=root.querySelector('[data-from][aria-pressed="true"]').dataset.from;const provider=prices.providers[from];const result=estimate(read(root),from,prices);fill(root,"from",result.from);fill(root,"sendoff",result.sendoff);const card=root.querySelector('[data-receipt="from"]');card.setAttribute("aria-label",provider.name+", estimated monthly bill");const name=card.querySelector("[data-receipt-name]");name.textContent=provider.name;for(const logo of card.querySelectorAll("[data-logo]")){logo.hidden=logo.dataset.logo!==from;if(!logo.hidden){name.classList.toggle("sr-only",logo.hasAttribute("data-wordmark"));}}root.querySelector("[data-assumption]").textContent=provider.assumption;const source=root.querySelector("[data-source]");source.href=provider.href;source.textContent=provider.name;root.querySelector("[data-difference]").textContent=result.difference;};const refresh=()=>{for(const root of document.querySelectorAll("[data-pricing]")){update(root);}};document.addEventListener("input",(e)=>{const root=e.target instanceof Element&&e.target.closest("[data-pricing]");if(!root){return;}for(const b of root.querySelectorAll("[data-preset]")){b.setAttribute("aria-pressed","false");}update(root);});document.addEventListener("click",(e)=>{const choice=e.target instanceof Element&&e.target.closest("[data-from]");const picked=choice&&choice.closest("[data-pricing]");if(picked){for(const b of picked.querySelectorAll("[data-from]")){b.setAttribute("aria-pressed",String(b===choice));}update(picked);return;}const button=e.target instanceof Element&&e.target.closest("[data-preset]");const root=button&&button.closest("[data-pricing]");if(!root){return;}const state=JSON.parse(button.dataset.preset);for(const range of root.querySelectorAll("[data-field]")){range.value=String(state[range.dataset.field]);}for(const b of root.querySelectorAll("[data-preset]")){b.setAttribute("aria-pressed",String(b===button));}update(root);});refresh();document.addEventListener("astro:page-load",refresh);})();`;
 ---
 
 <div class="grid items-start gap-12 lg:grid-cols-[2fr_3fr]" data-pricing>
   <div class="flex flex-col gap-8">
+    <div class="flex flex-col gap-3">
+      <p class="text-base text-muted-foreground sm:text-sm" id="pricing-from">Migrate from</p>
+      <div aria-labelledby="pricing-from" class="flex flex-wrap gap-2" role="group">
+        {
+          providerIds.map((id) => (
+            <button
+              aria-pressed={id === from ? "true" : "false"}
+              class="inline-flex h-10 cursor-pointer items-center gap-2 rounded-full px-4 text-base ring-1 ring-border hover:bg-muted aria-pressed:bg-foreground aria-pressed:text-background aria-pressed:ring-foreground sm:h-8 sm:px-3.5 sm:text-sm"
+              data-from={id}
+              type="button"
+            >
+              <ProviderLogo id={id} size={14} />
+              <span class:list={[logos[id].wordmark && "sr-only"]}>
+                {prices.providers[id].name}
+              </span>
+            </button>
+          ))
+        }
+      </div>
+    </div>
+
     <div class="flex flex-col gap-3">
       <p class="text-base text-muted-foreground sm:text-sm" id="pricing-presets">Start from</p>
       <div aria-labelledby="pricing-presets" class="flex flex-wrap gap-2" role="group">
@@ -91,8 +130,19 @@ const pricingScript = `(()=>{if(window.__sendoffPricing){return;}window.__sendof
 
   <div class="flex min-w-0 flex-col gap-6">
     <div class="grid gap-4 rounded-4xl bg-muted p-4 sm:grid-cols-2 sm:p-8">
-      <Receipt name="Resend" receipt={result.resend} side="resend">
-        <ResendLogo slot="logo" size={14} />
+      <Receipt name={provider.name} receipt={result.from} side="from">
+        {
+          providerIds.map((id) => (
+            <span
+              data-logo={id}
+              data-wordmark={logos[id].wordmark}
+              hidden={id !== from}
+              slot="logo"
+            >
+              <ProviderLogo id={id} size={14} />
+            </span>
+          ))
+        }
       </Receipt>
       <Receipt name="Sendoff" raised receipt={result.sendoff} side="sendoff">
         <Mark slot="logo" size={18} />
@@ -102,17 +152,17 @@ const pricingScript = `(()=>{if(window.__sendoffPricing){return;}window.__sendof
       {result.difference}
     </p>
     <p class="text-base/7 text-pretty text-muted-foreground sm:text-sm/6">
-      {assumptions} Sources:{" "}
+      Estimates, not quotes, checked {checked}. <span data-assumption>{provider.assumption}</span>
+      {" "}{sendoffAssumptions} Sources:{" "}
+      <a class={sourceLink} data-source href={provider.href}>{provider.name}</a>
       {
         sources.map((source, index) => (
           <>
-            <a
-              class="text-foreground underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground"
-              href={source.href}
-            >
+            {", "}
+            <a class={sourceLink} href={source.href}>
               {source.label}
             </a>
-            {index < sources.length - 1 ? ", " : "."}
+            {index === sources.length - 1 && "."}
           </>
         ))
       }

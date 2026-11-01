@@ -4,7 +4,8 @@
 // bottom edge. `raised` is Sendoff's, lifted off the panel. The drop shadow
 // sits on a wrapper, since the edge's mask would clip one on the receipt
 // itself; in dark mode, where the shadow is dropped, an inset hairline keeps
-// the edge. A logo goes in the `logo` slot.
+// the edge. A logo goes in the `logo` slot; the calculator swaps the name
+// through `data-receipt-name` when you change the service it compares.
 import type { ReceiptLine as Line, Receipt } from "./prices.ts";
 import ReceiptLine from "./receipt-line.astro";
 
@@ -29,7 +30,7 @@ const { name, raised = false, receipt, side } = Astro.props;
     >
       <p class="flex items-center gap-2 font-sans text-base font-medium sm:text-sm">
         <slot name="logo" />
-        {name}
+        <span data-receipt-name>{name}</span>
       </p>
       <p class="text-muted-foreground">Per month</p>
     </header>

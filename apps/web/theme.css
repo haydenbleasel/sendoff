@@ -110,12 +110,23 @@
   -webkit-box-decoration-break: clone;
 }
 
-/* On dark backgrounds a low stroke would sit under light text, so fill the word instead. */
+/*
+ * On dark backgrounds a low stroke would sit under light text, so fill the word
+ * instead. An inline fill covers Inter's whole content area (1.2em), which at
+ * the display headings' 1.02 line height reaches into the line above and cuts
+ * its descenders. So the fill is an inline-block cropped to the glyphs, from
+ * just over the ascenders to just under the descenders: the short line height
+ * puts the baseline 0.785em below its top, the bottom padding clears the
+ * descenders, and the negative margin keeps it from growing the line.
+ */
 :root[data-theme="dark"] .sendoff-highlight {
-  padding-inline: 0.06em;
+  display: inline-block;
+  margin-bottom: -0.1em;
+  padding: 0 0.06em 0.18em;
   border-radius: 0.06em;
   color: var(--sendoff-ink);
   background: var(--sendoff-signal);
+  line-height: 0.84em;
 }
 
 /*

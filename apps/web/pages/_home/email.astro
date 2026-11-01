@@ -2,8 +2,9 @@
 // A static mock of issue 24 in Sendoff's email template, using the template's
 // zinc palette (apps/app/src/email/theme.ts) and a signal-yellow accent.
 interface Props {
-  // "auto" follows the site theme; "light" pins the light palette.
-  scheme?: "auto" | "light";
+  // "auto" follows the site theme; "preview" follows the Light/Dark toggle on
+  // the live preview mock (index.astro), which sets data-scheme on group/preview.
+  scheme?: "auto" | "preview";
   // Include the callout, list and footer, not just the opening.
   full?: boolean;
 }
@@ -17,11 +18,12 @@ const palettes = {
     muted: "text-zinc-500 dark:text-zinc-400",
     surface: "bg-white text-zinc-700 dark:bg-zinc-950 dark:text-zinc-300",
   },
-  light: {
-    border: "border-zinc-200",
-    heading: "text-zinc-950",
-    muted: "text-zinc-500",
-    surface: "bg-white text-zinc-700",
+  preview: {
+    border: "border-zinc-200 group-data-[scheme=dark]/preview:border-zinc-800",
+    heading: "text-zinc-950 group-data-[scheme=dark]/preview:text-zinc-50",
+    muted: "text-zinc-500 group-data-[scheme=dark]/preview:text-zinc-400",
+    surface:
+      "bg-white text-zinc-700 group-data-[scheme=dark]/preview:bg-zinc-950 group-data-[scheme=dark]/preview:text-zinc-300",
   },
 } as const;
 
