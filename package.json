@@ -21,7 +21,8 @@
     "bump-deps": "npx npm-check-updates --deep -u && bun install",
     "prepare": "husky",
     "setup": "cd apps/app && bun run setup",
-    "deploy": "cd apps/app && bun run deploy"
+    "deploy": "cd apps/app && bun run deploy",
+    "update": "cd apps/app && bun run update"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.3",

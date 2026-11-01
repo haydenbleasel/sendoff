@@ -5,11 +5,25 @@ sidebar:
   icon: refresh-cw
 ---
 
-Your copy of Sendoff is a git clone of the repo, made by `bun create sendoff`, and your settings live in its database, not in code. So updating is just pulling and redeploying.
+Your copy of Sendoff is a git clone of the repo, made by `bun create sendoff`, and your settings live in its database, not in code. So updating is just moving to a newer version and redeploying.
 
 ## Updating
 
 From your Sendoff folder:
+
+```bash
+bun run update
+```
+
+It fetches Sendoff's releases and shows the release notes for every version since yours. If you say yes, it moves your folder to the latest release, installs dependencies and runs `bun run deploy`. That applies any new database migrations first, then deploys the Worker with your instance's settings, and the Pages project in front of it if [your DNS isn't on Cloudflare](/docs/reference/setup#domains-outside-cloudflare). It doesn't touch your secrets, DNS or SES setup.
+
+Type the `run`: `bun update` on its own is Bun's command for updating dependencies.
+
+If your folder has uncommitted changes, or commits of its own, it stops without changing anything and says what to do. If your folder doesn't have `bun run update` yet, run `git pull` once to get it.
+
+### Running the latest code
+
+To run what's on `main`, including changes that aren't released yet:
 
 ```bash
 git pull
@@ -17,13 +31,11 @@ bun install
 bun run deploy
 ```
 
-`bun run deploy` applies any new database migrations first, then deploys the Worker with your instance's settings, and the Pages project in front of it if [your DNS isn't on Cloudflare](/docs/reference/setup#domains-outside-cloudflare). It doesn't touch your secrets, DNS or SES setup.
+Unreleased changes don't have release notes yet, so `bun run update` is the safer way to update.
 
 ## What's changed
 
-Each version of the Worker has release notes on GitHub, under [Releases](https://github.com/haydenbleasel/sendoff/releases) (the ones tagged `app@`), and in `apps/app/CHANGELOG.md` in your folder. Read them when you update: if a version needs more than `bun run deploy`, like [running setup again](#running-setup-again), its notes say so.
-
-`git pull` brings in the latest code on `main`, which can be a little ahead of the latest release. Changes that haven't been released yet don't have notes until they are.
+Each version of the Worker has release notes on GitHub, under [Releases](https://github.com/haydenbleasel/sendoff/releases) (the ones tagged `app@`), and in `apps/app/CHANGELOG.md` in your folder. `bun run update` shows you the ones you're about to get. If a version needs more than deploying, like [running setup again](#running-setup-again), its notes say so.
 
 To hear about new versions, open the [Sendoff repo](https://github.com/haydenbleasel/sendoff) on GitHub and choose **Watch › Custom › Releases**.
 

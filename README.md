@@ -32,7 +32,7 @@ That shows anything still blocking a send, like SES production access (AWS usual
 
 ### Updating
 
-From your Sendoff folder, run `git pull`, `bun install` and `bun run deploy`. Each version's [release notes](https://github.com/haydenbleasel/sendoff/releases) say what changed and anything else to do. See [Updating](https://sendoff.dev/docs/guides/updating).
+From your Sendoff folder, run `bun run update`. It shows the [release notes](https://github.com/haydenbleasel/sendoff/releases) since your version, then moves to the latest release and deploys it. See [Updating](https://sendoff.dev/docs/guides/updating).
 
 ## How it works
 

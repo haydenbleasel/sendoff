@@ -15,6 +15,11 @@ import {
   pagesConfig,
   pagesSubdomain,
 } from "../scripts/setup/pages";
+import {
+  latestRelease,
+  parseVersion,
+  releaseNotes,
+} from "../scripts/setup/releases";
 
 const instance = instanceSchema.parse({
   accountId: "acct",
@@ -431,5 +436,60 @@ describe("Cloudflare DNS", () => {
       name: "b._domainkey.example.com",
       proxied: false,
     });
+  });
+});
+
+describe("Worker releases", () => {
+  it("picks the newest stable app@ tag, numerically", () => {
+    expect(
+      latestRelease([
+        "app@0.0.0",
+        "app@1.9.0",
+        "app@1.10.0",
+        "app@2.0.0-next.0",
+        "create-sendoff@3.0.0",
+        "",
+      ])
+    ).toStrictEqual({ tag: "app@1.10.0", version: [1, 10, 0] });
+    expect(latestRelease(["create-sendoff@1.0.0"])).toBeNull();
+    expect(parseVersion("1.2.3-next.0")).toBeNull();
+  });
+
+  it("keeps the changelog sections after the current version, up to the target", () => {
+    const changelog = [
+      "# app",
+      "",
+      "## 1.2.0",
+      "",
+      "### Minor Changes",
+      "",
+      "- abc: Something new.",
+      "",
+      "## 1.1.1",
+      "",
+      "- def: A fix.",
+      "",
+      "## 1.1.0",
+      "",
+      "- ghi: Already have this.",
+    ].join("\n");
+
+    expect(releaseNotes(changelog, [1, 1, 0], [1, 2, 0])).toBe(
+      [
+        "## 1.2.0",
+        "",
+        "### Minor Changes",
+        "",
+        "- abc: Something new.",
+        "",
+        "## 1.1.1",
+        "",
+        "- def: A fix.",
+      ].join("\n")
+    );
+    expect(releaseNotes(changelog, [1, 1, 0], [1, 1, 1])).toBe(
+      "## 1.1.1\n\n- def: A fix."
+    );
+    expect(releaseNotes(changelog, [1, 2, 0], [1, 2, 0])).toBe("");
   });
 });

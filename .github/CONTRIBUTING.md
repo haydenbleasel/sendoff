@@ -88,7 +88,7 @@ We use [Changesets](https://github.com/changesets/changesets) to version and rel
 
 The website and docs (`web`) aren't versioned, so they don't need a changeset. They deploy to sendoff.dev with every release.
 
-Self-hosters update the Worker with `git pull`, so the Worker's release notes are how they find out what changed, including anything to do after updating, like re-running setup.
+Self-hosters update the Worker with `bun run update`, which shows them the Worker's release notes before it moves to the latest release. So those notes are how they find out what changed, including anything to do after updating, like re-running setup.
 
 When you change one of them in a way people would notice:
 
