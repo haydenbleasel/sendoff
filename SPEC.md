@@ -51,7 +51,8 @@ One Worker serves everything:
 | --- | --- |
 | `GET /` | Subscribe page (Turnstile plus a honeypot field). |
 | `POST /subscribe` | Creates a `pending` subscriber and sends a confirmation email (double opt-in), at most once per 10 minutes per address. Always redirects to `/check-inbox`, whatever the outcome, so the form can't reveal who's subscribed. |
-| `GET /confirm/:token` | Marks a `pending` subscriber `active`. An old link can't undo an unsubscribe. |
+| `GET /confirm/:token` | Asks the person to confirm, with a button. It doesn't confirm on its own: mail filters open links in emails as they arrive. |
+| `POST /confirm/:token` | Marks a `pending` subscriber `active`. An old link can't undo an unsubscribe. |
 | `GET /unsubscribe/:token` | Asks for confirmation only. Link scanners load URLs in emails, so a GET must never unsubscribe. |
 | `POST /unsubscribe/:token` | Unsubscribes: the page's button, and RFC 8058 one-click POSTs from mail providers. `?issue=` attributes it to an issue. |
 | `POST /resubscribe/:token` | Undoes an unsubscribe from the same link. |

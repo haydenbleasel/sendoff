@@ -67,9 +67,17 @@ describe("signup", () => {
     expect(link).toBeDefined();
     expect(email?.html).toContain(link);
 
-    const confirmed = await request(link ?? "");
+    // Opening the link only asks, so a mail filter that opens it can't confirm.
+    const opened = await request(link ?? "");
+    expect(await opened.text()).toContain(`action="${link}"`);
+    expect(await statusOf("reader@example.com")).toBe("pending");
+
+    const confirmed = await request(link ?? "", { method: "POST" });
     expect(await confirmed.text()).toContain("You&#x27;re subscribed");
     expect(await statusOf("reader@example.com")).toBe("active");
+
+    const again = await request(link ?? "");
+    expect(await again.text()).toContain("You&#x27;re already subscribed");
   });
 
   it("responds the same way for existing subscribers without emailing them", async () => {
@@ -124,9 +132,14 @@ describe("signup", () => {
   });
 
   it("rejects confirm links that are forged", async () => {
-    const response = await request("/confirm/not-a-real-token");
+    const opened = await request("/confirm/not-a-real-token");
 
-    expect(response.status).toBe(404);
+    const posted = await request("/confirm/not-a-real-token", {
+      method: "POST",
+    });
+
+    expect(opened.status).toBe(404);
+    expect(posted.status).toBe(404);
   });
 });
 

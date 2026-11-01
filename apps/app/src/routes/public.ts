@@ -188,7 +188,46 @@ publicRoutes.get("/check-inbox", async (c) => {
   );
 });
 
+// Opening the link only asks, like unsubscribing: mail filters such as Safe
+// Links open every link in an email as it arrives, and that alone mustn't
+// confirm a signup the address's owner never made.
 publicRoutes.get("/confirm/:token", async (c) => {
+  const loaded = await load(c);
+
+  if (loaded instanceof Response) {
+    return loaded;
+  }
+
+  const { config, db, settings } = loaded;
+  const token = c.req.param("token");
+  const id = await verifyToken(config.tokenSecret, "confirm", token);
+  const subscriber = id ? await findSubscriberById(db, id) : undefined;
+
+  if (subscriber?.status === "active") {
+    return c.html(
+      messagePage({
+        body: `You'll get the next issue of ${settings.name} when it goes out.`,
+        settings,
+        title: "You're already subscribed",
+      })
+    );
+  }
+
+  if (subscriber?.status !== "pending") {
+    return invalidLink(c, settings);
+  }
+
+  return c.html(
+    messagePage({
+      action: { action: `/confirm/${token}`, label: "Confirm subscription" },
+      body: `${subscriber.email} will start getting ${settings.name}.`,
+      settings,
+      title: "Confirm your subscription",
+    })
+  );
+});
+
+publicRoutes.post("/confirm/:token", async (c) => {
   const loaded = await load(c);
 
   if (loaded instanceof Response) {
