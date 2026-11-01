@@ -96,12 +96,18 @@ const pick = <T>(
 
 /**
  * An empty string clears optional text too: some clients can't send null,
- * and turn it into the string "null" instead.
+ * and turn it into the string "null" instead, so that clears as well. A
+ * postal address of "null" would print in every footer and switch off the
+ * commercial-email check.
  */
 const pickText = (
   next: string | null | undefined,
   current: string | undefined
-): string | undefined => pick(next?.trim() === "" ? null : next, current);
+): string | undefined => {
+  const trimmed = next?.trim();
+
+  return pick(trimmed === "" || trimmed === "null" ? null : next, current);
+};
 
 const merge = (
   current: Settings | null,

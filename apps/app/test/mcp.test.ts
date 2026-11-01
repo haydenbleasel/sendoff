@@ -146,6 +146,12 @@ describe("tools", () => {
     expect(cleared.isError).toBe(false);
     expect(dataOf(cleared.text)).not.toHaveProperty("address");
 
+    // Those clients send "null" for null; it mustn't become the address.
+    await call("update_settings", { address: "1 Test Lane, Sydney" });
+    const nulled = await call("update_settings", { address: "null" });
+
+    expect(dataOf(nulled.text)).not.toHaveProperty("address");
+
     await call("update_settings", { address: "1 Test Lane, Sydney" });
   });
 
