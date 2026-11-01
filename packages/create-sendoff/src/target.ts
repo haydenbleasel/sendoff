@@ -64,7 +64,13 @@ export const displayPath = (from: string, dir: string): string => {
     return ".";
   }
 
-  return relative.startsWith("..") ? dir : `./${relative}`;
+  // On Windows, a folder on another drive comes back absolute (D:\news).
+  const outside =
+    path.isAbsolute(relative) ||
+    relative === ".." ||
+    relative.startsWith(`..${path.sep}`);
+
+  return outside ? dir : `./${relative}`;
 };
 
 /** A shell command to run inside `dir`, prefixed with the `cd` to get there. */

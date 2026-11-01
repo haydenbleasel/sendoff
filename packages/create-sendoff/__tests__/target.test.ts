@@ -62,6 +62,9 @@ describe("paths shown to people", () => {
     expect(displayPath("/home/me", "/home/me/sendoff")).toBe("./sendoff");
     expect(displayPath("/home/me", "/home/me")).toBe(".");
     expect(displayPath("/home/me", "/srv/sendoff")).toBe("/srv/sendoff");
+    expect(displayPath("/home/me/sendoff", "/home/me")).toBe("/home/me");
+    // A name that starts with two dots is still inside.
+    expect(displayPath("/home/me", "/home/me/..news")).toBe("./..news");
   });
 
   it("prefixes commands with the cd to get there", () => {
