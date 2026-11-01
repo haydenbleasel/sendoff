@@ -190,21 +190,31 @@ export const EmailShell = ({
         padding: 0,
       }}
     >
-      <Container
+      {/*
+       * Body wraps everything in a full-width cell with the light background
+       * but not the dark-mode class, which left white edges beside the column
+       * in dark mode. This full-width table carries the dark background over it.
+       */}
+      <Section
         className={darkClass.background}
-        style={{
-          backgroundColor: light.background,
-          margin: "0 auto",
-          maxWidth: CONTENT_WIDTH + 48,
-          padding: "48px 24px 56px",
-        }}
+        style={{ backgroundColor: light.background }}
       >
-        <Section style={{ marginBottom: 40 }}>
-          <Masthead settings={settings} />
-        </Section>
-        <Section>{children}</Section>
-        {footer}
-      </Container>
+        <Container
+          className={darkClass.background}
+          style={{
+            backgroundColor: light.background,
+            margin: "0 auto",
+            maxWidth: CONTENT_WIDTH + 48,
+            padding: "48px 24px 56px",
+          }}
+        >
+          <Section style={{ marginBottom: 40 }}>
+            <Masthead settings={settings} />
+          </Section>
+          <Section>{children}</Section>
+          {footer}
+        </Container>
+      </Section>
     </Body>
   </Html>
 );

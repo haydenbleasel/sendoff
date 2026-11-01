@@ -87,6 +87,22 @@ describe("renderIssue", () => {
   });
 });
 
+describe("dark mode", () => {
+  it("carries the dark background across the full width, not just the column", async () => {
+    const result = await renderIssue(sampleIssue, sampleSettings);
+
+    if (!result.ok) {
+      throw new Error("The sample should render");
+    }
+
+    // React Email's Body adds a full-width cell with the light background and
+    // no class; a full-width table with the dark-mode class has to cover it.
+    expect(result.html).toMatch(
+      /<table[^>]*width="100%"[^>]*class="so-bg"[^>]*style="background-color:#ffffff"/u
+    );
+  });
+});
+
 describe("without a postal address", () => {
   it("leaves the address out of the footer", async () => {
     const { address, ...settings } = sampleSettings;
