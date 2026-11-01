@@ -151,6 +151,16 @@ describe("importSubscribers", () => {
     );
   });
 
+  it("keeps the most serious status for an address listed twice", async () => {
+    await importSubscribers(db(), [
+      { email: "twice@example.com", status: "complained" },
+      { email: "twice@example.com", status: "unsubscribed" },
+    ]);
+
+    // An unsubscribe could be undone by a resubscribe link; a complaint can't.
+    expect(await statusOf("twice@example.com")).toBe("complained");
+  });
+
   it("treats imported active subscribers as confirmed", async () => {
     await importSubscribers(db(), [
       { email: "confirmed@example.com", status: "active" },

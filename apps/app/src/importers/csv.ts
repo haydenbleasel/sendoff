@@ -1,6 +1,7 @@
 import type { Database } from "../db/client";
 import { IssueError } from "../issues";
 import {
+  IMPORT_SEVERITY,
   importSubscribers,
   isValidEmail,
   normalizeEmail,
@@ -25,14 +26,6 @@ export const suppressedStatuses = [
 ] as const;
 
 export type SuppressedStatus = (typeof suppressedStatuses)[number];
-
-/** Least to most severe: when a row has several signals, the most severe wins. */
-const SEVERITY: readonly ImportStatus[] = [
-  "active",
-  "unsubscribed",
-  "bounced",
-  "complained",
-];
 
 const QUOTE = '"';
 const DELIMITERS = [",", ";", "\t"] as const;
@@ -320,7 +313,7 @@ const mostSevere = (statuses: ImportStatus[]): ImportStatus => {
   let worst: ImportStatus = "active";
 
   for (const status of statuses) {
-    if (SEVERITY.indexOf(status) > SEVERITY.indexOf(worst)) {
+    if (IMPORT_SEVERITY.indexOf(status) > IMPORT_SEVERITY.indexOf(worst)) {
       worst = status;
     }
   }

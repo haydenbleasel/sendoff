@@ -207,6 +207,14 @@ export const resubscribeSubscriber = async (
 
 export type ImportStatus = Exclude<SubscriberStatus, "pending">;
 
+/** Least to most serious: when an import has several signals for one address, the most serious wins. */
+export const IMPORT_SEVERITY: readonly ImportStatus[] = [
+  "active",
+  "unsubscribed",
+  "bounced",
+  "complained",
+];
+
 export interface ImportRow {
   email: string;
   name?: string | undefined;
@@ -238,11 +246,13 @@ const dedupe = (rows: ImportRow[]) => {
 
     const previous = byEmail.get(email);
 
-    // If the source lists an address twice, a suppression wins.
+    // If the source lists an address twice, the more serious status wins: a
+    // later "unsubscribed" row mustn't turn a complaint into something a
+    // resubscribe link can undo.
     const keepPrevious =
       previous !== undefined &&
-      SUPPRESSED.has(previous.status) &&
-      !SUPPRESSED.has(row.status);
+      IMPORT_SEVERITY.indexOf(previous.status) >
+        IMPORT_SEVERITY.indexOf(row.status);
 
     if (!keepPrevious) {
       byEmail.set(email, { ...row, email });
