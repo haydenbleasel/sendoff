@@ -34,6 +34,15 @@ describe("parseCsv", () => {
       ["1", "2"],
     ]);
   });
+
+  it("opens a quoted cell after a space, so its comma doesn't shift columns", () => {
+    expect(
+      parseCsv('email, name, subscribed\na@x.com, "Doe, Jane", false')
+    ).toStrictEqual([
+      ["email", " name", " subscribed"],
+      ["a@x.com", "Doe, Jane", " false"],
+    ]);
+  });
 });
 
 describe("readSubscriberCsv", () => {

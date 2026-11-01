@@ -110,7 +110,10 @@ export const parseCsv = (text: string, delimiter = ","): string[][] => {
       }
     }
 
-    if (character === QUOTE && cell === "") {
+    // A quote after a space (`a, "Doe, Jane"`) still opens a quoted cell;
+    // otherwise its comma would shift every column after it.
+    if (character === QUOTE && cell.trim() === "") {
+      cell = "";
       state = "quoted";
     } else if (character === delimiter) {
       endCell();
