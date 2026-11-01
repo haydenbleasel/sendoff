@@ -6,7 +6,7 @@
 
 Sendoff emails your list, with no dashboard: newsletters, product launches, announcements. You deploy it into your own Cloudflare and AWS accounts, connect it to Claude or Codex, and run it by asking: "draft the next issue from these notes", "make the intro shorter", "send it".
 
-[![Validate](https://github.com/haydenbleasel/sendoff/actions/workflows/validate.yml/badge.svg)](https://github.com/haydenbleasel/sendoff/actions/workflows/validate.yml) [![MIT license](https://img.shields.io/badge/license-MIT-171717)](license.md)
+[![Validate](https://github.com/haydenbleasel/sendoff/actions/workflows/validate.yml/badge.svg)](https://github.com/haydenbleasel/sendoff/actions/workflows/validate.yml) [![MIT license](https://img.shields.io/badge/license-MIT-171717)](license.md) ![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/haydenbleasel/sendoff?utm_source=oss&utm_medium=github&utm_campaign=haydenbleasel%2Fsendoff&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 
 [Website](https://sendoff.dev) · [Docs](https://sendoff.dev/docs) · [Quickstart](https://sendoff.dev/docs/quickstart)
 
