@@ -106,6 +106,26 @@ const imageStyle: CSSProperties = {
   width: "100%",
 };
 
+// Inside a line of text: the image's own size, capped at the column width.
+// Only an image on a line of its own spans the full width.
+const inlineImageStyle: CSSProperties = {
+  border: 0,
+  display: "inline",
+  height: "auto",
+  maxWidth: "100%",
+  outline: "none",
+  verticalAlign: "middle",
+};
+
+const renderInlineImage = (node: Image) => (
+  <Img
+    alt={node.alt ?? ""}
+    key={keyOf(node)}
+    src={node.url}
+    style={inlineImageStyle}
+  />
+);
+
 const renderImage = (node: Image) => (
   <Img
     alt={node.alt ?? ""}
@@ -168,7 +188,7 @@ const renderPhrasing = (node: PhrasingContent, theme: Theme): ReactNode => {
     }
 
     case "image": {
-      return renderImage(node);
+      return renderInlineImage(node);
     }
 
     default: {

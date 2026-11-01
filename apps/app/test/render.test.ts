@@ -9,6 +9,8 @@ import {
 import { sampleIssue, sampleSettings } from "../src/email/sample";
 import { createTheme } from "../src/email/theme";
 
+const FULL_WIDTH = /[;"]width:100%/u;
+
 const render = async (body: string, settings = sampleSettings) => {
   const result = await renderIssue(
     { body, preheader: "Preheader text", subject: "Subject line" },
@@ -53,6 +55,20 @@ describe("renderIssue", () => {
     );
 
     expect(result.ok).toBe(false);
+  });
+
+  it("spans the full width only for an image on its own line", async () => {
+    const { html } = await render(
+      "![Wide](https://example.com/wide.png)\n\nBuilt with ![badge](https://example.com/badge.png) today."
+    );
+
+    const tag = (src: string) =>
+      html.match(new RegExp(`<img[^>]*src="${src}"[^>]*>`, "u"))?.[0] ?? "";
+
+    // `width`, not `max-width`, which both images have.
+    expect(tag("https://example.com/wide.png")).toMatch(FULL_WIDTH);
+    expect(tag("https://example.com/badge.png")).toContain("display:inline");
+    expect(tag("https://example.com/badge.png")).not.toMatch(FULL_WIDTH);
   });
 
   it("escapes user content", async () => {
