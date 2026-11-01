@@ -188,4 +188,18 @@ describe("unsubscribe", () => {
 
     expect(response.status).toBe(404);
   });
+
+  it("doesn't offer, or claim, a resubscribe for an address that bounced", async () => {
+    await importSubscribers(db(), [
+      { email: "bounced@example.com", status: "bounced" },
+    ]);
+    const token = await unsubscribeToken("bounced@example.com");
+
+    const page = await request(`/unsubscribe/${token}`);
+    expect(await page.text()).not.toContain("/resubscribe/");
+
+    const back = await request(`/resubscribe/${token}`, { method: "POST" });
+    expect(await back.text()).toContain("Can&#x27;t resubscribe");
+    expect(await statusOf("bounced@example.com")).toBe("bounced");
+  });
 });

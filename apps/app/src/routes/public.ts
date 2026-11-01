@@ -22,6 +22,7 @@ import {
   subscribe,
   unsubscribeSubscriber,
 } from "../subscribers";
+import type { Subscriber } from "../subscribers";
 import { verifyToken } from "../tokens";
 import { verifyTurnstile } from "../turnstile";
 
@@ -223,17 +224,32 @@ publicRoutes.get("/confirm/:token", async (c) => {
 const unsubscribeAction = (token: string, issueId: string | undefined) =>
   `/unsubscribe/${token}${issueId ? `?issue=${encodeURIComponent(issueId)}` : ""}`;
 
-const unsubscribedPage = (settings: Settings, token: string) =>
-  messagePage({
-    action: {
-      action: `/resubscribe/${token}`,
-      label: "Resubscribe",
-      secondary: true,
-    },
-    body: `You won't get any more emails from ${settings.name}. Unsubscribed by mistake?`,
-    settings,
-    title: "You're unsubscribed",
-  });
+/**
+ * Only an unsubscribe can be undone here. An address that bounced or
+ * complained stays off the list, so it isn't offered a Resubscribe that
+ * wouldn't do anything.
+ */
+const unsubscribedPage = (
+  settings: Settings,
+  token: string,
+  subscriber: Subscriber
+) =>
+  subscriber.status === "unsubscribed"
+    ? messagePage({
+        action: {
+          action: `/resubscribe/${token}`,
+          label: "Resubscribe",
+          secondary: true,
+        },
+        body: `You won't get any more emails from ${settings.name}. Unsubscribed by mistake?`,
+        settings,
+        title: "You're unsubscribed",
+      })
+    : messagePage({
+        body: `You won't get any more emails from ${settings.name}.`,
+        settings,
+        title: "You're unsubscribed",
+      });
 
 // Opening the link only asks: link scanners and prefetchers load URLs in
 // emails, and that alone mustn't unsubscribe anyone.
@@ -254,7 +270,7 @@ publicRoutes.get("/unsubscribe/:token", async (c) => {
   }
 
   if (subscriber.status !== "active" && subscriber.status !== "pending") {
-    return c.html(unsubscribedPage(settings, token));
+    return c.html(unsubscribedPage(settings, token, subscriber));
   }
 
   return c.html(
@@ -293,7 +309,7 @@ publicRoutes.post("/unsubscribe/:token", async (c) => {
     return invalidLink(c, settings);
   }
 
-  return c.html(unsubscribedPage(settings, token));
+  return c.html(unsubscribedPage(settings, token, subscriber));
 });
 
 publicRoutes.post("/resubscribe/:token", async (c) => {
@@ -317,7 +333,18 @@ publicRoutes.post("/resubscribe/:token", async (c) => {
     return invalidLink(c, settings);
   }
 
-  await resubscribeSubscriber(db, subscriber.id);
+  const resubscribed = await resubscribeSubscriber(db, subscriber.id);
+
+  // Bounced or complained: it only undoes an unsubscribe.
+  if (!resubscribed && subscriber.status !== "active") {
+    return c.html(
+      messagePage({
+        body: `${settings.name} can't send to ${subscriber.email} any more, because emails to it bounced or were marked as spam.`,
+        settings,
+        title: "Can't resubscribe",
+      })
+    );
+  }
 
   return c.html(
     messagePage({
