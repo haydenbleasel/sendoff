@@ -136,7 +136,7 @@ const finished = (cwd: string, dir: string, shown: string) =>
   [
     "",
     `Sendoff lives in ${shown}. Keep that folder: apps/app/.sendoff holds your`,
-    "instance's settings, and updates deploy from it.",
+    "instance's config, and updates deploy from it.",
     "",
     `  Run setup again   ${commandIn(cwd, dir, "bun run setup")}`,
     `  Ship an update    ${commandIn(cwd, dir, "git pull && bun install && bun run deploy")}`,

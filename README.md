@@ -16,7 +16,7 @@ Sendoff emails your list, with no dashboard: newsletters, product launches, anno
 bun create sendoff
 ```
 
-That clones Sendoff into `./sendoff`, installs it and runs setup. Setup creates the database, queue and SES identity, writes your DNS records, deploys the Worker and asks AWS for production access. It takes about ten minutes, most of it waiting for DNS. If anything fails, run it again: it skips what's done.
+That clones Sendoff into `./sendoff`, installs it and runs setup. Setup creates the database, queue and SES identity, adds your DNS records (or lists them, if your DNS isn't on Cloudflare), deploys the Worker and asks AWS for production access. It takes about ten minutes, most of it waiting for DNS. If anything fails, run it again: it skips what's done.
 
 You need:
 

@@ -15,7 +15,7 @@ From your Sendoff folder:
 bun run update
 ```
 
-It fetches Sendoff's releases and shows the release notes for every version since yours. If you say yes, it moves your folder to the latest release, installs dependencies and runs `bun run deploy`. That applies any new database migrations first, then deploys the Worker with your instance's settings, and the Pages project in front of it if [your DNS isn't on Cloudflare](/docs/reference/setup#domains-outside-cloudflare). It doesn't touch your secrets, DNS or SES setup.
+It fetches Sendoff's releases and shows the release notes for every version since yours. If you say yes, it moves your folder to the latest release, installs dependencies and runs `bun run deploy`. That applies any new database migrations first, then deploys the Worker with your instance's config, and the Pages project in front of it if [your DNS isn't on Cloudflare](/docs/reference/setup#domains-outside-cloudflare). It doesn't touch your secrets, DNS or SES setup.
 
 Type the `run`: `bun update` on its own is Bun's command for updating dependencies.
 
