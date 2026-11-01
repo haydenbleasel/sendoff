@@ -163,6 +163,29 @@ export const createRuntimeKey = (): RuntimeKey => {
   };
 };
 
+/** IAM allows each user this many access keys. */
+export const MAX_KEYS_PER_USER = 2;
+
+const lastUsedSchema = z.object({
+  AccessKeyLastUsed: z.object({ LastUsedDate: z.string().optional() }),
+});
+
+/** A key's ID and when it last signed a request, to help someone pick a stale one. */
+export const describeRuntimeKey = (accessKeyId: string): string => {
+  try {
+    const { AccessKeyLastUsed } = awsJson(
+      ["iam", "get-access-key-last-used", "--access-key-id", accessKeyId],
+      lastUsedSchema
+    );
+
+    return AccessKeyLastUsed.LastUsedDate
+      ? `${accessKeyId} (last used ${AccessKeyLastUsed.LastUsedDate.slice(0, 10)})`
+      : `${accessKeyId} (never used)`;
+  } catch {
+    return accessKeyId;
+  }
+};
+
 /** Delete a key setup created earlier (and whose secret it no longer has). */
 export const deleteRuntimeKey = (accessKeyId: string): void => {
   const result = aws([

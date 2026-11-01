@@ -35,10 +35,13 @@ import {
 } from "./setup/aws";
 import type { AwsCredentials, AwsSetup } from "./setup/aws";
 import {
+  MAX_KEYS_PER_USER,
+  RUNTIME_USER,
   cliCredentials,
   cliIdentity,
   createRuntimeKey,
   deleteRuntimeKey,
+  describeRuntimeKey,
   ensureRuntimeUser,
   runtimeKeyIds,
 } from "./setup/aws-cli";
@@ -314,6 +317,36 @@ const manualAwsKeys = async (region: string): Promise<AwsCredentials> => {
 };
 
 /**
+ * Once the Worker has a new key, list the IAM user's other keys rather than
+ * delete them: one may belong to another Sendoff instance in the same AWS
+ * account. Left there, a stale one blocks the next new key.
+ */
+const warnAboutOldKeys = ({ runtime, runtimeKeyId }: AwsAccess): void => {
+  // Only when this run gave the Worker a key of the sendoff user's.
+  if (!runtime || !runtimeKeyId) {
+    return;
+  }
+
+  let others: string[];
+
+  try {
+    others = runtimeKeyIds().filter((key) => key !== runtimeKeyId);
+  } catch {
+    return;
+  }
+
+  if (others.length > 0) {
+    log.warn(
+      [
+        `The Worker has a new AWS key. The ${RUNTIME_USER} IAM user still has:`,
+        ...others.map((key) => `  ${describeRuntimeKey(key)}`),
+        `If no other Sendoff instance in this AWS account uses it, delete it (IAM console › Users › ${RUNTIME_USER} › Security credentials). IAM allows ${MAX_KEYS_PER_USER} keys per user, so a leftover one blocks the next new key.`,
+      ].join("\n")
+    );
+  }
+};
+
+/**
  * Prefer the AWS CLI's login: setup provisions with it, and the Worker gets a
  * send-only key for a dedicated IAM user. Otherwise ask for keys by hand.
  */
@@ -361,6 +394,20 @@ const awsAccess = async (
         // A key from an earlier run whose secret never reached the Worker can't be recovered.
         if (known && draft.awsAccessKeyId) {
           deleteRuntimeKey(draft.awsAccessKeyId);
+        }
+
+        const others = keys.filter((key) => key !== draft.awsAccessKeyId);
+
+        // Without instance.json, setup can't tell which key this Worker uses,
+        // or whether another Sendoff instance in the account uses the other.
+        if (others.length >= MAX_KEYS_PER_USER) {
+          return fail(
+            [
+              `The ${RUNTIME_USER} IAM user already has ${MAX_KEYS_PER_USER} access keys, IAM's limit, so setup can't make one for the Worker:`,
+              ...others.map((key) => `  ${describeRuntimeKey(key)}`),
+              `Delete one that no Sendoff instance uses (IAM console › Users › ${RUNTIME_USER} › Security credentials), then run setup again.`,
+            ].join("\n")
+          );
         }
 
         const runtime = createRuntimeKey();
@@ -1387,6 +1434,8 @@ const main = async () => {
   }
 
   progress.stop(`Deployed to ${publicUrl}`);
+
+  warnAboutOldKeys(access);
 
   // Show a new token straight away, so nothing after this can lose it.
   if (mcp.created && mcp.token) {
