@@ -7,8 +7,7 @@ sidebar:
 
 Sendoff's MCP server is at `/mcp` on your hostname, like `https://news.example.com/mcp`. Claude Code and Codex send the MCP token from setup with every request. claude.ai and Claude Desktop sign in with OAuth instead, and you approve each connection with the same token.
 
-<Tabs>
-  <Tab title="Claude Code">
+## Claude Code
 
 ```bash
 claude mcp add --scope user --transport http sendoff https://news.example.com/mcp \
@@ -17,8 +16,7 @@ claude mcp add --scope user --transport http sendoff https://news.example.com/mc
 
 `--scope user` makes Sendoff available wherever you start Claude Code. Without it, Claude Code only connects Sendoff in the folder you ran the command from. Restart Claude Code, then check `/mcp` lists `sendoff` as connected.
 
-  </Tab>
-  <Tab title="Codex">
+## Codex
 
 Add a custom MCP server:
 
@@ -28,8 +26,7 @@ Add a custom MCP server:
 
 Leave **Bearer token env var** empty: it takes the name of an environment variable, not the token itself.
 
-  </Tab>
-  <Tab title="claude.ai and Claude Desktop">
+## claude.ai and Claude Desktop
 
 1. Open **Settings › Connectors** and choose **Add custom connector**.
 2. Enter `https://news.example.com/mcp` as the URL.
@@ -37,9 +34,6 @@ Leave **Bearer token env var** empty: it takes the name of an environment variab
 4. Check the app's name on the consent page and choose **Allow**.
 
 Sendoff asks for consent on every new connection, so only you can connect an app. The sign-in lasts 15 minutes; the connection itself stays signed in and refreshes on its own.
-
-  </Tab>
-</Tabs>
 
 ## Check it works
 
