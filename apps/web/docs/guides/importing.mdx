@@ -51,7 +51,7 @@ Sendoff matches columns by their header, ignoring case, spaces and punctuation, 
 | Name | `name`, `full name`, `display name`, or `first name` and `last name` together |
 | Status | `status`, `state`, `subscription status`, `subscriber type` and similar |
 | Flags | `unsubscribed`, `bounced`, `complained`, `email disabled`, `do not email`, and timestamps like `unsubscribed at` or Mailchimp's `UNSUB_TIME` and `CLEAN_TIME`. Any value other than false or empty marks the row. |
-| Opt-in flags | `subscribed`, `opted in`, `accepts marketing`. False marks the row unsubscribed. |
+| Opt-in flags | `subscribed`, `opted in`, `accepts marketing`, and Ghost's `subscribed_to_emails`. False marks the row unsubscribed. |
 
 Status values it understands include active, subscribed and confirmed; unsubscribed, cancelled and removed; bounced, cleaned and invalid; complained and spam. When a row has more than one signal, the most serious wins: complained, then bounced, then unsubscribed, then active.
 

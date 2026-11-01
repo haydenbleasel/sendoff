@@ -84,6 +84,17 @@ describe("readSubscriberCsv", () => {
     ]);
   });
 
+  it("reads Ghost's subscribed_to_emails and a quoted name after a space", () => {
+    expect(
+      statuses(
+        'email,name,subscribed_to_emails\na@example.com,A,true\nb@example.com, "Doe, B", false'
+      )
+    ).toStrictEqual([
+      ["a@example.com", "active"],
+      ["b@example.com", "unsubscribed"],
+    ]);
+  });
+
   it("ignores look-alike columns such as a paid subscription flag", () => {
     const csv = readSubscriberCsv(
       "email,active_subscription,email_disabled\na@example.com,false,false\nb@example.com,true,true"

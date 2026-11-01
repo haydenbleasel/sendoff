@@ -207,6 +207,8 @@ const FLAG_HEADERS = new Map<
   ["optout", { status: "unsubscribed", when: "set" }],
   ["spamcomplaint", { status: "complained", when: "set" }],
   ["subscribed", { status: "unsubscribed", when: "unset" }],
+  // Ghost's member export.
+  ["subscribedtoemails", { status: "unsubscribed", when: "unset" }],
   ["unsubscribed", { status: "unsubscribed", when: "set" }],
   ["unsubscribedat", { status: "unsubscribed", when: "set" }],
   ["unsubscribedate", { status: "unsubscribed", when: "set" }],
