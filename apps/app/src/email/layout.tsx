@@ -1,5 +1,6 @@
 import {
   Body,
+  Column,
   Container,
   Head,
   Hr,
@@ -7,6 +8,7 @@ import {
   Img,
   Link,
   Preview,
+  Row,
   Section,
   Text,
 } from "@react-email/components";
@@ -24,6 +26,11 @@ export interface IssueEmailProps {
   theme: Theme;
   unsubscribeUrl: string;
 }
+
+/** Space either side of the column, so text never touches the screen's edge. */
+const COLUMN_GUTTER = 24;
+
+const COLUMN_PADDING = `48px ${COLUMN_GUTTER}px 56px`;
 
 const footerText: CSSProperties = {
   color: light.muted,
@@ -204,15 +211,20 @@ export const EmailShell = ({
           style={{
             backgroundColor: light.background,
             margin: "0 auto",
-            maxWidth: CONTENT_WIDTH + 48,
-            padding: "48px 24px 56px",
+            maxWidth: CONTENT_WIDTH + COLUMN_GUTTER * 2,
           }}
         >
-          <Section style={{ marginBottom: 40 }}>
-            <Masthead settings={settings} />
-          </Section>
-          <Section>{children}</Section>
-          {footer}
+          {/* Outlook for Windows only pads table cells, so the column's
+              padding goes on a cell, not on Container's table. */}
+          <Row>
+            <Column style={{ padding: COLUMN_PADDING }}>
+              <Section style={{ marginBottom: 40 }}>
+                <Masthead settings={settings} />
+              </Section>
+              <Section>{children}</Section>
+              {footer}
+            </Column>
+          </Row>
         </Container>
       </Section>
     </Body>

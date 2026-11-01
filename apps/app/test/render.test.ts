@@ -10,6 +10,8 @@ import { sampleIssue, sampleSettings } from "../src/email/sample";
 import { createTheme } from "../src/email/theme";
 
 const FULL_WIDTH = /[;"]width:100%/u;
+const COLUMN_PADDING_ON_CELL = /<td[^>]*style="[^"]*padding:48px 24px 56px/u;
+const COLUMN_PADDING_ON_TABLE = /<table[^>]*style="[^"]*padding:48px/u;
 
 const render = async (body: string, settings = sampleSettings) => {
   const result = await renderIssue(
@@ -100,6 +102,15 @@ describe("renderIssue", () => {
     );
     expect(html).toContain('width="120"');
     expect(html).toContain('height="32"');
+  });
+});
+
+describe("Outlook for Windows", () => {
+  it("pads the column on a table cell, the only place Outlook applies padding", async () => {
+    const { html } = await render("Hello");
+
+    expect(html).toMatch(COLUMN_PADDING_ON_CELL);
+    expect(html).not.toMatch(COLUMN_PADDING_ON_TABLE);
   });
 });
 
