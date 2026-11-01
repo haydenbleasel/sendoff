@@ -1,0 +1,114 @@
+name: Deploy
+
+# Ships the website (apps/web, sendoff.dev) and the Sendoff Worker (apps/app)
+# to Cloudflare. Runs from release.yml after a Changesets release, so what's
+# live matches what's released, and on demand. Plain pushes to main don't
+# deploy.
+#
+# Repository secrets:
+# - CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID: for both deploys. The
+#   token needs Workers Scripts, Workers Routes and D1 edit permissions.
+# - SENDOFF_INSTANCE: the contents of apps/app/.sendoff/instance.json, which
+#   setup writes. Without it, the Worker deploy is skipped.
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  website:
+    runs-on: ubuntu-24.04
+
+    concurrency:
+      group: deploy-website
+      cancel-in-progress: true
+
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+    steps:
+      - name: Check for Cloudflare credentials
+        id: credentials
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice::CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID isn't set, so the website wasn't deployed."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.credentials.outputs.ready == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Bun
+        if: steps.credentials.outputs.ready == 'true'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        if: steps.credentials.outputs.ready == 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Build and deploy the website
+        if: steps.credentials.outputs.ready == 'true'
+        working-directory: apps/web
+        run: bun run deploy
+
+  worker:
+    runs-on: ubuntu-24.04
+
+    # Never two at once: each applies migrations before deploying.
+    concurrency:
+      group: deploy-worker
+      cancel-in-progress: false
+
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      SENDOFF_INSTANCE: ${{ secrets.SENDOFF_INSTANCE }}
+
+    steps:
+      - name: Check for Cloudflare credentials and the instance config
+        id: credentials
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ] || [ -z "$SENDOFF_INSTANCE" ]; then
+            echo "::notice::CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID or SENDOFF_INSTANCE isn't set, so the Worker wasn't deployed."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.credentials.outputs.ready == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Bun
+        if: steps.credentials.outputs.ready == 'true'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        if: steps.credentials.outputs.ready == 'true'
+        run: bun install --frozen-lockfile
+
+      # Deploys read the instance's ids from this gitignored file.
+      - name: Write the instance config
+        if: steps.credentials.outputs.ready == 'true'
+        run: |
+          mkdir -p apps/app/.sendoff
+          printf '%s' "$SENDOFF_INSTANCE" > apps/app/.sendoff/instance.json
+
+      # Applies D1 migrations, then deploys. The Worker keeps its secrets.
+      - name: Deploy the Worker
+        if: steps.credentials.outputs.ready == 'true'
+        run: bun run deploy

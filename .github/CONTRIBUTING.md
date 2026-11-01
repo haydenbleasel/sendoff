@@ -79,20 +79,28 @@ CI runs on every pull request and push to `main`:
 
 ## Changesets
 
-We use [Changesets](https://github.com/changesets/changesets) to version and publish `create-sendoff`, the one package on npm. The Worker and the docs site aren't published: people update them with `git pull`, so they don't need changesets.
+We use [Changesets](https://github.com/changesets/changesets) to version and release three packages:
 
-When you change `packages/create-sendoff` in a way people would notice:
+| Package | What a release does |
+| --- | --- |
+| `create-sendoff` | Publishes it to npm |
+| `app` (the Worker) | Tags a GitHub release with its changelog, and deploys the maintainers' instance |
+| `web` (the website and docs) | Tags a GitHub release, and deploys sendoff.dev |
+
+Self-hosters update the Worker with `git pull`, so the Worker's release notes are how they find out what changed, including anything to do after updating, like re-running setup.
+
+When you change one of them in a way people would notice:
 
 1. Run `bun changeset` in the root directory
-2. Select `create-sendoff`
+2. Select the packages you changed
 3. Choose the version bump:
    - `patch`: bug fixes and small changes
    - `minor`: new features that don't break anything
-   - `major`: breaking changes, such as a new required flag
+   - `major`: breaking changes, such as a new required flag, or a step people must take after updating
 4. Describe the change in a sentence or two. It goes in the changelog.
 5. Commit the generated file in `.changeset/` with your change
 
-Skip it for refactors, tests and build configuration. Merging to `main` opens a "Version Packages" pull request; merging that publishes the new version.
+Skip it for refactors, tests and build configuration. Each push to `main` opens or updates a "Version Packages" pull request. Merging it releases everything in it, and any release deploys both the Worker and the website (`.github/workflows/deploy.yml`).
 
 ## Pull requests
 
@@ -101,7 +109,7 @@ Skip it for refactors, tests and build configuration. Merging to `main` opens a 
 - Add or update tests for behavior changes.
 - Update the docs and `SPEC.md` when behavior changes.
 - Add screenshots when the email layout or a page changes.
-- Add a changeset if you changed `create-sendoff` (see [Changesets](#changesets)).
+- Add a changeset if people would notice the change (see [Changesets](#changesets)).
 
 ## Reporting bugs
 
