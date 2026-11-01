@@ -289,7 +289,7 @@ const eventsChecks = async (
       check(
         "fail",
         "Bounce and complaint tracking",
-        `The SES configuration set "${name}" doesn't exist, and sends that name it will fail. Run setup.`
+        `The SES configuration set "${name}" doesn't exist, so sends that use it will fail. Run setup.`
       ),
     ];
   }

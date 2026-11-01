@@ -119,7 +119,7 @@ export const registerSendTools = (
     "send_test",
     {
       description:
-        "Email the current version of a draft to the sender (or up to 5 addresses) with [Test] in the subject. Sending requires a test of the exact current version, so send another after any change to the draft or settings. Ask the person to check it in their inbox.",
+        "Email the current version of a draft to the reply-to address or sender (or up to 5 addresses) with [Test] in the subject. Sending requires a test of the exact current version, so send another after any change to the draft or settings. Ask the person to check it in their inbox.",
       inputSchema: z.object({
         issue: issueRef,
         to: z
@@ -222,7 +222,7 @@ export const registerSendTools = (
 
         const queued = confirmed.queued
           ? ""
-          : " Starting it hit an error; the scheduled job will pick it up within 5 minutes.";
+          : " Starting it hit an error; the scheduled job will pick it up within 10 minutes.";
 
         return result(
           `Sending "${confirmed.issue.subject}" to ${number(confirmed.recipients)} subscribers.${queued} Check progress with send_status.`,

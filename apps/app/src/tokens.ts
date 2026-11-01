@@ -1,6 +1,9 @@
-// Signed, stateless tokens for confirm, unsubscribe and tracking links:
-// `<subscriberId>.<base64url(HMAC-SHA256(purpose:subscriberId))>`.
-// They never expire, because links in sent emails must keep working for years.
+// Signed, stateless tokens: `<payload>.<base64url(HMAC-SHA256(purpose:payload))>`.
+// For confirm, unsubscribe and tracking links the payload is a subscriber
+// ID, and they never expire, because links in sent emails must keep working
+// for years. Preview links carry an issue ID; sign-in sessions carry their
+// own expiry. Send confirmations and tracked-link signatures, below, are
+// signed the same way.
 
 export type TokenPurpose =
   | "confirm"

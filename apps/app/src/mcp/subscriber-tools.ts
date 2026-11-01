@@ -203,13 +203,13 @@ export const registerSubscriberTools = (
   server.registerTool(
     "import_csv",
     {
-      description: `Import subscribers from a CSV export from any provider. It needs a header row with an email column; name columns, a status column and unsubscribed/bounced/complained columns are detected. Suppressed rows are imported as suppressed; unconfirmed rows and statuses Sendoff doesn't recognize are skipped and reported, never imported as active. If the export leaves out unsubscribes or bounces, ask the person to export those too and import them with status. Always run dryRun first, show the person which columns were used and what was skipped, and wait for them to confirm before importing, even when the numbers look right. Pass the file's contents as csv for up to about 1,000 rows. For a bigger file, don't paste it: if you can run commands, create_api_key with scope subscribers:import, run \`curl --data-binary @file.csv -H "Authorization: Bearer <key>" -H "Content-Type: text/csv" "${config.publicUrl}/api/v1/subscribers/import?dryRun=true"\` (drop dryRun=true to import), then revoke_api_key. Otherwise import it in parts, or give the person that command to run.`,
+      description: `Import subscribers from a CSV export from any provider. It needs an email column, under a header row (a plain list of addresses works too); name columns, a status column and unsubscribed/bounced/complained columns are detected. Suppressed rows are imported as suppressed; unconfirmed rows and statuses Sendoff doesn't recognize are skipped and reported, never imported as active. If the export leaves out unsubscribes or bounces, ask the person to export those too and import them with status. Always run dryRun first, show the person which columns were used and what was skipped, and wait for them to confirm before importing, even when the numbers look right. Pass the file's contents as csv for up to about 1,000 rows. For a bigger file, don't paste it: if you can run commands, create_api_key with scope subscribers:import, run \`curl --data-binary @file.csv -H "Authorization: Bearer <key>" -H "Content-Type: text/csv" "${config.publicUrl}/api/v1/subscribers/import?dryRun=true"\` (drop dryRun=true to import), then revoke_api_key. Otherwise import it in parts, or give the person that command to run.`,
       inputSchema: z.object({
         csv: z
           .string()
           .min(1)
           .max(MAX_CSV_BYTES)
-          .describe("The file's contents, header row first."),
+          .describe("The file's contents, header row (if any) first."),
         dryRun: z.boolean().optional(),
         status: z
           .enum(suppressedStatuses)

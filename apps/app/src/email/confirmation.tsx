@@ -12,7 +12,7 @@ export interface ConfirmationEmail {
   text: string;
 }
 
-/** The double opt-in email sent after someone signs up through the form. */
+/** The double opt-in email sent after someone signs up (the form, the REST API or add_subscriber). */
 export const renderConfirmationEmail = async (
   settings: Settings,
   confirmUrl: string

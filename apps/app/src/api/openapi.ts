@@ -91,7 +91,7 @@ export const openApiDocument = (publicUrl: string) => ({
     "/subscribers/import": {
       post: {
         description:
-          'Import subscribers from a CSV export, e.g. `curl --data-binary @export.csv -H "Content-Type: text/csv"`. It needs a header row with an email column; name, status and unsubscribed/bounced/complained columns are detected. Imported active subscribers count as confirmed and get no email. Suppressed rows are imported as suppressed, existing subscribers are never reactivated, and unconfirmed rows or unrecognized statuses are skipped and reported. Run with dryRun=true first, and have a person check the report before importing.',
+          'Import subscribers from a CSV export, e.g. `curl --data-binary @export.csv -H "Content-Type: text/csv"`. It needs an email column, under a header row (a plain list of addresses works too); name, status and unsubscribed/bounced/complained columns are detected. Imported active subscribers count as confirmed and get no email. Suppressed rows are imported as suppressed, existing subscribers are never reactivated, and unconfirmed rows or unrecognized statuses are skipped and reported. Run with dryRun=true first, and have a person check the report before importing.',
         operationId: "importSubscribers",
         parameters: [
           {

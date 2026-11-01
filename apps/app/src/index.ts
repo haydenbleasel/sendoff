@@ -127,8 +127,8 @@ export default {
   fetch: (request, env, ctx) => providerFor(env).fetch(request, env, ctx),
 
   // One message = one chunk of recipients. processSendChunk records every
-  // outcome itself, so a throw here happened before anything was sent and
-  // is safe to retry.
+  // outcome itself, and a retry never reclaims rows an earlier attempt
+  // claimed, so retrying after a throw can't send anyone the issue twice.
   async queue(batch, env) {
     const deps = sendDeps(env);
 
@@ -146,7 +146,7 @@ export default {
         await processSendChunk(deps, parsed.data);
         message.ack();
       } catch (error) {
-        console.error("Send chunk failed before sending; retrying", error);
+        console.error("Send chunk failed; retrying", error);
         message.retry({ delaySeconds: RETRY_DELAY_SECONDS });
       }
     }
