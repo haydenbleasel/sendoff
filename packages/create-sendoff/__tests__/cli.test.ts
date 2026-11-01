@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { callerArn } from "../src/aws";
 import { DEFAULT_FOLDER, DEFAULT_REPO, parseCommand } from "../src/cli";

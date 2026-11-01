@@ -1,0 +1,9 @@
+[test]
+# Coverage is always on, so `bun test` fails if any line or function in src/
+# goes untested.
+coverage = true
+coverageThreshold = 1.0
+coverageSkipTestFiles = true
+# index.ts only wires main() to the real process (argv, stdout, exit code).
+# main.ts holds the flow and is tested in full.
+coveragePathIgnorePatterns = ["src/index.ts"]

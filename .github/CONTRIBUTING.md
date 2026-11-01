@@ -54,7 +54,7 @@ From the repo root:
 | `bun run fix` | Formats and fixes lint issues with Ultracite |
 | `bun run check` | Lints and checks formatting |
 | `bun run types` | Typechecks with tsgo |
-| `bun run test` | Runs the tests (the Worker's run inside workerd, the Workers runtime) |
+| `bun run test` | Runs the tests: the Worker's inside workerd (the Workers runtime), and `create-sendoff`'s with `bun test`, which fails below 100% coverage |
 | `bun run build` | Builds the docs site and `create-sendoff` |
 
 The pre-commit hook runs `bun run fix` on staged files, and CI runs `check`, `types`, `test` and `build` on every pull request.
@@ -66,7 +66,7 @@ The pre-commit hook runs `bun run fix` on staged files, and CI runs `check`, `ty
 - **Email layout:** check the change at `/preview/sample` in light and dark mode, and run `bun run bench` in `apps/app` to make sure rendering stays inside the Workers CPU limit.
 - **MCP tools and the REST API:** update the reference pages in `apps/web/docs/reference/` along with the code.
 - **Setup:** never run `bun run setup` against someone else's Cloudflare or AWS accounts. Test the pure parts, and run the real thing against accounts of your own.
-- **`create-sendoff`:** test it end to end with `--repo <path>` pointing at a local repo whose `setup` script is harmless, like `echo`, so it never touches real accounts.
+- **`create-sendoff`:** its tests (`packages/create-sendoff/__tests__`) run with `bun test` and must cover every line and function; `bunfig.toml` sets the threshold, and only `src/index.ts`, which wires `main()` to the real process, is left out. Pass fakes to `main()` rather than touching real accounts. To try it end to end, use `--repo <path>` pointing at a local repo whose `setup` script is harmless, like `echo`.
 - **Docs:** keep the writing short and plain, like the pages around it.
 
 ## Changesets

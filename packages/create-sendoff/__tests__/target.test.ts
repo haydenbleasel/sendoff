@@ -1,8 +1,7 @@
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { commandIn, displayPath, inspectTarget } from "../src/target";
 
@@ -34,6 +33,17 @@ describe("inspectTarget", () => {
   it("recognizes an earlier clone, so setup can resume", () => {
     checkout(root, "sendoff");
     expect(inspectTarget(root)).toBe("sendoff");
+  });
+
+  it("is taken by a folder of something else", () => {
+    writeFileSync(path.join(root, "notes.txt"), "");
+    expect(inspectTarget(root)).toBe("taken");
+  });
+
+  it("is taken by a folder with the setup script but no package.json", () => {
+    checkout(root, "sendoff");
+    rmSync(path.join(root, "package.json"));
+    expect(inspectTarget(root)).toBe("taken");
   });
 
   it("is taken by anything else", () => {

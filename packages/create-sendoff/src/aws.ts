@@ -19,8 +19,10 @@ export const callerArn = (stdout: string): string | undefined =>
  * Setup uses the AWS CLI's login to create the SES resources and the Worker's
  * send-only key. Without one it asks for IAM keys made by hand.
  */
-export const awsLogin = async (): Promise<AwsLogin> => {
-  const result = await run("aws", [
+export const awsLogin = async (
+  runCommand: typeof run = run
+): Promise<AwsLogin> => {
+  const result = await runCommand("aws", [
     "sts",
     "get-caller-identity",
     "--output",
