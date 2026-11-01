@@ -22,7 +22,7 @@ Sendoff is one Worker app (`apps/app`). There's no published framework package a
 - **Deploying:** `bun create sendoff [folder]` clones the repo (a real clone, so `git pull` updates it), runs `bun install` and hands off to `bun run setup` (see [Setup flow](#setup-flow)); later, `bun run update` moves the clone to the newest Worker release (the latest stable `app@x.y.z` tag, fast-forward only, after showing the changelog since the current version and asking), then installs and runs `bun run deploy`, which ships the code as it is. It never moves backwards past unreleased commits, and stops on uncommitted changes or local commits. Before cloning it checks for Git and Bun and nudges people to log in to the AWS CLI. Run again on an existing clone, it skips the clone and resumes setup. A Deploy to Cloudflare button comes later.
 - **Customizing doesn't touch code.** Brand and sender settings live in D1 and are edited through MCP: "make the accent color #ff0066" or "add my GitHub link". A user's copy never drifts from upstream, so updating is just moving to a newer release and redeploying.
 - **Where config lives:**
-  - Secrets are Worker secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `TOKEN_SECRET` (signs links), `TURNSTILE_SECRET_KEY`, and later the MCP token.
+  - Secrets are Worker secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `TOKEN_SECRET` (signs links), `TURNSTILE_SECRET_KEY` and `MCP_TOKEN`.
   - Vars and infrastructure IDs go in `wrangler.jsonc`, written by `setup`: `PUBLIC_URL`, `SES_REGION`, `SES_CONFIGURATION_SET`, `SES_EVENTS_TOPIC_ARN`, `TURNSTILE_SITE_KEY`, plus the D1 and queue bindings.
   - Locally, `.dev.vars` overrides them (`.dev.vars.example` uses Turnstile's always-pass test keys). `getConfig()` validates everything and names whatever is missing.
 
@@ -69,16 +69,16 @@ One Worker serves everything:
 | Queue consumer (`sendoff-send`) | One message = one chunk of up to 50 recipients. Batch size 1, concurrency 1. |
 | Cron (`*/5 * * * *`) | Restarts sends with no worker activity for 5 minutes (a lost queue message), and finishes sends with nothing left to do. |
 | Cron (`0 3 * * *`) | Purges expired OAuth grants and tokens. |
-| Email Routing handler | Inbound replies and the `mailto:` unsubscribe address. Replies are forwarded to `replyTo`. |
+| Email Routing handler (not built yet) | Inbound replies and the `mailto:` unsubscribe address. Replies are forwarded to `replyTo`. |
 
-Stack: Hono (routing), Drizzle + D1, `aws4fetch` (SigV4 for SES; no AWS SDK), Cloudflare Agents SDK MCP handler, `@cloudflare/workers-oauth-provider` (later), React Email.
+Stack: Hono (routing), Drizzle + D1, `aws4fetch` (SigV4 for SES; no AWS SDK), the MCP TypeScript SDK (`@modelcontextprotocol/server`), `@cloudflare/workers-oauth-provider` (OAuth for connectors), React Email.
 
 ### Platform limits
 
 Workers Paid gives 30 s CPU per request (15 min per queue consumer run) and 10,000 subrequests per run. A newsletter this size stays well inside the included usage. The design still keeps work small:
 
 - **Render once per issue.** Do string substitution per recipient. Measured with `bun run bench` on an M-series Mac: about 1 ms warm, about 28–32 ms cold. Don't use React Email's `<Tailwind>` component, which compiles CSS on every render; use inline styles.
-- **Send in chunks.** Each queue message carries about 100 recipients, so a chunk finishes in seconds at the SES max send rate. Chunks are the unit of retry and of pacing.
+- **Send in chunks.** Each queue message carries up to 50 recipients, so a chunk finishes in seconds at the SES max send rate. Chunks are the unit of retry and of pacing.
 - **Keep event writes small.** SES reports bounces, complaints, rejects and deliveries. A delivery is one `UPDATE` of its send row (by message id), not an event row, so a send costs about one SNS request and one write per recipient (6,000 a quarter is well inside SNS's free tier). Clicks and opens are tracked by the Worker itself; opens keep at most one row per person per kind of agent.
 
 ## Data model (D1)
@@ -88,7 +88,7 @@ subscribers  id (UUIDv7) PK, email UNIQUE (lowercased), name, status, source,
              created_at, confirmed_at, confirmation_sent_at, unsubscribed_at,
              last_engaged_at, metadata JSON
              status: pending | active | unsubscribed | bounced | complained
-             source: import | form | mcp
+             source: api | import | form | mcp
 
 issues       id PK, slug UNIQUE, subject, preheader, body, version INT,
              status, content_hash, test_sent_hash, test_sent_at,
