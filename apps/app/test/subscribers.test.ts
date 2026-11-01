@@ -104,6 +104,22 @@ describe("confirm, unsubscribe and resubscribe", () => {
     expect(await statusOf("lifecycle@example.com")).toBe("active");
   });
 
+  it("clears the unsubscribe date when someone signs up again and confirms", async () => {
+    const { subscriber } = await subscribe(db(), {
+      email: "again@example.com",
+      source: "form",
+    });
+
+    await confirmSubscriber(db(), subscriber.id);
+    await unsubscribeSubscriber(db(), subscriber.id);
+    await subscribe(db(), { email: "again@example.com", source: "form" });
+
+    expect(await confirmSubscriber(db(), subscriber.id)).toBe("confirmed");
+
+    const confirmed = await findSubscriberByEmail(db(), "again@example.com");
+    expect(confirmed).toMatchObject({ status: "active", unsubscribedAt: null });
+  });
+
   it("keeps bounced subscribers bounced when they unsubscribe", async () => {
     await importSubscribers(db(), [
       { email: "hard@example.com", status: "bounced" },

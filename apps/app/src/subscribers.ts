@@ -139,7 +139,8 @@ export const confirmSubscriber = async (
 ): Promise<ConfirmOutcome> => {
   const [confirmed] = await db
     .update(subscribers)
-    .set({ confirmedAt: now, status: "active" })
+    // Someone who unsubscribed and signed up again isn't unsubscribed any more.
+    .set({ confirmedAt: now, status: "active", unsubscribedAt: null })
     .where(and(eq(subscribers.id, id), eq(subscribers.status, "pending")))
     .returning({ id: subscribers.id });
 
