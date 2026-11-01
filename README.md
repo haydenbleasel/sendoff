@@ -51,7 +51,7 @@ Nothing reaches your list without you. Before a send, the agent has to email you
 - **Bring your list and your back catalog.** Import any provider's CSV export; imports never resubscribe anyone who unsubscribed, bounced or complained. Past issues come over exactly as they were sent, so nothing's lost.
 - **Signups from your site.** A hosted signup page, plus a REST API with scoped keys and an OpenAPI description for your own forms.
 - **Stats your agent can read.** Ask "how's my latest send doing?" for deliveries, clicks and unsubscribes in people, with security scanners filtered out, compared with your earlier issues. Clicks go through your own domain; opens are opt-in.
-- **Sends you can stop and resume.** Sends go out in chunks through a queue. If SES pauses or a worker crashes, the send stops and picks up where it left off when you resume it, and nobody gets the issue twice.
+- **Sends you can stop and resume.** Sends go out in chunks through a queue. If SES pauses, the send stops and picks up where it left off when you resume it. If a worker crashes, a scheduled job restarts the send on its own. Either way, nobody gets the issue twice.
 
 ## What it costs
 

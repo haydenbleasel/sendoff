@@ -48,7 +48,7 @@ Sendoff matches columns by their header, ignoring case, spaces and punctuation, 
 | Field | Headers it recognizes |
 | --- | --- |
 | Email | `email`, `email address`, `e-mail`, `mail`, or any other header containing "email". A file with no header row works too, if it's just a list of addresses. |
-| Name | `name`, `full name`, `display name`, or `first name` and `last name` together |
+| Name | `name`, `full name`, `display name`, or `first name` and `last name` (joined, or either one alone) |
 | Status | `status`, `state`, `subscription status`, `subscriber type` and similar |
 | Flags | `unsubscribed`, `bounced`, `complained`, `email disabled`, `do not email`, and timestamps like `unsubscribed at` or Mailchimp's `UNSUB_TIME` and `CLEAN_TIME`. Any value other than false or empty marks the row. |
 | Opt-in flags | `subscribed`, `opted in`, `accepts marketing`, and Ghost's `subscribed_to_emails`. False marks the row unsubscribed. |

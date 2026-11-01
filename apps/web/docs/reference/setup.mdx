@@ -98,7 +98,7 @@ Secrets, uploaded with the deploy:
 | --- | --- |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | The `sendoff` IAM user's send-only key |
 | `MCP_TOKEN` | Authenticates Claude Code and Codex, and signs you in when connecting claude.ai |
-| `TOKEN_SECRET` | Signs confirmation and unsubscribe links. Generated once and never rotated, because rotating it would break every unsubscribe link already sent. |
+| `TOKEN_SECRET` | Signs the confirmation, unsubscribe and tracked links in emails, plus preview links and sign-in sessions. Generated once and never rotated, because rotating it would break every unsubscribe link already sent. |
 | `TURNSTILE_SECRET_KEY` | Verifies the signup form's Turnstile challenge |
 
 Variables, in the generated config: `PUBLIC_URL`, `SES_REGION`, `SES_CONFIGURATION_SET`, `SES_EVENTS_TOPIC_ARN` and `TURNSTILE_SITE_KEY`.

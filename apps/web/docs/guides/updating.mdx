@@ -47,7 +47,7 @@ Setup records your instance in `apps/app/.sendoff/`, which git ignores:
 - `wrangler.jsonc`: the deploy config generated from it
 - `pages/`: the Pages project's code and config, generated from it, if you have one
 
-`bun run deploy` needs them. If you lose them, or move to another machine, run `bun run setup` again: it finds the resources that already exist instead of creating new ones.
+`bun run deploy` needs them. If you lose them, or move to another machine, run `bun run setup` again. It finds the database, queue and SES resources that already exist instead of creating new ones, and keeps the Worker's `TOKEN_SECRET`. It can't look up the Turnstile widget or the Worker's AWS key without these files, though, so it makes new ones: delete the old widget in the Cloudflare dashboard and the old key on the `sendoff` IAM user afterwards, since IAM allows a user only two keys.
 
 The repo's own `apps/app/wrangler.jsonc` stays generic, so pulling updates never conflicts with your instance.
 
