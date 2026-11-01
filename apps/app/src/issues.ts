@@ -188,6 +188,10 @@ export const createDraft = async (
   input: DraftInput,
   now: Date = new Date()
 ): Promise<Issue> => {
+  if (input.subject.trim() === "") {
+    throw new IssueError("The subject can't be empty.");
+  }
+
   const id = createId(now.getTime());
 
   const base =
