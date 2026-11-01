@@ -470,7 +470,7 @@ const workerSecretNames = (): Set<string> => {
       );
 };
 
-/** `dnsOnCloudflare` is false when the hostname's DNS is elsewhere, so the token is only for Turnstile. */
+/** `dnsOnCloudflare` is false when the From domain's DNS is elsewhere, so the token is only for Turnstile. */
 const cloudflareToken = async (
   dnsOnCloudflare: boolean
 ): Promise<CloudflareApi | null> => {
@@ -567,6 +567,50 @@ const hostnameOnCloudflare = async (
   );
 
   return false;
+};
+
+/**
+ * Whether the API token can add SES's records to the From domain's zone. Off
+ * Pages, setup asks for DNS permissions and checks the zone when it adds them.
+ * Behind Pages, the From domain's DNS can still be on Cloudflare: when the
+ * hostname is on another domain, like news.other.com sending from
+ * example.com, or when the DNS moved to Cloudflare after Pages was set up.
+ */
+const fromDomainOnCloudflare = async ({
+  accountId,
+  api,
+  domain,
+  hostname,
+  usePages,
+}: {
+  accountId: string;
+  api: CloudflareApi | null;
+  domain: string;
+  hostname: string;
+  usePages: boolean;
+}): Promise<boolean> => {
+  if (!usePages) {
+    return true;
+  }
+
+  const zone = api
+    ? await api.findZone(domain, accountId).catch(() => "unknown" as const)
+    : "unknown";
+
+  if (zone !== "unknown") {
+    return zone?.status === "active";
+  }
+
+  // A hostname on the From domain shares its DNS, which isn't on Cloudflare.
+  if (hostname === domain || hostname.endsWith(`.${domain}`)) {
+    return false;
+  }
+
+  return answer(
+    await confirm({
+      message: `Is ${domain}'s DNS on Cloudflare, in this account?`,
+    })
+  );
 };
 
 const pagesProjectsSchema = z.array(
@@ -1144,14 +1188,21 @@ const finishSetup = async ({
     settings.replyTo = newsletter.replyTo;
   }
 
-  const current = toolText(
-    await client.callTool({ arguments: {}, name: "get_settings" })
-  );
+  const currentResult = await client.callTool({
+    arguments: {},
+    name: "get_settings",
+  });
+
+  const current = toolText(currentResult);
 
   // Setup fills in the first settings only. After that they're the agent's
   // to change, and saving these answers again would undo its edits, such as
   // footer links (update_settings replaces the whole list).
-  if (current.startsWith(SETTINGS_NOT_SET_UP)) {
+  if (currentResult.isError) {
+    log.warn(
+      `Couldn't read your current settings, so setup didn't save yours: ${current}\nRun \`bun run setup\` again, or your agent can set them with update_settings.`
+    );
+  } else if (current.startsWith(SETTINGS_NOT_SET_UP)) {
     const saved = await client.callTool({
       arguments: settings,
       name: "update_settings",
@@ -1223,9 +1274,13 @@ const chooseHostname = async ({
   };
 };
 
-/** SES's records, plus the hostname's CNAME when it's behind Pages (`pagesDev`). */
+/**
+ * SES's records, plus the hostname's CNAME when it's behind Pages (`pagesDev`).
+ * `dnsOnCloudflare` says whether the From domain's DNS is on Cloudflare.
+ */
 const configureAllDns = async ({
   cloudflareApi,
+  dnsOnCloudflare,
   domain,
   hostname,
   pagesDev,
@@ -1233,6 +1288,7 @@ const configureAllDns = async ({
   ses,
 }: {
   cloudflareApi: () => Promise<CloudflareApi | null>;
+  dnsOnCloudflare: boolean;
   domain: string;
   hostname: string;
   pagesDev: string | undefined;
@@ -1260,8 +1316,9 @@ const configureAllDns = async ({
     return;
   }
 
-  // Behind Pages, the hostname's DNS isn't on Cloudflare, so the token can't add records.
-  const useToken = !(sesDone || pagesDev);
+  // SES's records go in the From domain's zone. The token can add them when
+  // that's on Cloudflare, even if the hostname's DNS (behind Pages) isn't.
+  const useToken = !sesDone && dnsOnCloudflare;
 
   await configureDns({
     byHand:
@@ -1322,6 +1379,14 @@ const main = async () => {
     workerName: WORKER_NAME,
   });
 
+  const dnsOnCloudflare = await fromDomainOnCloudflare({
+    accountId,
+    api: cloudflareLogin,
+    domain,
+    hostname,
+    usePages,
+  });
+
   const region = answer(
     await select({
       initialValue: draft.sesRegion ?? "us-east-1",
@@ -1350,7 +1415,7 @@ const main = async () => {
   let cloudflare: Promise<CloudflareApi | null> | undefined;
 
   const cloudflareApi = async (): Promise<CloudflareApi | null> => {
-    cloudflare ??= cloudflareToken(!usePages);
+    cloudflare ??= cloudflareToken(dnsOnCloudflare);
 
     return await cloudflare;
   };
@@ -1401,6 +1466,7 @@ const main = async () => {
 
   await configureAllDns({
     cloudflareApi,
+    dnsOnCloudflare,
     domain,
     hostname,
     pagesDev,

@@ -215,4 +215,16 @@ describe("unsubscribe", () => {
     expect(await back.text()).toContain("Can&#x27;t resubscribe");
     expect(await statusOf("bounced@example.com")).toBe("bounced");
   });
+
+  it("asks a pending signup to confirm instead of resubscribing it", async () => {
+    await signup({ email: "pending@example.com" });
+    const token = await unsubscribeToken("pending@example.com");
+
+    const back = await request(`/resubscribe/${token}`, { method: "POST" });
+    const html = await back.text();
+
+    expect(html).toContain("Confirm your subscription");
+    expect(html).not.toContain("bounced");
+    expect(await statusOf("pending@example.com")).toBe("pending");
+  });
 });

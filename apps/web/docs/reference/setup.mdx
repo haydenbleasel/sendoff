@@ -52,7 +52,8 @@ sidebar:
     clash with existing ones are reported, not changed. Skipped once SES has
     verified the domain and it has DMARC. If your DNS isn't on Cloudflare,
     there's also a `CNAME` from your hostname to the Pages project, and setup
-    lists every record for you to add at your DNS provider.
+    lists the records for you to add at your DNS provider. If only your sender's
+    domain is on Cloudflare, the token still adds SES's records there.
   </Step>
   <Step title="Deploy">
     Generates `.sendoff/wrangler.jsonc`, applies the database migrations, and

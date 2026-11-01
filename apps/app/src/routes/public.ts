@@ -374,8 +374,23 @@ publicRoutes.post("/resubscribe/:token", async (c) => {
 
   const resubscribed = await resubscribeSubscriber(db, subscriber.id);
 
-  // Bounced or complained: it only undoes an unsubscribe.
-  if (!resubscribed && subscriber.status !== "active") {
+  // It only undoes an unsubscribe. A signup that isn't confirmed yet still
+  // needs its confirmation link, so this can't skip that.
+  if (!resubscribed && subscriber.status === "pending") {
+    return c.html(
+      messagePage({
+        body: `${subscriber.email} hasn't confirmed its subscription yet. Open the link in the confirmation email to start getting ${settings.name}, or sign up again for a new one.`,
+        link: { href: "/", label: "Go to the signup page" },
+        settings,
+        title: "Confirm your subscription",
+      })
+    );
+  }
+
+  if (
+    !resubscribed &&
+    (subscriber.status === "bounced" || subscriber.status === "complained")
+  ) {
     return c.html(
       messagePage({
         body: `${settings.name} can't send to ${subscriber.email} any more, because emails to it bounced or were marked as spam.`,
