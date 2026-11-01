@@ -1,6 +1,19 @@
 /* Sendoff brand tokens ("Minimal Departures"). */
 
+/*
+ * The landing page's display headings: 44px on phones (48px is a few pixels
+ * too wide for "Sendoff handles" at 375px) up to 88px on wide screens.
+ */
+@theme {
+  --text-display: clamp(2.75rem, 6.4vw, 5.5rem);
+  --text-display--line-height: 1.02;
+}
+
 :root {
+  /* Motion: a strong ease-out for anything entering, and an ease-in-out for the flaps' rotation. */
+  --sendoff-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --sendoff-ease-in-out: cubic-bezier(0.645, 0.045, 0.355, 1);
+
   --sendoff-signal: #ffc20e;
   --sendoff-signal-shade: #f2b80d;
   --sendoff-ink: #0d0d0d;
@@ -23,26 +36,66 @@
 .sendoff-flap {
   --sendoff-flap-top: var(--sendoff-flap);
   --sendoff-flap-bottom: var(--sendoff-flap-shade);
+  --sendoff-flap-fill: linear-gradient(
+    var(--sendoff-flap-top) 0 calc(50% - 0.5px),
+    var(--blume-background) calc(50% - 0.5px) calc(50% + 0.5px),
+    var(--sendoff-flap-bottom) calc(50% + 0.5px) 100%
+  );
 
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
   line-height: 1;
   color: var(--blume-foreground);
-  background: linear-gradient(
-    var(--sendoff-flap-top) 0 calc(50% - 0.5px),
-    var(--blume-background) calc(50% - 0.5px) calc(50% + 0.5px),
-    var(--sendoff-flap-bottom) calc(50% + 0.5px) 100%
-  );
+  background: var(--sendoff-flap-fill);
+  perspective: 6em;
 }
 
-/* Live status ("BOARDING") flips the whole flap to yellow, never the letter. */
+/* Live status ("SENDING") flips the whole flap to yellow, never the letter. */
 .sendoff-flap[data-live] {
   --sendoff-flap-top: var(--sendoff-signal);
   --sendoff-flap-bottom: var(--sendoff-signal-shade);
 
   color: var(--sendoff-ink);
+}
+
+/*
+ * A tile mid-flip (built by the script in _home/flaps.astro): full-size faces,
+ * each clipped to one half so the glyphs line up across the split. The upper
+ * face shows the next character, the lower one the current, and the leaf
+ * between them falls from the top half to the bottom on a hinge at the split,
+ * carrying the current character's top on its front and the next one's
+ * bottom on its back.
+ */
+.sendoff-flap-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: inherit;
+  background: var(--sendoff-flap-fill);
+  backface-visibility: hidden;
+}
+
+.sendoff-flap-upper {
+  clip-path: inset(0 0 50% 0);
+}
+
+.sendoff-flap-lower {
+  clip-path: inset(50% 0 0 0);
+}
+
+.sendoff-flap-leaf {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+
+.sendoff-flap-back {
+  transform: rotateX(180deg);
 }
 
 /* A low marker stroke behind two or three words, once per view. */
@@ -63,4 +116,97 @@
   border-radius: 0.06em;
   color: var(--sendoff-ink);
   background: var(--sendoff-signal);
+}
+
+/*
+ * Landing page motion. Everything here is visible by default: the hero's
+ * entrance is a CSS animation, and the on-view states only hide content once
+ * the page script has set `data-motion` on <html> (and left anything already
+ * on screen alone). Reduced motion keeps the fades and drops the movement.
+ */
+
+/* The hero's entrance on load, staggered by `--i`. */
+.sendoff-enter {
+  animation: sendoff-fade 0.5s ease both;
+  animation-delay: calc(var(--i, 0) * 0.1s);
+}
+
+/* Chat bubbles arrive one at a time, growing from their own corner. */
+[data-chat="load"] .sendoff-bubble {
+  animation: sendoff-fade 0.4s ease both;
+  animation-delay: calc(0.6s + var(--i, 0) * 0.15s);
+}
+
+[data-motion] [data-reveal]:not([data-reveal="contents"], [data-revealed]),
+[data-motion] [data-chat="view"]:not([data-revealed]) .sendoff-bubble,
+[data-motion] [data-reveal="contents"]:not([data-revealed]) .sendoff-check {
+  opacity: 0;
+}
+
+/* Transitions live on the revealed state only, so hiding is instant and only the reveal animates. */
+[data-reveal][data-revealed]:not([data-reveal="contents"]) {
+  transition:
+    opacity 0.8s var(--sendoff-ease-out),
+    transform 0.8s var(--sendoff-ease-out);
+  transition-delay: var(--reveal-delay, 0s);
+}
+
+[data-chat="view"][data-revealed] .sendoff-bubble {
+  transition:
+    opacity 0.5s var(--sendoff-ease-out),
+    transform 0.5s var(--sendoff-ease-out);
+  transition-delay: calc(var(--i, 0) * 0.15s);
+}
+
+/* Preflight ticks its checks off in order, as if it were running them. */
+[data-reveal="contents"][data-revealed] .sendoff-check {
+  transition:
+    opacity 0.3s var(--sendoff-ease-out),
+    transform 0.4s var(--sendoff-ease-out);
+  transition-delay: calc(0.2s + var(--i, 0) * 0.12s);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sendoff-enter {
+    animation: sendoff-enter 0.9s var(--sendoff-ease-out) both;
+    animation-delay: calc(var(--i, 0) * 0.1s);
+  }
+
+  [data-chat="load"] .sendoff-bubble {
+    animation: sendoff-bubble 0.5s var(--sendoff-ease-out) both;
+    animation-delay: calc(0.7s + var(--i, 0) * 0.15s);
+  }
+
+  [data-motion] [data-reveal]:not([data-reveal="contents"], [data-revealed]) {
+    transform: translateY(1rem);
+  }
+
+  [data-motion] [data-chat="view"]:not([data-revealed]) .sendoff-bubble {
+    transform: translateY(0.5rem) scale(0.97);
+  }
+
+  [data-motion] [data-reveal="contents"]:not([data-revealed]) .sendoff-check {
+    transform: scale(0.5);
+  }
+}
+
+@keyframes sendoff-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes sendoff-enter {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateY(0.75rem);
+  }
+}
+
+@keyframes sendoff-bubble {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem) scale(0.97);
+  }
 }

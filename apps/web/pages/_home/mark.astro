@@ -8,16 +8,35 @@ const { size = 24 } = Astro.props;
 
 // Smaller marks get a heavier arrow so it holds up at favicon sizes.
 const LARGE_MARK = 48;
-const strokeWidth = size >= LARGE_MARK ? 6.5 : 8;
+const weight = size >= LARGE_MARK ? 6.5 : 8;
+
+// The arrow as one filled outline, `weight` wide: the corner (25,20)–(44,20)–
+// (44,39) and the shaft from (19,45) into it. Stroked as two lines, the shaft's
+// square cap poked out past the corner, so here the shaft ends flush inside
+// the corner and only its tail is squared off. public/logo.svg and
+// public/icon.svg carry the same outline at weights 8 and 9.
+const half = weight / 2;
+
+// How far a square end reaches along each axis on the 45° shaft.
+const reach = weight / Math.SQRT2;
+
+const points: [number, number][] = [
+  [25 - half, 20 - half],
+  [44 + half, 20 - half],
+  [44 + half, 39 + half],
+  [44 - half, 39 + half],
+  [44 - half, 20 + half + reach],
+  [19, 45 + reach],
+  [19 - reach, 45],
+  [44 - half - reach, 20 + half],
+  [25 - half, 20 + half],
+];
+
+const arrow = `M${points.map(([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`).join("L")}Z`;
 ---
 
 <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" class="shrink-0">
   <rect width="64" height="64" rx="15" style="fill: var(--sendoff-mark-tile)"></rect>
-  <path
-    d="M19 45 44 20M25 20h19v19"
-    fill="none"
-    style="stroke: var(--sendoff-signal)"
-    stroke-width={strokeWidth}
-    stroke-linecap="square"></path>
+  <path d={arrow} style="fill: var(--sendoff-signal)"></path>
   <rect y="31.25" width="64" height="1.5" style="fill: var(--blume-background)"></rect>
 </svg>

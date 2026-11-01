@@ -1,25 +1,36 @@
 ---
 // A row of split-flap tiles. Flaps are for live status and numbers only,
-// never headlines; `live` flips them to signal yellow.
+// never headlines; `live` flips them to signal yellow. The script below flips
+// each board into place the first time it comes into view; `delay` (ms) holds
+// a board back so it can follow the content around it.
 interface Props {
   text: string;
   label?: string;
   live?: boolean;
   size?: "sm" | "md" | "lg";
+  delay?: number;
+  class?: string;
 }
 
-const { text, label = text, live = false, size = "md" } = Astro.props;
+const { text } = Astro.props;
+const { class: className, delay = 0, label = text, live = false, size = "md" } = Astro.props;
 
 const sizes = {
-  lg: "h-10 w-[30px] rounded-[5px] text-[22px]",
-  md: "h-[30px] w-[22px] rounded-[4px] text-[17px]",
-  sm: "h-[25px] w-[18px] rounded-[3px] text-sm",
+  lg: "h-10 w-7.5 rounded-[5px] text-[1.375rem]",
+  md: "h-7.5 w-5.5 rounded-sm text-[1.0625rem]",
+  sm: "h-6.25 w-4.5 rounded-[3px] text-sm",
 } as const;
 
 const characters = [...text];
 ---
 
-<span class="inline-flex gap-[2px]" role="img" aria-label={label}>
+<span
+  class:list={["inline-flex gap-0.5", className]}
+  role="img"
+  aria-label={label}
+  data-flaps
+  data-flaps-delay={delay}
+>
   {
     characters.map((character) => (
       <span class:list={["sendoff-flap", sizes[size]]} data-live={live ? "" : undefined}>
@@ -28,3 +39,128 @@ const characters = [...text];
     ))
   }
 </span>
+
+<script>
+  // Flip each board into place, once, when it comes into view. Every tile falls
+  // through a few random characters before landing on its own, the tiles
+  // starting left to right so the board settles in a wave. Boards already on
+  // screen refresh from the text they show; boards further down start blank.
+  // With reduced motion, or without script, the boards just show their text.
+  const CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const FLIP_MS = 90;
+
+  // --sendoff-ease-in-out; the Web Animations API can't read CSS variables.
+  const FLIP_EASING = "cubic-bezier(0.645, 0.045, 0.355, 1)";
+  const TILE_STAGGER_MS = 45;
+  const MIN_FLIPS = 3;
+  const EXTRA_FLIPS = 3;
+
+  interface Tile {
+    back: HTMLElement;
+    front: HTMLElement;
+    leaf: HTMLElement;
+    lower: HTMLElement;
+    upper: HTMLElement;
+  }
+
+  const face = (classes: string, character: string) => {
+    const element = document.createElement("span");
+    element.className = `sendoff-flap-face ${classes}`;
+    element.textContent = character;
+
+    return element;
+  };
+
+  // Swap a tile's text for the layered faces that can flip.
+  const build = (element: HTMLElement, character: string): Tile => {
+    const upper = face("sendoff-flap-upper", character);
+    const lower = face("sendoff-flap-lower", character);
+    const front = face("sendoff-flap-upper", character);
+    const back = face("sendoff-flap-lower sendoff-flap-back", character);
+    const leaf = document.createElement("span");
+    leaf.className = "sendoff-flap-leaf";
+    leaf.append(front, back);
+    element.replaceChildren(upper, lower, leaf);
+
+    return { back, front, leaf, lower, upper };
+  };
+
+  // The next character goes under the leaf (upper) and on its back first;
+  // both stay hidden until the leaf falls.
+  const flip = async (tile: Tile, next: string, delay = 0) => {
+    tile.upper.textContent = next;
+    tile.back.textContent = next;
+
+    const animation = tile.leaf.animate(
+      [{ transform: "rotateX(0deg)" }, { transform: "rotateX(-180deg)" }],
+      { delay, duration: FLIP_MS, easing: FLIP_EASING, fill: "forwards" }
+    );
+
+    await animation.finished;
+    tile.front.textContent = next;
+    tile.lower.textContent = next;
+    // Reset the leaf in the same frame its faces change, so it never shows the old character.
+    animation.cancel();
+  };
+
+  const randomCharacter = () => CHARACTERS[Math.floor(Math.random() * CHARACTERS.length)] ?? "";
+
+  const run = async (tile: Tile, target: string, startAfter: number) => {
+    const flips = MIN_FLIPS + Math.floor(Math.random() * EXTRA_FLIPS);
+
+    for (let index = 0; index < flips; index += 1) {
+      // oxlint-disable-next-line no-await-in-loop -- each flip has to land before the next starts
+      await flip(tile, randomCharacter(), index === 0 ? startAfter : 0);
+    }
+
+    await flip(tile, target);
+  };
+
+  const prepare = (board: HTMLElement, blank: boolean) => {
+    const delay = Number(board.dataset.flapsDelay ?? 0);
+
+    const tiles = [...board.querySelectorAll<HTMLElement>(".sendoff-flap")].map((element) => {
+      const target = element.textContent ?? "";
+
+      return { target, tile: build(element, blank ? "" : target) };
+    });
+
+    return () => {
+      for (const [index, { target, tile }] of tiles.entries()) {
+        run(tile, target, delay + index * TILE_STAGGER_MS);
+      }
+    };
+  };
+
+  const init = () => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return;
+    }
+
+    const starts = new Map<Element, () => void>();
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            observer.unobserve(entry.target);
+            starts.get(entry.target)?.();
+          }
+        }
+      },
+      { rootMargin: "0px 0px -10% 0px" }
+    );
+
+    for (const board of document.querySelectorAll<HTMLElement>("[data-flaps]:not([data-flaps-ready])")) {
+      board.dataset.flapsReady = "";
+      const onScreen = board.getBoundingClientRect().top < window.innerHeight;
+      starts.set(board, prepare(board, !onScreen));
+      observer.observe(board);
+    }
+  };
+
+  // ClientRouter fires astro:page-load on every navigation; the ready flag keeps a board from flipping twice.
+  init();
+
+  document.addEventListener("astro:page-load", init);
+</script>

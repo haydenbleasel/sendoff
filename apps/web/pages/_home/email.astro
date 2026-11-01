@@ -1,0 +1,60 @@
+---
+// A static mock of issue 24 in Sendoff's email template, using the template's
+// zinc palette (apps/app/src/email/theme.ts) and a signal-yellow accent.
+interface Props {
+  // "auto" follows the site theme; "light" pins the light palette.
+  scheme?: "auto" | "light";
+  // Include the callout, list and footer, not just the opening.
+  full?: boolean;
+}
+
+const { full = false, scheme = "auto" } = Astro.props;
+
+const palettes = {
+  auto: {
+    border: "border-zinc-200 dark:border-zinc-800",
+    heading: "text-zinc-950 dark:text-zinc-50",
+    muted: "text-zinc-500 dark:text-zinc-400",
+    surface: "bg-white text-zinc-700 dark:bg-zinc-950 dark:text-zinc-300",
+  },
+  light: {
+    border: "border-zinc-200",
+    heading: "text-zinc-950",
+    muted: "text-zinc-500",
+    surface: "bg-white text-zinc-700",
+  },
+} as const;
+
+const palette = palettes[scheme];
+---
+
+<div class:list={["flex flex-col gap-5 p-6 text-left sm:p-8", palette.surface]}>
+  <p class:list={["text-[0.9375rem] font-semibold", palette.heading]}>The Sendoff Quarterly</p>
+  <p class:list={["text-2xl font-semibold tracking-tight", palette.heading]}>Shipping in public</p>
+  <p class="text-base/7">
+    Three months of building in the open, and what I’d do differently next time.
+  </p>
+  <p
+    class="self-start rounded-lg bg-(--sendoff-signal) px-4 py-2.5 text-sm font-semibold text-(--sendoff-ink)"
+  >
+    Read the full post
+  </p>
+  {
+    full && (
+      <>
+        <div class="rounded-lg bg-(--sendoff-signal)/12 p-4">
+          <p class:list={["text-base/7 font-semibold", palette.heading]}>The short version</p>
+          <p class="text-base/7">Ship small, write it down and reply to everyone.</p>
+        </div>
+        <ul class="list-disc pl-5 text-base/7">
+          <li>Why I post unfinished work</li>
+          <li>The tools I use every week</li>
+        </ul>
+        <p class:list={["border-t pt-5 text-[0.8125rem]/5", palette.border, palette.muted]}>
+          You’re receiving this because you subscribed to The Sendoff Quarterly.{" "}
+          <span class="underline">Unsubscribe</span>
+        </p>
+      </>
+    )
+  }
+</div>

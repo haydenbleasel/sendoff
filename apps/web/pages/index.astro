@@ -1,8 +1,12 @@
 ---
+import Icon from "blume/components/Icon.astro";
 import PageLayout from "blume/components/layout/PageLayout.astro";
 import data from "blume:data";
 
 import Arrow from "./_home/arrow.astro";
+import Calculator from "./_home/calculator.astro";
+import Chat from "./_home/chat.astro";
+import Email from "./_home/email.astro";
 import Flaps from "./_home/flaps.astro";
 import Mark from "./_home/mark.astro";
 
@@ -10,77 +14,215 @@ const { config } = data;
 
 const DOCS = "/docs";
 
+// Until launch, the deploy and docs calls to action show a COMING SOON board
+// instead, and the steps and footer drop their docs links. Flip this to bring
+// them back.
+const launched = false;
+
+// The hero conversation, from first draft to send.
 const chat = [
-  { text: "Draft issue 24 from my last three posts.", who: "You" },
+  { from: "you", messages: [{ text: "Draft issue 24 from my last three posts." }] },
   {
-    text: "“Shipping in public” is drafted, 612 words. The preview is ready.",
-    tool: "create_draft · preview_draft",
-    who: "Sendoff",
+    from: "agent",
+    messages: [
+      { text: "“Shipping in public” is drafted, 612 words. The preview is ready." },
+      { link: true, text: "news.example.com/preview/x7Kp2Q" },
+    ],
   },
-  { text: "Send me a test, then send it.", who: "You" },
+  { from: "you", messages: [{ text: "Send me a test." }] },
+  { from: "agent", messages: [{ text: "Sent to hello@example.com. Preflight passed." }] },
+  { from: "you", messages: [{ text: "Looks good. Send it." }] },
+  { from: "agent", messages: [{ text: "Issue 24 is going out to 6,042 subscribers." }] },
+] as const;
+
+// The edits that build the email mock (_home/email.astro), one block at a time.
+const emailChat = [
   {
-    text: "Test sent to hello@example.com. Preflight passed.",
-    tool: "send_test · prepare_send",
-    who: "Sendoff",
+    from: "you",
+    messages: [{ text: "Start issue 24 with a short intro about shipping in public." }],
+  },
+  { from: "agent", messages: [{ text: "Drafted “Shipping in public” with a short intro." }] },
+  { from: "you", messages: [{ text: "Add a button to read the full post." }] },
+  { from: "agent", messages: [{ text: "Added “Read the full post” under the intro." }] },
+  { from: "you", messages: [{ text: "Now a callout with the short version." }] },
+  {
+    from: "agent",
+    messages: [{ text: "Done: “Ship small, write it down and reply to everyone.”" }],
+  },
+  { from: "you", messages: [{ text: "And list what’s in the post." }] },
+  { from: "agent", messages: [{ text: "Added two bullets after the callout." }] },
+] as const;
+
+// The live preview's toggles (apps/app/src/preview-page.ts), on their defaults.
+// Options with an icon (Lucide, via Blume) show it instead of the label.
+const previewControls = [
+  { options: [{ label: "Email" }, { label: "Text" }] },
+  {
+    options: [
+      { icon: "monitor", label: "Desktop" },
+      { icon: "smartphone", label: "Mobile" },
+    ],
+  },
+  {
+    options: [
+      { icon: "sun", label: "Light" },
+      { icon: "moon", label: "Dark" },
+    ],
+  },
+];
+
+const previewFeatures = [
+  {
+    body: "Desktop and mobile, light and dark, and the plain-text version.",
+    icon: "monitor-smartphone",
+    title: "Every view",
+  },
+  {
+    body: "Edits show up within a couple of seconds, so you can read along as you ask for changes.",
+    icon: "refresh-cw",
+    title: "Live",
+  },
+  {
+    body: "Anything that won’t render is listed by line, so your agent can fix it before you send.",
+    icon: "triangle-alert",
+    title: "Problems flagged",
+  },
+];
+
+// The checks `prepare_send` runs before a send goes out (`doctor` plus the test
+// match, per SPEC.md), as they'd read for the hero's issue 24.
+const preflightChecks = [
+  { detail: "DKIM on example.com", label: "Domain verified" },
+  { detail: "bounce.example.com", label: "Custom MAIL FROM" },
+  { detail: "p=none on example.com", label: "DMARC record" },
+  { detail: "Out of the SES sandbox", label: "Production access" },
+  { detail: "50,000 a day", label: "Sending quota" },
+  { detail: "Wired to Sendoff", label: "Bounces and complaints" },
+  { detail: "Sent at 08:52", label: "Test matches the draft" },
+];
+
+// Deliverability defaults that are always on (SPEC.md).
+const deliverability = [
+  {
+    body: "DKIM, a custom MAIL FROM and DMARC on your own domain, set up for you.",
+    icon: "shield-check",
+    title: "Authenticated",
+  },
+  {
+    body: "Every email carries one-click unsubscribe headers, a visible link and your postal address.",
+    icon: "mail-x",
+    title: "One-click unsubscribe",
+  },
+  {
+    body: "Signups confirm by email, and bounces and complaints come off the list on their own.",
+    icon: "user-check",
+    title: "A clean list",
   },
 ];
 
 // Placeholder issues for the status table; swap in real ones before launch.
+// Counts are what `send_status` reports: sent, bounced and unsubscribed.
 const issues = [
-  { live: true, number: 24, time: "09:00", title: "Shipping in public", to: "6,042 inboxes" },
-  { number: 23, time: "Q3", title: "What I learned building Blume", to: "5,918 inboxes" },
-  { number: 22, time: "Q2", title: "Notes on open source", to: "5,701 inboxes" },
-  { number: 21, time: "Q1", title: "A year of building", to: "5,466 inboxes" },
+  {
+    bounced: 3,
+    live: true,
+    number: 24,
+    recipients: 6042,
+    sent: 2410,
+    sentAt: "2026-10-31T09:00",
+    title: "Shipping in public",
+    unsubscribed: 1,
+  },
+  {
+    bounced: 12,
+    number: 23,
+    recipients: 5918,
+    sent: 5918,
+    sentAt: "2026-08-01T09:00",
+    title: "What I learned building Blume",
+    unsubscribed: 9,
+  },
+  {
+    bounced: 9,
+    number: 22,
+    recipients: 5701,
+    sent: 5701,
+    sentAt: "2026-05-02T09:00",
+    title: "Notes on open source",
+    unsubscribed: 7,
+  },
+  {
+    bounced: 14,
+    number: 21,
+    recipients: 5466,
+    sent: 5466,
+    sentAt: "2026-01-31T09:00",
+    title: "A year of building",
+    unsubscribed: 11,
+  },
 ];
 
+const formatCount = (n: number) => n.toLocaleString("en-US");
+
+// "Oct 31, 09:00". Date and time are formatted separately because a combined
+// formatter joins them with " at ".
+const dayFormat = new Intl.DateTimeFormat("en-US", { day: "numeric", month: "short" });
+
+const timeFormat = new Intl.DateTimeFormat("en-US", {
+  hour: "2-digit",
+  hourCycle: "h23",
+  minute: "2-digit",
+});
+
+const formatSentAt = (sentAt: string) => {
+  const date = new Date(sentAt);
+
+  return `${dayFormat.format(date)}, ${timeFormat.format(date)}`;
+};
+
+// `code` is what you type or say at each step.
 const steps = [
   {
     body: "Clone the repo and run setup. It creates the database, queue and SES identity, writes your DNS records and asks AWS for production access.",
+    code: "bun run setup",
     link: "Setup guide",
     number: "1",
     title: "Deploy",
   },
   {
-    body: "Add the MCP server to Claude Code, Codex or Claude Desktop. One URL, one token.",
+    body: "Add one URL as a connector in claude.ai or Claude Desktop, or with the command setup prints for Claude Code and Codex.",
+    code: "news.example.com/mcp",
     link: "Connect your agent",
     number: "2",
     title: "Connect",
   },
   {
-    body: "Draft, preview and test from the chat. Nothing leaves until the test matches the draft and you confirm.",
+    body: "Ask for a draft, check the preview and send yourself a test. Nothing goes out until you say so.",
+    code: "“Send it.”",
     link: "How sending works",
     number: "3",
     title: "Send",
   },
 ];
 
-const facts = [
-  {
-    body: "Sending four issues to 6,000 subscribers costs $2.40 a year, paid straight to AWS at ten cents per thousand emails. Everything else runs on Cloudflare’s $5-a-month Workers plan.",
-    flaps: { label: "$2.40 a year", text: "$2.40/YR" },
-    title: "At cost",
-  },
-  {
-    body: "DKIM, a custom MAIL FROM, DMARC, one-click unsubscribe and double opt-in are set up for you, and none of them can be switched off.",
-    title: "Deliverability, handled",
-  },
-  {
-    body: "Your domain, your AWS account, your list. The reputation you build stays with you.",
-    title: "Yours",
-  },
-];
-
-// Shared class lists for repeated elements.
-const autoFit = "grid gap-12 [grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr))]";
+// Shared class lists for repeated elements. Headings inherit Blume's -0.05em
+// display tracking from its base styles, so they don't set their own.
+const autoFit = "grid grid-cols-[repeat(auto-fit,minmax(min(--spacing(75),100%),1fr))] gap-12";
 
 const primaryButton =
-  "inline-flex min-h-[52px] items-center gap-2.5 rounded-full bg-foreground px-6 text-base font-medium text-background no-underline transition-opacity hover:opacity-85";
+  "inline-flex min-h-13 items-center gap-2.5 rounded-full bg-foreground px-6 text-base font-medium text-background no-underline hover:opacity-85";
 
 const textLink =
-  "inline-flex items-center gap-2 font-medium text-foreground no-underline transition-colors hover:text-muted-foreground";
+  "inline-flex items-center gap-2 font-medium text-foreground no-underline hover:text-muted-foreground";
 
-const sectionHeading =
-  "m-0 font-medium text-[clamp(34px,4vw,52px)] leading-[1.05] tracking-[-0.04em] text-balance";
+const displayHeading = "max-w-[20ch] text-display font-medium text-balance";
+
+const sectionHeading = "max-w-[30ch] text-4xl font-medium text-balance lg:text-5xl";
+
+const lead = "max-w-[48ch] text-lg/7 text-pretty text-muted-foreground";
+
+const inlineLink =
+  "font-medium text-foreground underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground";
 ---
 
 <PageLayout
@@ -103,188 +245,423 @@ const sectionHeading =
     title: "Sendoff — Say “send it.” Sendoff handles the rest.",
   }}
 >
-  <div class="mx-auto max-w-[1200px] px-5 text-foreground sm:px-8 lg:px-12">
-    <section
-      class="flex flex-col items-center gap-[30px] pt-20 pb-16 text-center md:pt-[176px] md:pb-28"
-    >
-      <div class="flex flex-wrap items-center justify-center gap-3">
-        <Flaps text="09:00" />
-        <Flaps text="NO.24" label="Issue 24" />
-        <Flaps text="BOARDING" label="Boarding" live />
-      </div>
-      <h1
-        class="m-0 max-w-[1000px] font-medium text-[clamp(44px,6.4vw,88px)] leading-[1.02] tracking-[-0.048em] text-balance"
-      >
-        Say <span class="sendoff-highlight">“send it.”</span> Sendoff handles the rest.
+  <div class="mx-auto max-w-300 px-5 text-foreground sm:px-8 lg:px-12">
+    <section class="flex flex-col items-center gap-7.5 pt-20 pb-16 text-center md:pt-44 md:pb-28">
+      <Flaps text="09:00 NO.24" label="09:00, issue 24" class="sendoff-enter" />
+      <h1 class:list={[displayHeading, "sendoff-enter [--i:1]"]}>
+        Say <span class="sendoff-highlight text-nowrap">“send it.”</span> Sendoff handles the rest.
       </h1>
-      <p
-        class="m-0 max-w-[660px] text-[19px] leading-[1.55] text-pretty text-muted-foreground"
-      >
+      <p class="sendoff-enter max-w-[40ch] text-xl/8 text-pretty text-muted-foreground [--i:2]">
         A newsletter tool you deploy to your own Cloudflare and AWS accounts and run from Claude or
-        Codex. DNS, deliverability, bounces and unsubscribes are set up for you, and sending costs
-        about $2.40 a year.
+        Codex.
       </p>
-      <div class="flex flex-wrap items-center justify-center gap-x-7 gap-y-3">
-        <a href={DOCS} class={primaryButton}>Deploy your own <Arrow /></a>
-        <a href={DOCS} class:list={[textLink, "min-h-11 text-base"]}>Read the docs <Arrow /></a>
-      </div>
-    </section>
-
-    <section
-      class="flex justify-center rounded-[32px] bg-muted px-4 py-6 sm:px-12 sm:py-[88px]"
-      aria-label="Example conversation"
-    >
-      <div
-        class="flex w-full max-w-[720px] flex-col gap-[22px] rounded-[22px] bg-background p-5 shadow-[0_1px_2px_rgb(13_13_13/0.04),0_20px_48px_rgb(13_13_13/0.06)] sm:p-9"
-      >
-        <div class="flex items-center justify-between text-[13px] text-muted-foreground">
-          <span>Claude Code</span>
-          <span class="font-mono text-xs">sendoff · connected</span>
-        </div>
-        {
-          chat.map((message) => (
-            <div class="grid grid-cols-[76px_minmax(0,1fr)] items-baseline gap-3.5">
-              <span
-                class:list={[
-                  "text-[13px] font-semibold",
-                  message.who === "You" ? "text-foreground" : "text-muted-foreground",
-                ]}
-              >
-                {message.who}
-              </span>
-              <span class="flex flex-col gap-1.5 text-left">
-                <span class="text-base leading-normal">{message.text}</span>
-                {message.tool && (
-                  <span class="self-start rounded-md bg-muted px-2 py-[3px] font-mono text-xs text-muted-foreground">
-                    {message.tool}
-                  </span>
-                )}
-              </span>
-            </div>
-          ))
-        }
-        <div
-          class="flex flex-wrap items-center justify-between gap-4 border-t border-border pt-[22px]"
-        >
-          <span class="flex flex-wrap items-center gap-3">
-            <Flaps text="BOARDING" label="Boarding" live size="sm" />
-            <span class="text-sm text-muted-foreground">6,042 recipients · preflight passed</span>
-          </span>
-          <span
-            class="inline-flex min-h-11 items-center gap-2 rounded-full bg-foreground px-[18px] text-[15px] font-medium text-background"
-          >
-            Confirm send <Arrow size={14} />
-          </span>
-        </div>
-      </div>
-    </section>
-
-    <section class="flex flex-col gap-10 pt-24 md:pt-[176px]">
-      <div class="flex flex-wrap items-end justify-between gap-6">
-        <h2 class:list={[sectionHeading, "max-w-[560px]"]}>Ask for the status of any send.</h2>
-        <p class="m-0 max-w-[400px] text-[17px] leading-[1.55] text-muted-foreground">
-          One newsletter, one list, sent when you say. Your agent can tell you what went out, what
-          bounced and what’s still queued.
-        </p>
-      </div>
-      <div class="overflow-x-auto">
-        <table class="w-full min-w-[640px] border-collapse text-base">
-          <thead>
-            <tr class="text-left font-mono text-xs tracking-[0.06em] text-muted-foreground">
-              <th class="border-b border-foreground pb-3.5 font-normal">TIME</th>
-              <th class="border-b border-foreground pb-3.5 font-normal">ISSUE</th>
-              <th class="border-b border-foreground pb-3.5 font-normal">RECIPIENTS</th>
-              <th class="border-b border-foreground pb-3.5 text-right font-normal">STATUS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {
-              issues.map((issue) => (
-                <tr>
-                  <td class="w-[14%] border-b border-border py-[22px] font-mono text-sm text-muted-foreground">
-                    {issue.time}
-                  </td>
-                  <td class="border-b border-border py-[22px] font-medium">
-                    {issue.title}{" "}
-                    <span class="font-normal text-muted-foreground">· No. {issue.number}</span>
-                  </td>
-                  <td class="border-b border-border py-[22px]">{issue.to}</td>
-                  <td class="border-b border-border py-[22px] text-right">
-                    {issue.live ? (
-                      <Flaps text="BOARDING" label="Boarding" live size="sm" />
-                    ) : (
-                      <span class="text-muted-foreground">Departed</span>
-                    )}
-                  </td>
-                </tr>
-              ))
-            }
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section id="how" class="flex scroll-mt-24 flex-col gap-14 pt-24 md:pt-[176px]">
-      <h2 class:list={[sectionHeading, "max-w-[640px]"]}>Three steps, then it’s just talking.</h2>
-      <div class={autoFit}>
-        {
-          steps.map((step) => (
-            <div class="flex flex-col items-start gap-4">
-              <Flaps text={step.number} label={`Step ${step.number}`} size="lg" />
-              <h3 class="m-0 text-[21px] font-semibold tracking-[-0.02em]">{step.title}</h3>
-              <p class="m-0 text-base leading-[1.6] text-pretty text-muted-foreground">
-                {step.body}
-              </p>
-              <a href={DOCS} class:list={[textLink, "min-h-8 text-[15px]"]}>
-                {step.link} <Arrow size={14} />
-              </a>
-            </div>
-          ))
-        }
-      </div>
-    </section>
-
-    <section class:list={[autoFit, "pt-24 md:pt-[176px]"]}>
       {
-        facts.map((fact) => (
-          <div class="flex flex-col gap-4 border-t border-foreground pt-6">
-            <h2 class="m-0 text-[40px] leading-none font-medium tracking-[-0.045em]">
-              {fact.title}
-            </h2>
-            {fact.flaps && <Flaps text={fact.flaps.text} label={fact.flaps.label} />}
-            <p class="m-0 text-base leading-[1.6] text-muted-foreground">{fact.body}</p>
+        launched ? (
+          <div class="sendoff-enter flex flex-wrap items-center justify-center gap-x-7 gap-y-3 [--i:3]">
+            <a href={DOCS} class={primaryButton}>
+              Deploy your own <Arrow />
+            </a>
+            <a href={DOCS} class:list={[textLink, "min-h-11 text-base"]}>
+              Read the docs <Arrow />
+            </a>
           </div>
-        ))
+        ) : (
+          <Flaps
+            text="COMING SOON"
+            label="Coming soon"
+            class="sendoff-enter [--i:3]"
+            delay={300}
+          />
+        )
       }
     </section>
 
     <section
-      class="flex flex-col items-center gap-7 pt-[120px] pb-24 text-center md:pt-[200px] md:pb-40"
+      class="flex justify-center rounded-4xl bg-muted px-4 py-8 sm:px-12 sm:py-22"
+      aria-label="Example conversation"
     >
-      <Mark size={56} />
-      <h2
-        class="m-0 max-w-[900px] font-medium text-[clamp(44px,6vw,80px)] leading-[1.02] tracking-[-0.048em] text-balance"
+      <div class="w-full max-w-160">
+        <Chat turns={chat} entrance="load" />
+      </div>
+    </section>
+
+    <section class="flex flex-col gap-10 pt-24 md:pt-44">
+      <div data-reveal>
+        <h2 class={sectionHeading}>Your agent writes it. React&nbsp;Email makes it look good.</h2>
+        <p class:list={[lead, "mt-6"]}>
+          Connect Sendoff to Claude or Codex and describe the issue you want. Your agent writes and
+          edits it, and Sendoff renders it with{" "}
+          <a href="https://react.email" class={inlineLink}>React Email</a> into a polished layout,
+          with buttons, callouts, images and dark mode taken care of.
+        </p>
+      </div>
+      <figure
+        class="grid gap-4 rounded-4xl bg-muted p-4 sm:p-10 lg:grid-cols-[1fr_auto_1fr] lg:gap-6"
+        role="img"
+        aria-label="A chat where your agent builds issue 24 block by block, next to the email it renders"
       >
-        Stop paying rent on <span class="sendoff-highlight">your list.</span>
+        <div
+          class="flex flex-col justify-end rounded-2xl bg-background p-4 ring-1 ring-black/5 sm:p-6 dark:bg-white/5 dark:ring-white/10"
+        >
+          <Chat turns={emailChat} onCard small entrance="view" />
+        </div>
+        <div class="flex items-center justify-center text-muted-foreground">
+          <div class="rotate-90 lg:rotate-0"><Arrow /></div>
+        </div>
+        <div class="grid overflow-hidden rounded-2xl ring-1 ring-black/5 dark:ring-white/10">
+          <Email full />
+        </div>
+      </figure>
+    </section>
+
+    <section class="grid items-center gap-12 pt-24 md:pt-44 lg:grid-cols-[2fr_3fr]">
+      <div data-reveal>
+        <h2 class={sectionHeading}>Your agent sends a link when it’s ready.</h2>
+        <p class:list={[lead, "mt-6"]}>
+          Open it on your phone or laptop and see the issue the way subscribers will, before anything
+          goes out.
+        </p>
+        <dl class="mt-10 divide-y divide-border">
+          {
+            previewFeatures.map((feature) => (
+              <div class="py-5 first:pt-0 last:pb-0">
+                <dt class="flex gap-4 text-base/7 font-medium">
+                  <Icon name={feature.icon} size={20} class="h-lh shrink-0" />
+                  {feature.title}
+                </dt>
+                <dd class="pl-9 text-base/7 text-pretty text-muted-foreground">{feature.body}</dd>
+              </div>
+            ))
+          }
+        </dl>
+      </div>
+      <figure
+        class="rounded-4xl bg-muted p-3 sm:p-6 [--reveal-delay:120ms]"
+        role="img"
+        aria-label="The live preview of issue 24 at desktop width in light mode"
+        data-reveal
+      >
+        <div
+          class="overflow-hidden rounded-2xl bg-background ring-1 ring-black/5 dark:bg-white/5 dark:ring-white/10"
+        >
+          <p class="border-b border-border px-4 py-2.5 font-mono text-xs text-muted-foreground">
+            news.example.com/preview/x7Kp2Q
+          </p>
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-border px-4 py-3">
+            <p class="flex min-w-0 flex-1 basis-32 items-center gap-2.5 text-sm font-semibold">
+              <span class="size-2 shrink-0 rounded-full bg-(--sendoff-signal)"></span>
+              <span class="truncate">Shipping in public</span>
+            </p>
+            <div class="flex gap-2">
+              {
+                previewControls.map((control) => (
+                  <div class="inline-flex rounded-lg p-0.5 ring-1 ring-border ring-inset">
+                    {control.options.map((option, index) => (
+                      <span
+                        class:list={[
+                          "grid h-7 place-items-center rounded-md text-[0.8125rem]",
+                          option.icon ? "w-7" : "px-2.5",
+                          index === 0 ? "bg-foreground text-background" : "text-muted-foreground",
+                        ]}
+                      >
+                        {option.icon ? <Icon name={option.icon} size={16} /> : option.label}
+                      </span>
+                    ))}
+                  </div>
+                ))
+              }
+            </div>
+          </div>
+          <div class="bg-muted/60 p-3 sm:p-5 dark:bg-black/20">
+            <div
+              class="h-96 overflow-hidden rounded-xl bg-white ring-1 ring-black/5 mask-b-from-80% sm:h-104"
+            >
+              <div class="flex flex-col gap-3 border-b border-zinc-200 px-6 pt-5 pb-4 sm:px-8">
+                <p class="text-lg font-semibold text-zinc-950">Shipping in public</p>
+                <div class="flex items-center gap-3 text-sm">
+                  <span
+                    class="grid size-9 shrink-0 place-items-center rounded-full bg-zinc-900 font-semibold text-white"
+                    >S</span
+                  >
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate text-zinc-500">
+                      <span class="font-semibold text-zinc-950">The Sendoff Quarterly</span>{" "}
+                      &lt;hello@example.com&gt;
+                    </p>
+                    <p class="text-zinc-500">to you</p>
+                  </div>
+                  <p class="text-zinc-500 tabular-nums">09:00</p>
+                </div>
+              </div>
+              <Email full scheme="light" />
+            </div>
+          </div>
+        </div>
+      </figure>
+    </section>
+
+    <section id="pricing" class="flex scroll-mt-24 flex-col gap-12 pt-24 md:pt-44">
+      <div data-reveal>
+        <h2 class={sectionHeading}>Host it yourself. Skip the subscription.</h2>
+        <p class:list={[lead, "mt-6"]}>
+          Sendoff runs in your own Cloudflare account and sends through your own Amazon SES, so you
+          pay them directly and nobody else. Move the sliders to see how that compares with Resend.
+        </p>
+      </div>
+      <div class="[--reveal-delay:120ms]" data-reveal>
+        <Calculator />
+      </div>
+    </section>
+
+    <section class="grid gap-12 pt-24 md:pt-44 lg:grid-cols-[2fr_3fr]">
+      <div data-reveal>
+        <h2 class={sectionHeading}>Nothing leaves until preflight passes.</h2>
+        <p class:list={[lead, "mt-6"]}>
+          Before every send, Sendoff checks your domain, your SES account and your latest test, and
+          won’t go until everything passes.
+        </p>
+        <dl class="mt-10 divide-y divide-border">
+          {
+            deliverability.map((item) => (
+              <div class="py-5 first:pt-0 last:pb-0">
+                <dt class="flex gap-4 text-base/7 font-medium">
+                  <Icon name={item.icon} size={20} class="h-lh shrink-0" />
+                  {item.title}
+                </dt>
+                <dd class="pl-9 text-base/7 text-pretty text-muted-foreground">{item.body}</dd>
+              </div>
+            ))
+          }
+        </dl>
+      </div>
+      <figure
+        class="flex flex-col rounded-4xl bg-muted p-3 sm:p-6"
+        role="img"
+        aria-label="Preflight for issue 24, with every check passed"
+        data-reveal="contents"
+      >
+        <div
+          class="flex flex-1 flex-col overflow-hidden rounded-2xl bg-background ring-1 ring-black/5 dark:bg-white/5 dark:ring-white/10"
+        >
+          <div
+            class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-border px-5 py-4 sm:px-6"
+          >
+            <p class="text-base font-semibold">Preflight</p>
+            <p class="text-sm text-muted-foreground">Issue 24 · Shipping in public</p>
+          </div>
+          {/* On desktop the card takes the copy's height and the checks share it evenly. */}
+          <ul role="list" class="flex flex-1 flex-col divide-y divide-border px-5 sm:px-6">
+            {
+              preflightChecks.map((check, index) => (
+                <li class="flex flex-1 items-center gap-3 py-3.5">
+                  <span class="sendoff-check grid shrink-0" style={`--i: ${index}`}>
+                    <Icon
+                      name="circle-check"
+                      size={20}
+                      class="text-emerald-600 dark:text-emerald-400"
+                    />
+                  </span>
+                  <p class="flex-1 text-base font-medium">{check.label}</p>
+                  <p class="text-right font-mono text-sm text-muted-foreground">{check.detail}</p>
+                </li>
+              ))
+            }
+          </ul>
+        </div>
+      </figure>
+    </section>
+
+    <section class="flex flex-col gap-10 pt-24 md:pt-44">
+      <div class="grid gap-6 lg:grid-cols-2 lg:items-end" data-reveal>
+        <h2 class={sectionHeading}>Ask for the status of any send.</h2>
+        <p class="max-w-[48ch] text-lg/7 text-pretty text-muted-foreground lg:justify-self-end">
+          Your agent can tell you how far a send has got, what bounced and who unsubscribed. Bounces
+          and complaints come off the list on their own.
+        </p>
+      </div>
+      <div
+        class="-mx-5 -my-2 overflow-x-auto whitespace-nowrap [--reveal-delay:120ms] sm:-mx-8 lg:-mx-12"
+        data-reveal
+      >
+        <div class="inline-block min-w-full px-5 py-2 align-middle sm:px-8 lg:px-12">
+          <table class="w-full border-collapse text-base">
+            <thead>
+              <tr class="text-left font-mono text-sm text-muted-foreground sm:text-xs">
+                <th class="border-b border-foreground pr-6 pb-3.5 font-normal">Date</th>
+                <th class="border-b border-foreground pr-6 pb-3.5 font-normal">Issue</th>
+                <th class="border-b border-foreground pr-6 pb-3.5 text-right font-normal">Sent</th>
+                <th class="border-b border-foreground pr-6 pb-3.5 text-right font-normal">
+                  Bounced
+                </th>
+                <th class="border-b border-foreground pr-6 pb-3.5 text-right font-normal">
+                  Unsubscribed
+                </th>
+                <th class="border-b border-foreground pb-3.5 text-right font-normal">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {
+                issues.map((issue) => (
+                  <tr>
+                    <td class="border-b border-border py-5.5 pr-6 font-mono text-base text-muted-foreground tabular-nums sm:text-sm">
+                      <time datetime={issue.sentAt}>{formatSentAt(issue.sentAt)}</time>
+                    </td>
+                    <td class="border-b border-border py-5.5 pr-6 font-medium">
+                      {issue.title}{" "}
+                      <span class="font-normal text-muted-foreground">· No. {issue.number}</span>
+                    </td>
+                    <td class="border-b border-border py-5.5 pr-6 text-right tabular-nums">
+                      {issue.live ? (
+                        <>
+                          {formatCount(issue.sent)}{" "}
+                          <span class="text-muted-foreground">
+                            of {formatCount(issue.recipients)}
+                          </span>
+                        </>
+                      ) : (
+                        formatCount(issue.sent)
+                      )}
+                    </td>
+                    <td class="border-b border-border py-5.5 pr-6 text-right tabular-nums">
+                      {formatCount(issue.bounced)}
+                    </td>
+                    <td class="border-b border-border py-5.5 pr-6 text-right tabular-nums">
+                      {formatCount(issue.unsubscribed)}
+                    </td>
+                    <td class="border-b border-border py-5.5 text-right">
+                      {issue.live ? (
+                        <Flaps text="SENDING" label="Sending" live size="sm" delay={400} />
+                      ) : (
+                        <span class="text-muted-foreground">Sent</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="how" class="flex scroll-mt-24 flex-col gap-14 pt-24 md:pt-44">
+      <h2 class={sectionHeading} data-reveal>Three steps, then it’s just talking.</h2>
+      <ol role="list" class:list={[autoFit, "[--reveal-delay:120ms]"]} data-reveal>
+        {
+          steps.map((step, index) => (
+            <li
+              class:list={[
+                "grid grid-rows-subgrid justify-items-start gap-4",
+                launched ? "row-span-5" : "row-span-4",
+              ]}
+            >
+              <Flaps
+                text={step.number}
+                label={`Step ${step.number}`}
+                size="lg"
+                delay={300 + index * 150}
+              />
+              <h3 class="text-xl font-semibold tracking-tight">{step.title}</h3>
+              <p class="text-base/7 text-pretty text-muted-foreground">{step.body}</p>
+              <p class="rounded-lg bg-muted px-3 py-1.5 font-mono text-sm">{step.code}</p>
+              {launched && (
+                <a href={DOCS} class:list={[textLink, "min-h-8 text-base sm:text-[0.9375rem]"]}>
+                  {step.link} <Arrow size={14} />
+                </a>
+              )}
+            </li>
+          ))
+        }
+      </ol>
+    </section>
+
+    <section
+      class="mt-20 flex flex-col items-center gap-7 border-t border-border pt-20 pb-24 text-center md:mt-28 md:pt-28 md:pb-40"
+    >
+      <div data-reveal>
+        <Mark size={56} />
+      </div>
+      <h2 class:list={[displayHeading, "[--reveal-delay:80ms]"]} data-reveal>
+        Give your emails a <span class="sendoff-highlight text-nowrap">proper sendoff.</span>
       </h2>
-      <p class="m-0 max-w-[520px] text-lg leading-[1.55] text-muted-foreground">
-        Import your list from any provider's CSV export, keep your unsubscribes and your From
-        domain, and send the next issue from your own accounts.
+      <p
+        class="max-w-[48ch] text-lg/7 text-pretty text-muted-foreground [--reveal-delay:160ms]"
+        data-reveal
+      >
+        Deploy to your own Cloudflare and AWS accounts, bring your list with you, and send the next
+        issue from the chat.
       </p>
-      <a href={DOCS} class={primaryButton}>Deploy your own <Arrow /></a>
+      <div class="[--reveal-delay:240ms]" data-reveal>
+        {
+          launched ? (
+            <a href={DOCS} class={primaryButton}>
+              Deploy your own <Arrow />
+            </a>
+          ) : (
+            <Flaps text="COMING SOON" label="Coming soon" delay={400} />
+          )
+        }
+      </div>
     </section>
   </div>
 
-  <footer slot="footer" class="mx-auto max-w-[1200px] px-5 sm:px-8 lg:px-12">
+  <footer slot="footer" class="mx-auto max-w-300 px-5 sm:px-8 lg:px-12">
     <div
       class="flex flex-wrap items-center justify-between gap-4 border-t border-border pt-6 pb-10 text-sm text-muted-foreground"
     >
-      <span class="flex flex-wrap items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2">
         <Mark size={18} />
-        <span class="font-semibold tracking-[-0.02em] text-foreground">Sendoff</span>
+        <span class="font-semibold tracking-tight text-foreground">Sendoff</span>
         <span>Runs on Cloudflare Workers and Amazon SES</span>
-      </span>
-      <a href={DOCS} class="text-muted-foreground no-underline hover:text-foreground">Docs</a>
+      </div>
+      {
+        launched && (
+          <a href={DOCS} class="text-muted-foreground no-underline hover:text-foreground">
+            Docs
+          </a>
+        )
+      }
     </div>
   </footer>
 </PageLayout>
+
+<script>
+  // On-view reveals. Each [data-reveal] element fades and rises into place the
+  // first time it comes into view; with data-reveal="contents" the element
+  // stays still and its children animate instead (theme.css has the states).
+  // Anything already on screen is marked revealed before the hidden states
+  // switch on, so nothing visible blinks out, and without script nothing is
+  // hidden at all.
+  const init = () => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting && entry.target instanceof HTMLElement) {
+            observer.unobserve(entry.target);
+            entry.target.dataset.revealed = "";
+          }
+        }
+      },
+      { rootMargin: "0px 0px -10% 0px" }
+    );
+
+    for (const element of document.querySelectorAll<HTMLElement>(
+      "[data-reveal]:not([data-revealed], [data-reveal-ready])"
+    )) {
+      element.dataset.revealReady = "";
+
+      if (element.getBoundingClientRect().top < window.innerHeight) {
+        element.dataset.revealed = "";
+      } else {
+        observer.observe(element);
+      }
+    }
+
+    document.documentElement.dataset.motion = "";
+  };
+
+  // ClientRouter fires astro:page-load on every navigation; the ready flag keeps elements from being observed twice.
+  init();
+
+  document.addEventListener("astro:page-load", init);
+</script>

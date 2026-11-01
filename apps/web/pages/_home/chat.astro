@@ -1,0 +1,101 @@
+---
+import Arrow from "./arrow.astro";
+
+// A conversation as message bubbles: you on the right, your agent on the left.
+// A turn's messages stack as one group, with the tail on the last bubble.
+interface Message {
+  text: string;
+  // Styles the text as a URL with an outbound arrow.
+  link?: boolean;
+}
+
+interface Turn {
+  from: "you" | "agent";
+  messages: readonly Message[];
+}
+
+interface Props {
+  turns: readonly Turn[];
+  // The bubbles sit on a card (the page background) rather than a muted panel.
+  onCard?: boolean;
+  // Smaller text from `sm` up; phones keep 16px.
+  small?: boolean;
+  // How the messages arrive, one at a time: with the page's entrance, or when
+  // the chat first comes into view (see the motion styles in theme.css).
+  entrance?: "load" | "view";
+}
+
+const { entrance, onCard = false, small = false, turns } = Astro.props;
+
+// Number every message across turns, so each one arrives after the last.
+const numbered: { from: Turn["from"]; messages: (Message & { order: number })[] }[] = [];
+let order = 0;
+
+for (const turn of turns) {
+  const start = order;
+
+  numbered.push({
+    from: turn.from,
+    messages: turn.messages.map((message, index) => ({ ...message, order: start + index })),
+  });
+  order += turn.messages.length;
+}
+
+const agentBubble = onCard ? "bg-muted dark:bg-white/10" : "bg-background dark:bg-white/10";
+
+const bubbleSize = small
+  ? "px-4 py-2.5 text-base sm:px-3.5 sm:py-2 sm:text-sm/6"
+  : "px-4.5 py-3 text-base";
+---
+
+<ol
+  role="list"
+  class="flex w-full flex-col gap-3"
+  data-chat={entrance}
+  data-reveal={entrance === "view" ? "contents" : undefined}
+>
+  {
+    numbered.map((turn) => (
+      <li
+        class:list={[
+          "flex max-w-[85%] flex-col gap-1",
+          turn.from === "you" ? "items-end self-end" : "items-start self-start",
+        ]}
+      >
+        <span class="sr-only">{turn.from === "you" ? "You:" : "Claude:"}</span>
+        {turn.messages.map((message) => (
+          <p
+            class:list={[
+              "sendoff-bubble rounded-3xl text-pretty tabular-nums",
+              bubbleSize,
+              turn.from === "you"
+                ? "origin-bottom-right bg-foreground text-background last:rounded-br-md"
+                : [agentBubble, "origin-bottom-left last:rounded-bl-md"],
+              message.link &&
+                "flex items-center gap-1.5 underline decoration-foreground/30 underline-offset-4",
+            ]}
+            style={`--i: ${message.order}`}
+          >
+            {message.link ? (
+              // Let a narrow bubble wrap the URL before a slash, not mid-word.
+              <span class="wrap-anywhere">
+                {message.text.split("/").map((part, index) =>
+                  index === 0 ? (
+                    part
+                  ) : (
+                    <>
+                      <wbr />/{part}
+                    </>
+                  ),
+                )}
+              </span>
+            ) : (
+              message.text
+            )}
+            {message.link && <Arrow direction="out" size={14} />}
+          </p>
+        ))}
+      </li>
+    ))
+  }
+</ol>
