@@ -17,9 +17,12 @@ Sending takes four steps, and the agent can't skip any of them. Ask "send a test
   <Step title="Prepare">
     `prepare_send` checks that the draft renders, that your last test was of
     this exact version, and that the [preflight
-    checks](/docs/help/troubleshooting) pass. It sends nothing. It returns a
-    summary to show you: how many people it'll go to, from which address, and
-    roughly how long it'll take.
+    checks](/docs/help/troubleshooting) pass. If you haven't set a postal
+    address, it also checks the issue doesn't read as commercial (see [When you
+    need a postal
+    address](/docs/guides/deliverability#when-you-need-a-postal-address)). It
+    sends nothing. It returns a summary to show you: how many people it'll go
+    to, from which address, and roughly how long it'll take.
   </Step>
   <Step title="Confirm">
     Read the summary, then tell the agent to send. `confirm_send` takes the
@@ -43,7 +46,7 @@ Each email gets:
 - its own unsubscribe link in the footer
 - links that count clicks, through your Sendoff domain, unless you've [turned click tracking off](/docs/guides/stats#turning-tracking-on-or-off)
 - `List-Unsubscribe` and `List-Unsubscribe-Post` headers, which give Gmail, Apple Mail and Yahoo their one-click unsubscribe button
-- your postal address
+- your postal address, if you've set one
 
 Anyone who unsubscribes, bounces or complains during the send is skipped if they haven't been sent to yet.
 

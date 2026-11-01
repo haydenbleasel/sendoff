@@ -18,8 +18,11 @@ const updateSchema = z.object({
     .describe("Accent color for links, buttons and callouts, as #rrggbb."),
   address: z
     .string()
+    .nullable()
     .optional()
-    .describe("Postal address for the footer. Required by anti-spam law."),
+    .describe(
+      "Postal address for the footer: a street address, PO box or private mailbox. US and Canadian law require one in commercial email (launches, promotions). Without one, prepare_send checks each issue and blocks any that read as commercial. null removes it."
+    ),
   description: z
     .string()
     .nullable()
@@ -92,7 +95,7 @@ const merge = (
   update: SettingsUpdate
 ): SettingsDraft => ({
   accent: update.accent ?? current?.accent,
-  address: update.address ?? current?.address,
+  address: pick(update.address, current?.address),
   description: pick(update.description, current?.description),
   from: update.from ?? current?.from,
   links: update.links ?? current?.links,
@@ -158,7 +161,7 @@ export const registerSettingsTools = (
 
         if (!settings) {
           return result(
-            "Sendoff isn't set up yet. Ask for a name (a newsletter or brand name, shown in every email's header), the sender's name and email, and a postal address, then call update_settings."
+            "Sendoff isn't set up yet. Ask for a name (a newsletter or brand name, shown in every email's header), the sender's name and email, and a postal address (needed for commercial email such as launches, optional otherwise), then call update_settings."
           );
         }
 
@@ -171,7 +174,7 @@ export const registerSettingsTools = (
     {
       annotations: { idempotentHint: true },
       description:
-        "Update Sendoff's settings. Pass only the fields to change; the first call must include name, from and address. Changes apply to the preview immediately and to every email sent afterwards.",
+        "Update Sendoff's settings. Pass only the fields to change; the first call must include name and from. Changes apply to the preview immediately and to every email sent afterwards.",
       inputSchema: updateSchema,
       title: "Update settings",
     },

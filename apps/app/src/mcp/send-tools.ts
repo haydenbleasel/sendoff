@@ -4,15 +4,17 @@ import { z } from "zod";
 import type { Config } from "../config";
 import type { Database } from "../db/client";
 import { formatChecks, runDoctor } from "../doctor";
+import { describePromotion } from "../promotion";
 import {
   cancelSend,
   confirmSend,
   prepareSend,
   resumeSend,
+  runPromotionCheck,
   sendStatus,
   sendTest,
 } from "../sending";
-import type { SendQueue, SendStatus } from "../sending";
+import type { PromotionResult, SendQueue, SendStatus } from "../sending";
 import { presentIssue, result, run } from "./results";
 
 const READ_ONLY = { idempotentHint: true, readOnlyHint: true } as const;
@@ -30,6 +32,18 @@ const duration = (recipients: number, rate: number): string => {
   return seconds < SECONDS_PER_MINUTE
     ? `under a minute`
     : `about ${Math.ceil(seconds / SECONDS_PER_MINUTE)} minutes`;
+};
+
+const promotionNote = (promotion: PromotionResult): string => {
+  if (promotion.status === "skipped") {
+    return "";
+  }
+
+  if (promotion.status === "failed") {
+    return `Couldn't check whether this reads as commercial email (${promotion.error}). There's no postal address, so only send it if promotion isn't its main purpose.`;
+  }
+
+  return `There's no postal address, so it was checked for promotion. ${describePromotion(promotion.check)}`;
 };
 
 const describeStatus = ({
@@ -157,12 +171,33 @@ export const registerSendTools = (
             warnings.length > 0
               ? `Warnings:\n${formatChecks(warnings)}`
               : "All checks passed.",
+            promotionNote(prepared.promotion),
             `Confirmation (expires in ${minutes} minutes): ${prepared.confirmation}`,
             "Show this summary to the person. Only call confirm_send after they explicitly say to send it now. Sending can't be undone.",
           ]
             .filter(Boolean)
             .join("\n\n")
         );
+      })
+  );
+
+  server.registerTool(
+    "check_promotion",
+    {
+      annotations: READ_ONLY,
+      description:
+        "Check whether a draft reads as commercial email (promoting a product or service), using the US primary-purpose test and Canada's. Commercial email needs a postal address in settings, so without one, prepare_send runs this and blocks commercial issues. Use it while drafting, especially for launches or announcements, and follow its fixes if the person doesn't want to add an address. The verdict is kept until the draft changes.",
+      inputSchema: z.object({ issue: issueRef }),
+      title: "Check for promotion",
+    },
+    async ({ issue: ref }) =>
+      await run(async () => {
+        const { check, issue } = await runPromotionCheck(deps, ref);
+
+        return result(describePromotion(check), {
+          ...check,
+          issue: issue.id,
+        });
       })
   );
 

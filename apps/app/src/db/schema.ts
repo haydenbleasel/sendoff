@@ -78,6 +78,19 @@ export interface IssueSender {
   replyTo?: string | undefined;
 }
 
+/** The AI promotion check's verdict for one version of an issue (see promotion.ts). */
+export interface IssuePromotionCheck {
+  checkedAt: string;
+  /** Anything that encourages buying or signing up for something commercial (Canada's test). */
+  commercialMentions: boolean;
+  /** The content it judged; a different hash means the issue changed since. */
+  contentHash: string;
+  fixes: string[];
+  model: string;
+  reasons: string[];
+  verdict: "commercial" | "borderline" | "not_commercial";
+}
+
 /** What a sent issue measured, snapshotted at confirm time. */
 export interface IssueTracking {
   clicks: boolean;
@@ -97,6 +110,10 @@ export const issues = sqliteTable("issues", {
    */
   importedAt: integer("imported_at", { mode: "timestamp_ms" }),
   preheader: text("preheader"),
+  /** The latest AI promotion check, reused while the content is unchanged. */
+  promotionCheck: text("promotion_check", {
+    mode: "json",
+  }).$type<IssuePromotionCheck>(),
   /** Active subscribers snapshotted when the send was confirmed. */
   recipientCount: integer("recipient_count"),
   renderedHtml: text("rendered_html"),

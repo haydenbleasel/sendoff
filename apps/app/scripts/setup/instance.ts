@@ -19,7 +19,7 @@ export const instanceSchema = z.object({
   /** Setup's answers about the newsletter, so re-runs can pre-fill them. */
   newsletter: z
     .object({
-      address: z.string(),
+      address: z.string().optional(),
       fromEmail: z.string(),
       fromName: z.string(),
       name: z.string(),

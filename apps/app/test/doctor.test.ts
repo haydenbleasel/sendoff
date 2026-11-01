@@ -45,6 +45,7 @@ describe("runDoctor", () => {
     expect(report.status("DMARC")).toBe("pass");
     expect(report.status("Bounce and complaint tracking")).toBe("pass");
     expect(report.status("Delivery reports")).toBe("pass");
+    expect(report.status("Postal address")).toBe("pass");
   });
 
   it("blocks sending from the SES sandbox, a shut-down account or too small a quota", async () => {
@@ -110,6 +111,16 @@ describe("runDoctor", () => {
     expect(unwired).toMatchObject({ ok: true });
     expect(unwired.status("Bounce and complaint tracking")).toBe("warn");
     expect(gone.status("Bounce and complaint tracking")).toBe("fail");
+  });
+
+  it("warns, without blocking, when there's no postal address", async () => {
+    const { address: _address, ...withoutAddress } = testSettings;
+    await saveSettings(db(), withoutAddress);
+    const report = await statuses(HEALTHY_SES);
+    await saveSettings(db(), testSettings);
+
+    expect(report.ok).toBe(true);
+    expect(report.status("Postal address")).toBe("warn");
   });
 
   it("warns, without blocking, when SES doesn't report deliveries", async () => {

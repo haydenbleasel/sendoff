@@ -18,8 +18,11 @@ export const settingsSchema = z.object({
     .regex(/^#[\da-f]{6}$/iu, "Use a 6-digit hex color like #2563eb")
     .transform((value) => value.toLowerCase())
     .default("#2563eb"),
-  /** Postal address shown in the footer (required by CAN-SPAM). */
-  address: z.string().trim().min(1).max(300),
+  /**
+   * Postal address shown in the footer. Commercial email needs one (CAN-SPAM,
+   * CASL); without it, prepare_send checks each issue isn't promotional.
+   */
+  address: z.string().trim().min(1).max(300).optional(),
   /** One or two sentences for the subscribe page. */
   description: z.string().trim().min(1).max(280).optional(),
   from: z.object({

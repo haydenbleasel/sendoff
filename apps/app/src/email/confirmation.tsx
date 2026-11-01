@@ -85,7 +85,9 @@ export const renderConfirmationEmail = async (
     "--",
     ignore,
     settings.address,
-  ].join("\n\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   return { html, subject, text };
 };

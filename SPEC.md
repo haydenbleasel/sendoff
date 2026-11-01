@@ -34,7 +34,7 @@ Settings (one row in D1):
   description: "A quarterly letter about…", // optional, shown on the subscribe page
   from: { name: "Hayden Bleasel", email: "hello@example.com" }, // must match a verified SES identity
   replyTo: "hello@example.com",
-  address: "123 Example St, Sydney NSW 2000", // CAN-SPAM postal address
+  address: "123 Example St, Sydney NSW 2000", // optional; needed for commercial email
   accent: "#ff0066", // links, buttons, callout tint; contrast is adjusted automatically
   logo: { url: "https://example.com/logo.png", darkUrl: "https://…", width: 120, height: 32 }, // optional
   links: [{ label: "Website", url: "https://example.com" }, { label: "X", url: "https://x.com/example" }],
@@ -93,6 +93,7 @@ subscribers  id (UUIDv7) PK, email UNIQUE (lowercased), name, status, source,
 issues       id PK, slug UNIQUE, subject, preheader, body, version INT,
              status, content_hash, test_sent_hash, test_sent_at,
              rendered_html, rendered_text, sender JSON, tracking JSON,
+             promotion_check JSON,
              recipient_count,
              send_started_at, send_heartbeat_at, send_error,
              created_at, updated_at, sent_at, cancelled_at, imported_at
@@ -126,7 +127,7 @@ Unsubscribe and confirm tokens are `subscriberId.base64url(HMAC-SHA256(TOKEN_SEC
   - `::button[Label]{href="https://…"}`
   - `:::callout[Optional title]` … `:::`
 - Anything else is rejected with a line number and a suggested fix (`src/email/markdown.ts`), so the agent can correct the draft. Raw HTML, reference-style links, footnotes and `####` headings are all rejected. Accidental text directives like `note:here` stay as literal text.
-- The layout (`apps/app/src/email`) has a header with logo, the body, and a footer with unsubscribe link, postal address, social links and "you're receiving this because…". Settings fill in the logo, accent, links and address; nothing else about the design is configurable in v1.
+- The layout (`apps/app/src/email`) has a header with logo, the body, and a footer with unsubscribe link, postal address (if set), social links and "you're receiving this because…". Settings fill in the logo, accent, links and address; nothing else about the design is configurable in v1.
 - Quality bar: test in Gmail (web and iOS), Apple Mail, Outlook (web and Windows) and dark mode. Use system font stacks, because most clients ignore web fonts. Every email gets a plain-text alternative, generated from the Markdown tree rather than scraped from the HTML. Dark mode uses `prefers-color-scheme` styles that clients like Apple Mail apply; other clients get the light inline styles.
 - Images are URL-only in v1. R2 uploads come later.
 
@@ -135,9 +136,9 @@ Unsubscribe and confirm tokens are `subscriberId.base64url(HMAC-SHA256(TOKEN_SEC
 | Group | Tools | Notes |
 | --- | --- | --- |
 | Settings | `get_settings`, `update_settings` | `update_settings` merges a partial update (`null` clears optional fields), including `tracking: { clicks, opens }`. It warns, rather than blocks, when the sender's domain isn't verified in SES; sending is blocked until it is. |
-| Setup | `doctor` | Fails (blocks sending): no settings, no active subscribers, SES unreachable, sandbox, sending disabled, account shut down, quota below the list size, sender domain not verified, no DMARC record (looked up over DNS-over-HTTPS, falling back to the parent domain), configuration set missing. Warns: probation, no custom MAIL FROM, bounce/complaint events not wired to Sendoff's SNS topic, deliveries not reported, account suppression list off. |
+| Setup | `doctor` | Fails (blocks sending): no settings, no active subscribers, SES unreachable, sandbox, sending disabled, account shut down, quota below the list size, sender domain not verified, no DMARC record (looked up over DNS-over-HTTPS, falling back to the parent domain), configuration set missing. Warns: probation, no postal address, no custom MAIL FROM, bounce/complaint events not wired to Sendoff's SNS topic, deliveries not reported, account suppression list off. |
 | Drafts | `create_draft`, `get_draft`, `edit_draft`, `set_draft_meta`, `list_issues`, `preview_draft`, `delete_draft`, `import_issue` | `edit_draft` applies exact find/replace edits all-or-nothing (or replaces the body), takes an optional `expectedVersion`, and bumps `version`. Drafts are stored even with Markdown problems; results list them by line. `preview_draft` returns the URL plus the plain-text version so the agent can proofread. Issues are addressed by id or slug. `import_issue` keeps one past issue from another provider (see [Importing](#importing)); `delete_draft` also deletes imported issues. |
-| Sending | `send_test`, `prepare_send`, `confirm_send`, `send_status`, `cancel_send`, `resume_send` | See [Send pipeline](#send-pipeline). `confirm_send` and `cancel_send` are annotated `destructiveHint: true`, and the instructions tell the agent to confirm only after the person explicitly says to send. |
+| Sending | `send_test`, `prepare_send`, `check_promotion`, `confirm_send`, `send_status`, `cancel_send`, `resume_send` | See [Send pipeline](#send-pipeline). `confirm_send` and `cancel_send` are annotated `destructiveHint: true`, and the instructions tell the agent to confirm only after the person explicitly says to send. |
 | Subscribers | `add_subscriber`, `import_csv`, `import_subscribers`, `search_subscribers`, `unsubscribe_subscriber` (`prune` in M6) | `add_subscriber` sends a confirmation email unless `skipConfirmation` (only when the person asked to be added). Imports support `dryRun`, can suppress an existing subscriber but never reactivate one, and treat imported active subscribers as confirmed. `import_csv` reads any provider's CSV export (see [Importing](#importing)); `import_subscribers` takes a short list of addresses. |
 | API keys | `create_api_key`, `list_api_keys`, `revoke_api_key` | Keys are shown once (to the agent, which hands them to the person) and stored hashed. Revoke by id or prefix. |
 | Stats | `issue_stats` (`growth` later) | See [Tracking and stats](#tracking-and-stats). Clicks and unsubscribes are the trustworthy signals. Opens are unreliable because of Apple Mail Privacy Protection, so they're off by default. |
@@ -214,6 +215,7 @@ Implemented in `src/sending.ts`.
    - the issue is a draft that renders
    - the last test matches the current fingerprint
    - `doctor` has no failures
+   - with no postal address, the issue doesn't read as commercial. `src/promotion.ts` asks `@cf/openai/gpt-oss-120b` on Workers AI (the `AI` binding) to apply the FTC's primary-purpose test (16 CFR 316.3: subject line; placement, proportion and emphasis of promotion) and CASL's broader one, returning `{ verdict: commercial | borderline | not_commercial, commercialMentions, reasons, fixes }` as JSON. "commercial" blocks with the reasons and fixes; "borderline", and "not_commercial" with commercial mentions (CASL), are warnings. The result is stored in `issues.promotion_check` with the content hash and model, and reused until the content changes, so it doesn't flip between runs. If the model can't be reached or answers badly, it's a warning, not a block. `check_promotion` runs the same check on demand. About 40 neurons a check, inside Workers AI's free daily allowance. Tests stub the classifier, and `remoteBindings: false` keeps Vitest off Cloudflare.
 
    It returns a summary (recipients, sender, estimated time at the SES max send rate, warnings) and a confirmation token: `expiresAt.HMAC(TOKEN_SECRET, "send:" + issueId + fingerprint + expiresAt)`, valid for 15 minutes.
 
@@ -261,7 +263,8 @@ Settings `tracking: { clicks: true, opens: false }` by default, snapshotted onto
 ## Deliverability defaults (all on, not configurable away)
 
 - DKIM (SES Easy DKIM), a custom MAIL FROM subdomain for SPF alignment, and DMARC (`p=none` with `rua` reporting to start).
-- RFC 8058 one-click unsubscribe headers, plus a visible unsubscribe link and postal address in every email.
+- RFC 8058 one-click unsubscribe headers and a visible unsubscribe link in every email.
+- The postal address is optional, because US (CAN-SPAM) and Canadian (CASL) law require it only in commercial email. With one, it's in every footer. Without one, `doctor` warns and `prepare_send` runs the promotion check (see [Send pipeline](#send-pipeline)).
 - Double opt-in for form signups, and Turnstile on the form.
 - Honor unsubscribes immediately. The legal ceilings are 2 days (Gmail/Yahoo) and 10 business days (CAN-SPAM).
 - Click tracking is on by default, through Sendoff's own hostname rather than SES's or anyone's shared tracking domain. Open tracking is off by default.
@@ -277,7 +280,7 @@ Settings `tracking: { clicks: true, opens: false }` by default, snapshotted onto
 `bun run setup` (in `scripts/setup.ts`) connects Sendoff to your accounts and deploys it. Every step checks what already exists, so it's safe to re-run; progress (including the newsletter answers, which pre-fill the prompts) is kept in the gitignored `apps/app/.sendoff/instance.json`. If a step after the deploy fails, setup says so and stops; running it again skips what's done.
 
 1. **Cloudflare account:** read from `wrangler whoami` (runs `wrangler login` if needed, asks which account if there are several). It confirms the account is on Workers Paid, which can't be checked through Wrangler.
-2. **Details:** name (a newsletter or brand name), sender, reply-to, postal address. Then the hostname (default `news.<sender domain>`), which must be on a Cloudflare zone in the account. Links on your own domain also keep emails away from shared `workers.dev` URLs, which spam filters distrust. Then the SES region.
+2. **Details:** name (a newsletter or brand name), sender, reply-to, an optional postal address. Then the hostname (default `news.<sender domain>`), which must be on a Cloudflare zone in the account. Links on your own domain also keep emails away from shared `workers.dev` URLs, which spam filters distrust. Then the SES region.
 3. **AWS access:** if the AWS CLI is logged in, setup offers to use that login (`aws configure export-credentials`, including short-lived SSO or `aws login` sessions) to provision SES and SNS. It then creates a dedicated `sendoff` IAM user with a send-only inline policy (`ses:SendEmail`, `GetAccount`, `GetEmailIdentity`, `GetConfigurationSetEventDestinations`) and an access key: the only AWS credential the Worker holds, so it can't create or change AWS resources. Re-runs reuse that key while the Worker has its secret, and only ever delete the one key setup recorded. Without the CLI, setup writes the full provisioning policy to `.sendoff/iam-policy.json` and asks for keys, which then serve both purposes.
 4. **Optional Cloudflare API token** (Zone DNS Edit, Zone Read, Account Turnstile Edit). It's used during setup and not stored, and only asked for if the Turnstile or DNS step still has work to do. With it, setup writes the DNS records and creates the Turnstile widget. Without it, setup prints the records and asks for Turnstile keys made in the dashboard.
 5. **Resources:** the D1 database `sendoff`, the KV namespace `sendoff-oauth` and the queue `sendoff-send` through Wrangler, and a Turnstile widget for the hostname (skipped once the Worker has its secret).

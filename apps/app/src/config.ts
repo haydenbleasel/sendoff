@@ -41,14 +41,17 @@ const configSchema = z.object({
   turnstileSiteKey: required("TURNSTILE_SITE_KEY"),
 });
 
-export type Config = z.output<typeof configSchema>;
+export type Config = z.output<typeof configSchema> & {
+  /** Workers AI, for the promotion check. */
+  ai: Ai;
+};
 
 const emptyToUndefined = (value: string | undefined) =>
   value === "" ? undefined : value;
 
 /** Validated runtime configuration. Throws a readable error if setup is incomplete. */
-export const getConfig = (env: Env): Config =>
-  configSchema.parse({
+export const getConfig = (env: Env): Config => ({
+  ...configSchema.parse({
     awsAccessKeyId: env.AWS_ACCESS_KEY_ID,
     awsSecretAccessKey: env.AWS_SECRET_ACCESS_KEY,
     mcpToken: env.MCP_TOKEN,
@@ -59,7 +62,9 @@ export const getConfig = (env: Env): Config =>
     tokenSecret: env.TOKEN_SECRET,
     turnstileSecretKey: env.TURNSTILE_SECRET_KEY,
     turnstileSiteKey: env.TURNSTILE_SITE_KEY,
-  });
+  }),
+  ai: env.AI,
+});
 
 export const createSes = (config: Config): SesClient =>
   createSesClient({

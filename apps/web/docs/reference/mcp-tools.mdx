@@ -35,7 +35,8 @@ Drafts are saved even when the Markdown has problems; each result lists them by 
 | Tool | What it does |
 | --- | --- |
 | `send_test` | Emails the current version, with `[Test]` in the subject, to the reply-to address, the sender, or up to five addresses. |
-| `prepare_send` | Checks the draft is ready to go, without sending: it renders, the last test matches this exact version, and `doctor` passes. Returns a summary and a confirmation that expires in 15 minutes. |
+| `prepare_send` | Checks the draft is ready to go, without sending: it renders, the last test matches this exact version, `doctor` passes, and, with no postal address, it doesn't read as commercial. Returns a summary and a confirmation that expires in 15 minutes. |
+| `check_promotion` | Checks whether a draft reads as commercial email, the same way `prepare_send` does without a postal address. See [When you need a postal address](/docs/guides/deliverability#when-you-need-a-postal-address). |
 | `confirm_send` | Sends to every active subscriber. Agents are told to call it only after you've seen the summary and said to send. |
 | `send_status` | Shows a send's progress (sent, failed, skipped, remaining), deliveries, bounces, complaints, unsubscribes, and why it stopped, if it did. |
 | `cancel_send` | Stops a send in progress. Everyone not yet sent to is skipped. |

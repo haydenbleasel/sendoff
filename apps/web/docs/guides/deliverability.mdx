@@ -30,7 +30,7 @@ Once you're approved, check your quota with `doctor`. New accounts often start a
 ## Defaults you can't turn off
 
 - **One-click unsubscribe** headers ([RFC 8058](https://www.rfc-editor.org/rfc/rfc8058)) and a visible unsubscribe link in every email, honored immediately
-- **Your postal address** in every footer
+- **Your postal address** in every footer, once you've set one
 - **Double opt-in** for signups, with Turnstile on the form
 - **Bounces and complaints** suppressed automatically, plus SES's account-wide suppression list
 
@@ -39,11 +39,25 @@ Once you're approved, check your quota with `doctor`. New accounts often start a
 - **Keep your From domain.** If you're moving from another provider, send from the same domain. Its reputation comes with it; a new domain starts from nothing.
 - **Import your suppressions.** Bring over unsubscribes and bounces from your old provider, so you don't email them again. See [Importing your list](/docs/guides/importing).
 - **Send what people signed up for.** A list that hasn't heard from you in a year will complain more. If it's been a while, say so at the top of the issue and make unsubscribing easy.
-- **Use a real postal address.** US law (CAN-SPAM) requires a street address, PO box or private mailbox, not just a city.
 - **Watch the numbers after each send.** SES reviews an account at about a 5% bounce rate or 0.1% complaint rate, and may pause sending at about 10% or 0.5%. Gmail wants spam complaints under 0.3%. [`issue_stats`](/docs/guides/stats) shows both rates for each issue, and flags them when they get close.
 - **Decide on tracking.** Click tracking is on, and goes through your own domain rather than a shared tracking domain, which some spam filters distrust. Open tracking is off, because Apple Mail loads every image automatically, which makes open rates unreliable. You can change either. See [Issue stats](/docs/guides/stats).
 
 SES uses shared IP addresses, which is the right choice for a list that sends every few weeks: a dedicated IP needs steady daily sending to stay warm.
+
+## When you need a postal address
+
+US and Canadian anti-spam laws require your postal address in commercial email, and only there. It can be a street address, a PO box or a private mailbox, but not just a city.
+
+- **US (CAN-SPAM)** treats an email as commercial when its primary purpose is promoting a commercial product or service. A launch or a sale is. A personal update with a short mention near the end usually isn't, unless the subject line is about the product or the promotion comes first, takes up most of the email, or is played up with buttons and images.
+- **Canada (CASL)** is broader: it covers an email if one of its purposes is to encourage buying or signing up for something commercial, and it applies to readers in Canada wherever you send from.
+
+The address is optional in Sendoff. If you set one, it's in every footer and you can send anything. If you don't, `prepare_send` asks a model on Workers AI to read each issue against those tests first:
+
+- **Commercial:** the send is blocked, with the reasons and what to change. Add an address, or rework the issue so promotion isn't its main purpose.
+- **Borderline:** a warning in the summary.
+- **Not commercial,** but it encourages readers to buy or sign up for something: a warning about Canada.
+
+The verdict is kept until the issue changes, and the agent can run the same check while drafting with `check_promotion`. It's a careful reading, not legal advice.
 
 ## Tightening DMARC
 

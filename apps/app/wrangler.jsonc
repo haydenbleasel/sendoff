@@ -23,6 +23,9 @@
       "TURNSTILE_SECRET_KEY",
     ],
   },
+  // Workers AI, for the promotion check in prepare_send when there's no
+  // postal address. It always runs on Cloudflare, even in local dev.
+  "ai": { "binding": "AI", "remote": true },
   // OAuth grants and tokens for claude.ai and Claude Desktop connectors.
   "kv_namespaces": [{ "binding": "OAUTH_KV" }],
   "queues": {

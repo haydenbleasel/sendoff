@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getConfig } from "../src/config";
 import { events, issues, sends, subscribers } from "../src/db/schema";
 import { createDraft, editDraft } from "../src/issues";
+import type { ClassifyPromotion, PromotionAssessment } from "../src/promotion";
 import {
   CHUNK_SIZE,
   STALL_AFTER_MS,
@@ -409,6 +410,100 @@ describe("sending", () => {
 
     await drain();
     expect(newsletterEmails()).toHaveLength(2);
+  });
+});
+
+const { address: _address, ...withoutAddress } = testSettings;
+
+/** A classifier that records what it was asked and always gives `verdict`. */
+const stubClassifier = (verdict: PromotionAssessment["verdict"]) => {
+  const asked: string[] = [];
+
+  const classify: ClassifyPromotion = (content) => {
+    asked.push(content.subject);
+
+    return Promise.resolve({
+      commercialMentions: verdict !== "not_commercial",
+      fixes: verdict === "commercial" ? ["Lead with your own update."] : [],
+      reasons: ["It's mostly about a paid product."],
+      verdict,
+    });
+  };
+
+  return { asked, classify };
+};
+
+/** A tested draft, ready for prepare_send. */
+const testedDraft = async (subject: string) => {
+  const draft = await createDraft(db(), { body: "News.", subject });
+  await sendTest(deps, draft.id);
+
+  return draft;
+};
+
+describe("promotion check", () => {
+  it("blocks an issue that reads as commercial when there's no postal address", async () => {
+    await saveSettings(db(), withoutAddress);
+    await addActive(1);
+    deps = {
+      ...deps,
+      classifyPromotion: stubClassifier("commercial").classify,
+    };
+
+    const draft = await testedDraft("Buy Tersa Pro");
+
+    await expect(prepareSend(deps, draft.id)).rejects.toThrow(
+      "reads as commercial email"
+    );
+    await expect(prepareSend(deps, draft.id)).rejects.toThrow(
+      "Lead with your own update."
+    );
+  });
+
+  it("checks each version once, and skips the check with an address", async () => {
+    await saveSettings(db(), withoutAddress);
+    await addActive(1);
+    const stub = stubClassifier("not_commercial");
+    deps = { ...deps, classifyPromotion: stub.classify };
+
+    const draft = await testedDraft("A few updates");
+    const first = await prepareSend(deps, draft.id);
+    await prepareSend(deps, draft.id);
+
+    expect(first.promotion).toMatchObject({
+      check: { verdict: "not_commercial" },
+      status: "checked",
+    });
+    expect(stub.asked).toStrictEqual(["A few updates"]);
+
+    await editDraft(db(), draft.id, { body: "More news." });
+    await sendTest(deps, draft.id);
+    await prepareSend(deps, draft.id);
+    expect(stub.asked).toHaveLength(2);
+
+    await saveSettings(db(), testSettings);
+    await sendTest(deps, draft.id);
+    const withAddress = await prepareSend(deps, draft.id);
+
+    expect(withAddress.promotion).toStrictEqual({ status: "skipped" });
+    expect(stub.asked).toHaveLength(2);
+  });
+
+  it("warns rather than blocks when the check can't run", async () => {
+    await saveSettings(db(), withoutAddress);
+    await addActive(1);
+    deps = {
+      ...deps,
+      classifyPromotion: () => Promise.reject(new Error("Workers AI is down")),
+    };
+
+    const draft = await testedDraft("Quiet update");
+    const prepared = await prepareSend(deps, draft.id);
+
+    expect(prepared.promotion).toStrictEqual({
+      error: "Workers AI is down",
+      status: "failed",
+    });
   });
 });
 

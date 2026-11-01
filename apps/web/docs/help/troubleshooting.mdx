@@ -11,7 +11,10 @@ Ask your agent to "run doctor" at any time. `prepare_send` runs the same checks,
 
 <Accordion>
   <AccordionItem title="Settings">
-    **Fails** when Sendoff has no settings yet. Ask the agent to set the name, sender and postal address, or run `bun run setup` again.
+    **Fails** when Sendoff has no settings yet. Ask the agent to set the name and sender, or run `bun run setup` again.
+  </AccordionItem>
+  <AccordionItem title="Postal address">
+    **Warns** when there's no postal address. That's fine for email that isn't commercial; `prepare_send` checks each issue and blocks any that read as commercial. See [When you need a postal address](/docs/guides/deliverability#when-you-need-a-postal-address).
   </AccordionItem>
   <AccordionItem title="Subscribers">
     **Fails** when nobody is active. [Import your list](/docs/guides/importing), or share your signup page.
@@ -58,6 +61,8 @@ Ask your agent to "run doctor" at any time. `prepare_send` runs the same checks,
 **The agent can't connect.** Check the URL ends in `/mcp` and the header is `Authorization: Bearer <token>`, with a space after `Bearer`. If you've lost the token, [replace it](/docs/connect#keep-the-token-safe).
 
 **A test email didn't arrive.** Check spam. While the account is in the SES sandbox, tests only reach addresses verified in SES, which your sender domain counts as. If SES refused it, the agent saw the reason when it sent the test; `doctor` shows anything else in the way.
+
+**`prepare_send` says the issue reads as commercial.** You have no postal address, and the issue reads as promoting something. Add an address with your agent ("set my postal address to …"), or follow the fixes it lists, such as leading with your own update and keeping the product to a short mention. Then send another test.
 
 **Sending stopped.** Ask for `send_status`, which says why it stopped. Fix the cause, such as a raised quota or a re-enabled account, then ask the agent to resume.
 

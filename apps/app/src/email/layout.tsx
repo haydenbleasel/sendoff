@@ -91,11 +91,12 @@ const FooterRule = () => (
   />
 );
 
-const Address = ({ settings }: { settings: Settings }) => (
-  <Text className={darkClass.muted} style={{ ...footerText, margin: 0 }}>
-    {settings.address}
-  </Text>
-);
+const Address = ({ settings }: { settings: Settings }) =>
+  settings.address ? (
+    <Text className={darkClass.muted} style={{ ...footerText, margin: 0 }}>
+      {settings.address}
+    </Text>
+  ) : null;
 
 const IssueFooter = ({
   settings,

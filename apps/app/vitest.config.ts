@@ -34,6 +34,9 @@ export default defineConfig({
             TURNSTILE_SITE_KEY: "test-site-key",
           },
         },
+        // Never reach real Cloudflare resources (like Workers AI) from tests:
+        // CI has no credentials, and it would cost money. Tests stub them.
+        remoteBindings: false,
         wrangler: { configPath: "./wrangler.jsonc" },
       };
     }),

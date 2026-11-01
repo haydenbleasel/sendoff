@@ -39,9 +39,12 @@ Settings live in Sendoff's database, not in code, so you change them by asking y
   before you can send; setup does this for the address you give it.
 </ResponseField>
 
-<ResponseField name="address" type="string" required>
-  The postal address in every footer. Anti-spam laws require one: in the US, a
-  street address, PO box or private mailbox.
+<ResponseField name="address" type="string">
+  The postal address in every footer: a street address, PO box or private
+  mailbox, not just a city. US and Canadian law require one in commercial email,
+  like launches and promotions. Without one, `prepare_send` checks each issue
+  and blocks any that read as commercial. See [When you need a postal
+  address](/docs/guides/deliverability#when-you-need-a-postal-address).
 </ResponseField>
 
 <ResponseField name="replyTo" type="string">

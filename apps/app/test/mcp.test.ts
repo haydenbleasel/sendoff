@@ -78,6 +78,7 @@ describe("tools", () => {
     expect(names).toStrictEqual([
       "add_subscriber",
       "cancel_send",
+      "check_promotion",
       "confirm_send",
       "create_api_key",
       "create_draft",

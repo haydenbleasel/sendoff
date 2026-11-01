@@ -129,7 +129,7 @@ const fail = (message: string): never => {
 // --- Steps --------------------------------------------------------------------------
 
 interface Newsletter {
-  address: string;
+  address?: string | undefined;
   fromEmail: string;
   fromName: string;
   name: string;
@@ -232,11 +232,10 @@ const newsletterDetails = async (
   });
 
   const address = await ask(
-    "Postal address for the footer (required by anti-spam law)",
+    "Postal address for the footer (optional; commercial email, like launches, needs one)",
     {
       initial: previous?.address,
-      placeholder: "1 Example St, Sydney NSW 2000, Australia",
-      validate: required("A postal address"),
+      placeholder: "A street address, PO box or private mailbox",
     }
   );
 
@@ -249,7 +248,7 @@ const newsletterDetails = async (
   });
 
   return {
-    address,
+    address: address.trim() || undefined,
     fromEmail,
     fromName,
     name,
@@ -837,11 +836,14 @@ const finishSetup = async ({
   const client = await mcpClient(publicUrl, token);
 
   const settings: JsonObject = {
-    address: newsletter.address,
     from: { email: newsletter.fromEmail, name: newsletter.fromName },
     links: [{ label: "Website", url: newsletter.website }],
     name: newsletter.name,
   };
+
+  if (newsletter.address) {
+    settings.address = newsletter.address;
+  }
 
   if (newsletter.replyTo) {
     settings.replyTo = newsletter.replyTo;

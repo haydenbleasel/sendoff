@@ -111,7 +111,7 @@ const Page = ({
         {showMasthead ? <Masthead settings={settings} /> : null}
         {children}
       </main>
-      <footer>{settings.address}</footer>
+      {settings.address ? <footer>{settings.address}</footer> : null}
     </body>
   </html>
 );

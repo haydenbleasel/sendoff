@@ -43,6 +43,13 @@
       "when": 1793501124828,
       "tag": "0005_imported_issues",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793505513716,
+      "tag": "0006_promotion_check",
+      "breakpoints": true
     }
   ]
 }

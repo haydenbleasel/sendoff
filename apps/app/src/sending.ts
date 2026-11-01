@@ -6,7 +6,12 @@ import { createSes } from "./config";
 import type { Config } from "./config";
 import type { Database } from "./db/client";
 import { events, issues, sends, subscribers } from "./db/schema";
-import type { IssueSender, IssueTracking, sendStatuses } from "./db/schema";
+import type {
+  IssuePromotionCheck,
+  IssueSender,
+  IssueTracking,
+  sendStatuses,
+} from "./db/schema";
 import { formatChecks, runDoctor } from "./doctor";
 import type { DoctorReport } from "./doctor";
 import {
@@ -17,6 +22,12 @@ import {
 import type { RenderedIssue } from "./email/render";
 import { IssueError, requireIssue } from "./issues";
 import type { Issue } from "./issues";
+import {
+  checkPromotion,
+  createPromotionClassifier,
+  describePromotion,
+} from "./promotion";
+import type { ClassifyPromotion } from "./promotion";
 import { SesError } from "./ses";
 import type { SesClient } from "./ses";
 import { getSettings } from "./settings";
@@ -78,6 +89,8 @@ export interface SendQueue {
 }
 
 export interface SendDeps {
+  /** Injected in tests; defaults to Workers AI. */
+  classifyPromotion?: ClassifyPromotion;
   config: Config;
   db: Database;
   now?: () => number;
@@ -89,6 +102,68 @@ export interface SendDeps {
 
 const clock = (deps: SendDeps) => deps.now?.() ?? Date.now();
 const sesFor = (deps: SendDeps) => deps.ses ?? createSes(deps.config);
+
+const classifierFor = (deps: SendDeps): ClassifyPromotion =>
+  deps.classifyPromotion ?? createPromotionClassifier(deps.config.ai);
+
+export type PromotionResult =
+  | { check: IssuePromotionCheck; status: "checked" }
+  | { error: string; status: "failed" }
+  | { status: "skipped" };
+
+/**
+ * Without a postal address, judge whether the issue is commercial email. A
+ * model that can't be reached doesn't block a send; the warning says so.
+ */
+export const promotionFor = async (
+  deps: SendDeps,
+  issue: Issue,
+  settings: Settings
+): Promise<PromotionResult> => {
+  if (settings.address) {
+    return { status: "skipped" };
+  }
+
+  try {
+    return {
+      check: await checkPromotion(
+        deps.db,
+        issue,
+        classifierFor(deps),
+        new Date(clock(deps))
+      ),
+      status: "checked",
+    };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error),
+      status: "failed",
+    };
+  }
+};
+
+/** Run the promotion check on demand, address or not. */
+export const runPromotionCheck = async (
+  deps: SendDeps,
+  ref: string
+): Promise<{ check: IssuePromotionCheck; issue: Issue }> => {
+  const issue = await requireIssue(deps.db, ref);
+
+  if (issue.importedAt) {
+    throw new IssueError(
+      `"${issue.subject}" was imported, so there's nothing to check before sending.`
+    );
+  }
+
+  const check = await checkPromotion(
+    deps.db,
+    issue,
+    classifierFor(deps),
+    new Date(clock(deps))
+  );
+
+  return { check, issue };
+};
 
 const pause = async (deps: SendDeps, ms: number) =>
   await (deps.sleep ?? ((delay: number) => scheduler.wait(delay)))(ms);
@@ -242,6 +317,7 @@ export interface PreparedSend {
   expiresAt: number;
   issue: Issue;
   maxSendRate: number;
+  promotion: PromotionResult;
   recipients: number;
   report: DoctorReport;
   settings: Settings;
@@ -285,6 +361,17 @@ export const prepareSend = async (
     );
   }
 
+  const promotion = await promotionFor(deps, issue, settings);
+
+  if (
+    promotion.status === "checked" &&
+    promotion.check.verdict === "commercial"
+  ) {
+    throw new IssueError(
+      `${describePromotion(promotion.check)}\n\nThere's no postal address in your settings, so it can't be sent as it is. Either add one with update_settings (a street address, a PO box or a private mailbox), or change the issue so promotion isn't its main purpose, then send another test.`
+    );
+  }
+
   const expiresAt = clock(deps) + CONFIRMATION_TTL_MS;
 
   return {
@@ -297,6 +384,7 @@ export const prepareSend = async (
     expiresAt,
     issue,
     maxSendRate: report.account.maxSendRate,
+    promotion,
     recipients: report.activeSubscribers,
     report,
     settings,

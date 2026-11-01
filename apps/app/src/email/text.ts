@@ -142,4 +142,6 @@ export const toPlainText = (
     `You're receiving this because you subscribed to ${settings.name}.`,
     `Unsubscribe: ${unsubscribeUrl}`,
     settings.address,
-  ].join("\n\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");

@@ -87,6 +87,23 @@ describe("renderIssue", () => {
   });
 });
 
+describe("without a postal address", () => {
+  it("leaves the address out of the footer", async () => {
+    const { address, ...settings } = sampleSettings;
+    const result = await renderIssue(sampleIssue, settings);
+
+    if (!result.ok) {
+      throw new Error("The sample should render");
+    }
+
+    expect(result.html).not.toContain(address ?? "");
+    expect(result.text).not.toContain(address ?? "");
+    expect(
+      result.text.endsWith("Unsubscribe: %%sendoff_unsubscribe_url%%")
+    ).toBe(true);
+  });
+});
+
 describe("personalize", () => {
   it("swaps the placeholder and escapes the URL for HTML", () => {
     const result = personalize(

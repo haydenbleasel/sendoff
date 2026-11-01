@@ -1,0 +1,1 @@
+ALTER TABLE `issues` ADD `promotion_check` text;

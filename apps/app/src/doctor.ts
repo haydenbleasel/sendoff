@@ -379,6 +379,18 @@ export const runDoctor = async ({
         )
   );
 
+  if (settings) {
+    checks.push(
+      settings.address
+        ? check("pass", "Postal address", settings.address)
+        : check(
+            "warn",
+            "Postal address",
+            "None set. US and Canadian law require one in commercial email (launches, promotions), so prepare_send checks each issue with AI and blocks any that read as commercial."
+          )
+    );
+  }
+
   try {
     account = await ses.getAccount();
     checks.push(...accountChecks(account, counts.active));
