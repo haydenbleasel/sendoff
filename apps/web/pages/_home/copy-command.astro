@@ -1,0 +1,82 @@
+---
+import Icon from "blume/components/Icon.astro";
+
+// The install command as the primary call to action: a pill that copies the
+// command on click, so it's one step from the page to a terminal.
+interface Props {
+  command: string;
+}
+
+const { command } = Astro.props;
+---
+
+<button
+  type="button"
+  class="group inline-flex min-h-13 items-center gap-3 rounded-full bg-foreground pr-5 pl-6 font-mono text-base text-background hover:opacity-85"
+  data-copy={command}
+  aria-label={`Copy “${command}”`}
+>
+  <span class="opacity-50 select-none" aria-hidden="true">$</span>
+  <span aria-hidden="true">{command}</span>
+  <span class="relative ml-1 size-4" aria-hidden="true">
+    <Icon
+      name="copy"
+      size={16}
+      class="absolute inset-0 transition-opacity group-data-copied:opacity-0"
+    />
+    <Icon
+      name="check"
+      size={16}
+      class="absolute inset-0 opacity-0 transition-opacity group-data-copied:opacity-100"
+    />
+  </span>
+</button>
+<span class="sr-only" aria-live="polite" data-copy-status></span>
+
+<script>
+  // Copies a [data-copy] button's command, swaps its icon for a check for a
+  // moment and announces it. Bundled scripts run once per session, so this
+  // delegates from `document` and works on every visit to the page.
+  const COPIED_MS = 2000;
+  const timers = new WeakMap<HTMLElement, number>();
+
+  document.addEventListener("click", async (event) => {
+    const button =
+      event.target instanceof Element
+        ? event.target.closest<HTMLElement>("[data-copy]")
+        : null;
+
+    const command = button?.dataset.copy;
+
+    if (!(button && command)) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(command);
+    } catch {
+      // No clipboard access; the command is still there to select.
+      return;
+    }
+
+    const status = button.nextElementSibling;
+
+    button.dataset.copied = "";
+
+    if (status instanceof HTMLElement) {
+      status.textContent = "Copied";
+    }
+
+    window.clearTimeout(timers.get(button));
+    timers.set(
+      button,
+      window.setTimeout(() => {
+        delete button.dataset.copied;
+
+        if (status instanceof HTMLElement) {
+          status.textContent = "";
+        }
+      }, COPIED_MS)
+    );
+  });
+</script>

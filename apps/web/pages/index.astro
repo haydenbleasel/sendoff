@@ -6,6 +6,7 @@ import data from "blume:data";
 import Arrow from "./_home/arrow.astro";
 import Calculator from "./_home/calculator.astro";
 import Chat from "./_home/chat.astro";
+import CopyCommand from "./_home/copy-command.astro";
 import Email from "./_home/email.astro";
 import Flaps from "./_home/flaps.astro";
 import Mark from "./_home/mark.astro";
@@ -14,11 +15,7 @@ const { config } = data;
 
 const DOCS = "/docs";
 const QUICKSTART = "/docs/quickstart";
-
-// Until launch, the deploy and docs calls to action show a COMING SOON board
-// instead, and the steps drop their docs links. Flip this to bring them back.
-// The footer's Docs link stays either way.
-const launched = false;
+const CREATE_COMMAND = "bun create sendoff";
 
 // The hero conversation, from first draft to send.
 const chat = [
@@ -219,8 +216,8 @@ const formatSentAt = (sentAt: string) => {
 // `code` is what you type or say at each step.
 const steps = [
   {
-    body: "Clone the repo and run setup. It creates the database, queue and SES identity, writes your DNS records and asks AWS for production access.",
-    code: "bun run setup",
+    body: "One command clones Sendoff and runs setup. It creates the database, queue and SES identity, writes your DNS records and asks AWS for production access.",
+    code: CREATE_COMMAND,
     href: QUICKSTART,
     link: "Setup guide",
     number: "1",
@@ -247,9 +244,6 @@ const steps = [
 // Shared class lists for repeated elements. Headings inherit Blume's -0.05em
 // display tracking from its base styles, so they don't set their own.
 const autoFit = "grid grid-cols-[repeat(auto-fit,minmax(min(--spacing(75),100%),1fr))] gap-12";
-
-const primaryButton =
-  "inline-flex min-h-13 items-center gap-2.5 rounded-full bg-foreground px-6 text-base font-medium text-background no-underline hover:opacity-85";
 
 const textLink =
   "inline-flex items-center gap-2 font-medium text-foreground no-underline hover:text-muted-foreground";
@@ -294,25 +288,14 @@ const inlineLink =
         A newsletter tool you deploy to your own Cloudflare and AWS accounts and run from Claude or
         Codex.
       </p>
-      {
-        launched ? (
-          <div class="sendoff-enter flex flex-wrap items-center justify-center gap-x-7 gap-y-3 [--i:3]">
-            <a href={QUICKSTART} class={primaryButton}>
-              Deploy your own <Arrow />
-            </a>
-            <a href={DOCS} class:list={[textLink, "min-h-11 text-base"]}>
-              Read the docs <Arrow />
-            </a>
-          </div>
-        ) : (
-          <Flaps
-            text="COMING SOON"
-            label="Coming soon"
-            class="sendoff-enter [--i:3]"
-            delay={300}
-          />
-        )
-      }
+      <div
+        class="sendoff-enter flex flex-wrap items-center justify-center gap-x-7 gap-y-3 [--i:3]"
+      >
+        <CopyCommand command={CREATE_COMMAND} />
+        <a href={DOCS} class:list={[textLink, "min-h-11 text-base"]}>
+          Read the docs <Arrow />
+        </a>
+      </div>
     </section>
 
     <section
@@ -673,10 +656,7 @@ const inlineLink =
         {
           steps.map((step, index) => (
             <li
-              class:list={[
-                "grid grid-rows-subgrid justify-items-start gap-4",
-                launched ? "row-span-5" : "row-span-4",
-              ]}
+              class="row-span-5 grid grid-rows-subgrid justify-items-start gap-4"
             >
               <Flaps
                 text={step.number}
@@ -687,11 +667,9 @@ const inlineLink =
               <h3 class="text-xl font-semibold tracking-tight">{step.title}</h3>
               <p class="text-base/7 text-pretty text-muted-foreground">{step.body}</p>
               <p class="rounded-lg bg-muted px-3 py-1.5 font-mono text-sm">{step.code}</p>
-              {launched && (
-                <a href={step.href} class:list={[textLink, "min-h-8 text-base sm:text-[0.9375rem]"]}>
-                  {step.link} <Arrow size={14} />
-                </a>
-              )}
+              <a href={step.href} class:list={[textLink, "min-h-8 text-base sm:text-[0.9375rem]"]}>
+                {step.link} <Arrow size={14} />
+              </a>
             </li>
           ))
         }
@@ -715,15 +693,7 @@ const inlineLink =
         issue from the chat.
       </p>
       <div class="[--reveal-delay:240ms]" data-reveal>
-        {
-          launched ? (
-            <a href={QUICKSTART} class={primaryButton}>
-              Deploy your own <Arrow />
-            </a>
-          ) : (
-            <Flaps text="COMING SOON" label="Coming soon" delay={400} />
-          )
-        }
+        <CopyCommand command={CREATE_COMMAND} />
       </div>
     </section>
   </div>
