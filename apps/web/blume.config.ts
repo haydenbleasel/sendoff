@@ -1,12 +1,85 @@
 import { defineConfig } from "blume";
 
+const REPO = "https://github.com/haydenbleasel/sendoff";
+const NPM = "https://www.npmjs.com/package/create-sendoff";
+const X = "https://x.com/haydenbleasel";
+
 export default defineConfig({
+  agents: {
+    // Guidance at the top of llms.txt: when an agent should reach for
+    // Sendoff, and how to set it up and run it.
+    llmsTxt: {
+      details: [
+        "Reach for Sendoff when someone wants to run an email newsletter from Claude or Codex on accounts they own. It's self-hosted: one Cloudflare Worker (with D1, Queues and Turnstile) sends through their own Amazon SES account, from their own domain. It runs one newsletter with one list; it doesn't send transactional email, and has no segments, automations, A/B tests or open tracking.",
+        "",
+        `Set it up with \`bun create sendoff\` (package: ${NPM}), which clones the repo and runs \`bun run setup\` to provision Cloudflare and AWS and deploy. It needs Cloudflare Workers Paid with the domain's DNS on Cloudflare, an AWS account, Bun and Git. Setup is interactive and creates resources in the person's accounts, so they should run it themselves. It prints an MCP server URL (\`https://<host>/mcp\`) and a token. Once connected, call \`doctor\` first, and never send without the person's go-ahead: \`send_test\`, then \`prepare_send\`, then \`confirm_send\` only after they explicitly say to send.`,
+      ].join("\n"),
+    },
+  },
+
   // The landing page owns `/` (pages/index.astro), so the docs mount under /docs.
   basePath: "/docs",
+
   // Workers exposes no site URL at build time, so canonicals and the sitemap need it here.
   deployment: { site: "https://sendoff.dev" },
-  description: "Self-hosted newsletters you run from Claude or Codex.",
+
+  // Also the homepage's meta description (pages/index.astro) and llms.txt.
+  description:
+    "Sendoff is a self-hosted newsletter you run from Claude or Codex, on your own Cloudflare and AWS accounts, sending through Amazon SES.",
+
+  // The footer on docs pages (the homepage renders its own). The GitHub icon
+  // comes from `github` below; X sits beside it.
+  footer: {
+    copyright: `© ${new Date().getFullYear()} Hayden Bleasel. MIT licensed.`,
+    links: [
+      { href: NPM, label: "npm" },
+      { href: "https://github.com/sponsors/haydenbleasel", label: "Sponsor" },
+      { href: `${REPO}/issues`, label: "Report an issue" },
+    ],
+    socials: { x: X },
+  },
+
+  // The footer's repository link and each page's "Edit on GitHub" action.
+  github: {
+    dir: "apps/web",
+    owner: "haydenbleasel",
+    repo: "sendoff",
+  },
+
+  // "Last updated" on each docs page, from the file's last commit.
+  lastModified: "git",
+
   logo: "/logo.svg",
+
+  seo: {
+    og: {
+      // Share cards in the brand: ink on signal yellow, like the homepage
+      // highlight. The logo's dark tile carries the mark.
+      palette: {
+        background: "#ffc20e",
+        border: "rgb(13 13 13 / 0.15)",
+        foreground: "#0d0d0d",
+        muted: "rgb(13 13 13 / 0.75)",
+      },
+    },
+    // JSON-LD: who's behind the site, and Sendoff as a SoftwareApplication on
+    // the homepage.
+    organization: {
+      logo: "/logo.svg",
+      name: "Sendoff",
+      sameAs: [REPO, NPM, X],
+    },
+    software: {
+      applicationCategory: "CommunicationApplication",
+      license: "https://opensource.org/license/mit",
+      operatingSystem: "Cloudflare Workers",
+      price: 0,
+      sameAs: [REPO, NPM],
+    },
+    // twitter:site and twitter:creator on every page.
+    x: { creator: "haydenbleasel", handle: "haydenbleasel" },
+  },
+
   theme: {
     // Signal yellow is never text on a light background, so the light-mode accent is ink.
     accent: { dark: "#ffc20e", light: "#0d0d0d" },
@@ -16,5 +89,6 @@ export default defineConfig({
       mono: "jetbrains-mono",
     },
   },
+
   title: "Sendoff",
 });

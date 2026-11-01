@@ -16,6 +16,7 @@ const { config } = data;
 const DOCS = "/docs";
 const QUICKSTART = "/docs/quickstart";
 const CREATE_COMMAND = "bun create sendoff";
+const REPO = "https://github.com/haydenbleasel/sendoff";
 
 // The hero conversation, from first draft to send.
 const chat = [
@@ -707,7 +708,10 @@ const inlineLink =
         <span class="font-semibold tracking-tight text-foreground">Sendoff</span>
         <span>Runs on Cloudflare Workers and Amazon SES</span>
       </div>
-      <a href={DOCS} class="text-muted-foreground no-underline hover:text-foreground">Docs</a>
+      <nav aria-label="Footer" class="flex items-center gap-5">
+        <a href={DOCS} class="text-muted-foreground no-underline hover:text-foreground">Docs</a>
+        <a href={REPO} class="text-muted-foreground no-underline hover:text-foreground">GitHub</a>
+      </nav>
     </div>
   </footer>
 </PageLayout>
