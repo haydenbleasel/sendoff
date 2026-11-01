@@ -113,10 +113,9 @@ export type ImportedIssueInput = z.output<typeof importedIssueSchema>;
 
 // --- Plain text from HTML -----------------------------------------------
 
-const DROPPED_ELEMENTS =
-  /<(?<tag>head|style|script|title|noscript)\b[^>]*>[\s\S]*?<\/\k<tag>\s*>/giu;
-
-const COMMENT = /<!--[\s\S]*?-->/gu;
+// Comments, and elements whose contents aren't text a reader sees.
+const HIDDEN =
+  /<!--[\s\S]*?-->|<(?<tag>head|style|script|title|noscript)\b[^>]*>[\s\S]*?<\/\k<tag>\s*>/giu;
 
 const LINK =
   /<a\b[^>]*?\shref="(?<href>https?:[^"]*)"[^>]*>(?<label>[\s\S]*?)<\/a\s*>/giu;
@@ -127,7 +126,8 @@ const LIST_ITEM = /<li\b[^>]*>/giu;
 const BLOCK_END =
   /<\/(?:p|div|h[1-6]|li|ul|ol|tr|td|th|table|blockquote|section|article|header|footer)\s*>/giu;
 
-const TAG = /<[^>]+>/gu;
+// A tag, or one left unclosed at the end.
+const TAG = /<[^>]+(?:>|$)/gu;
 const ENTITY = /&(?:#(?<decimal>\d+)|#x(?<hex>[\da-f]+)|(?<name>[a-z]+));/giu;
 const HORIZONTAL_SPACE = /[ \t\f\v\u00A0]+/gu;
 
@@ -178,22 +178,49 @@ const decodeEntity = (
   return NAMED_ENTITIES.get(name?.toLowerCase() ?? "") ?? entity;
 };
 
+// Removing a match can join what was around it into a new one, as
+// `<scr<script>…</script>ipt>` becomes `<script>`, so removals repeat until
+// nothing changes. Real emails settle in a pass or two, and the cap keeps a
+// pathological import within the CPU limit. Whatever a capped pass leaves of
+// a hidden element is only its contents, as text, since the tags are removed
+// last and TAG leaves none.
+const MAX_REMOVAL_PASSES = 10;
+
+const removeAll = (value: string, pattern: RegExp): string => {
+  let current = value;
+
+  for (let pass = 0; pass < MAX_REMOVAL_PASSES; pass += 1) {
+    const next = current.replaceAll(pattern, "");
+
+    if (next === current) {
+      break;
+    }
+
+    current = next;
+  }
+
+  return current;
+};
+
 const linkText = (_link: string, href: string, label: string): string => {
-  const words = label.replaceAll(TAG, "").trim();
+  const words = removeAll(label, TAG).trim();
 
   return words && words !== href ? `${label} (${href})` : href;
 };
 
-/** A readable plain-text version, for providers that only export HTML. */
+/**
+ * A readable plain-text version, for providers that only export HTML. It's
+ * text, not HTML: markup the email showed escaped, like `&lt;b&gt;`, comes
+ * out as the characters a reader saw, so it's escaped wherever it's shown.
+ */
 export const htmlToText = (html: string): string => {
-  const text = html
-    .replaceAll(DROPPED_ELEMENTS, "")
-    .replaceAll(COMMENT, "")
+  const marked = removeAll(html, HIDDEN)
     .replaceAll(LINK, linkText)
     .replaceAll(LINE_BREAK, "\n")
     .replaceAll(LIST_ITEM, "\n- ")
-    .replaceAll(BLOCK_END, "\n\n")
-    .replaceAll(TAG, "")
+    .replaceAll(BLOCK_END, "\n\n");
+
+  const text = removeAll(marked, TAG)
     .replaceAll(ENTITY, decodeEntity)
     .replaceAll(INVISIBLE, "");
 

@@ -86,6 +86,20 @@ describe("htmlToText", () => {
       ].join("\n")
     );
   });
+
+  it("drops hidden elements and tags that removing others would rebuild", () => {
+    expect(
+      htmlToText(
+        "<p>Hi</p><scr<script>x</script>ipt>alert(1)</script><!<!-- a -->-- b --><p>Bye <script"
+      )
+    ).toBe("Hi\n\nBye");
+  });
+
+  it("keeps escaped markup as the text a reader saw", () => {
+    expect(htmlToText("<p>Use &lt;script&gt; tags</p>")).toBe(
+      "Use <script> tags"
+    );
+  });
 });
 
 describe("findMergeTags", () => {
