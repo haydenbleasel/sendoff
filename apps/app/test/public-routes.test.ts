@@ -216,15 +216,20 @@ describe("unsubscribe", () => {
     expect(await statusOf("bounced@example.com")).toBe("bounced");
   });
 
-  it("asks a pending signup to confirm instead of resubscribing it", async () => {
+  it("puts a pending signup back on the list, as unsubscribing and resubscribing it would", async () => {
+    await importSubscribers(db(), [
+      { email: "pending@example.com", status: "unsubscribed" },
+    ]);
+    // Signed up again, so it's pending until confirmed.
     await signup({ email: "pending@example.com" });
     const token = await unsubscribeToken("pending@example.com");
 
-    const back = await request(`/resubscribe/${token}`, { method: "POST" });
-    const html = await back.text();
-
-    expect(html).toContain("Confirm your subscription");
-    expect(html).not.toContain("bounced");
     expect(await statusOf("pending@example.com")).toBe("pending");
+
+    // The link came from an email to that inbox, as a confirmation link does.
+    const back = await request(`/resubscribe/${token}`, { method: "POST" });
+
+    expect(await back.text()).toContain("You&#x27;re back on the list");
+    expect(await statusOf("pending@example.com")).toBe("active");
   });
 });

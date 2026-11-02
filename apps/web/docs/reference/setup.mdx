@@ -19,9 +19,14 @@ sidebar:
     The name, sender name and address, an optional reply-to, an optional postal
     address for the footer, and your website. Then the hostname for Sendoff (by
     default `news.` plus your sender's domain) and the SES region. Setup checks
-    whether the hostname's DNS is on Cloudflare in this account. If it isn't,
-    Sendoff reaches it through a small Pages project; see [Domains outside
-    Cloudflare](#domains-outside-cloudflare).
+    whether the hostname's DNS is on Cloudflare in this account, and asks if it
+    can't tell. If it isn't, Sendoff reaches it through a small Pages project;
+    see [Domains outside Cloudflare](#domains-outside-cloudflare). Behind Pages,
+    setup checks your sender's domain the same way before it asks for the API
+    token or adds SES's DNS records, since the token can still add those records
+    if that domain is on Cloudflare. It doesn't ask about the sender's domain
+    when the hostname is on it and setup has just found the hostname isn't on
+    Cloudflare.
   </Step>
   <Step title="AWS access">
     If the AWS CLI is logged in, setup uses that login (including short-lived
@@ -50,10 +55,12 @@ sidebar:
     Three DKIM `CNAME` records, an `MX` and SPF `TXT` record for the MAIL FROM
     domain, and a DMARC record if your domain doesn't have one. Records that
     clash with existing ones are reported, not changed. Skipped once SES has
-    verified the domain and it has DMARC. If your DNS isn't on Cloudflare,
-    there's also a `CNAME` from your hostname to the Pages project, and setup
-    lists the records for you to add at your DNS provider. If only your sender's
-    domain is on Cloudflare, the token still adds SES's records there.
+    verified the domain and it has DMARC. The API token adds them to your
+    sender's domain's zone. Without a token, or if that domain isn't on
+    Cloudflare, setup lists them for you to add at your DNS provider, and if the
+    token can't see the zone, setup says so and lists them too. If your hostname
+    is behind Pages, there's also a `CNAME` from it to the Pages project, which
+    setup always lists for you to add.
   </Step>
   <Step title="Deploy">
     Generates `.sendoff/wrangler.jsonc`, applies the database migrations, and
@@ -74,7 +81,11 @@ sidebar:
     you say yes. See
     [Deliverability](/docs/guides/deliverability#production-access).
   </Step>
-  <Step title="Finish">Saves your settings and runs the preflight checks.</Step>
+  <Step title="Finish">
+    Saves your settings and runs the preflight checks. If it can't read or save
+    your settings, setup stops with the reason instead of saying Sendoff is
+    live, because the signup and unsubscribe pages don't work without them.
+  </Step>
 </Steps>
 
 ## Domains outside Cloudflare
@@ -83,7 +94,7 @@ Sendoff normally runs on your hostname as a [Workers Custom Domain](https://deve
 
 What changes for you:
 
-- **One more DNS record:** a `CNAME` from your hostname (like `news.example.com`) to the project's `*.pages.dev` address. Setup lists it with the SES records, which you add yourself, since setup can't write to DNS outside Cloudflare.
+- **One more DNS record:** a `CNAME` from your hostname (like `news.example.com`) to the project's `*.pages.dev` address. Setup lists it for you to add, since it can't write to DNS outside Cloudflare, and lists SES's records with it when your sender's domain is outside Cloudflare too. If your sender's domain is on Cloudflare (say Sendoff lives on `news.other.com` but sends from `example.com`), the API token still adds SES's records to it, as long as the token has DNS permissions for `example.com`.
 - **Add the domain to the project in the dashboard, if setup can't.** Setup does it with your Wrangler login, and if that fails, it shows where in the Cloudflare dashboard to do it.
 - **Everything else is the same.** Links in your emails still use your own hostname, and `bun run deploy` updates the Pages project along with the Worker.
 
