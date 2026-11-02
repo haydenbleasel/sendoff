@@ -104,6 +104,22 @@ describe("confirm, unsubscribe and resubscribe", () => {
     expect(await statusOf("lifecycle@example.com")).toBe("active");
   });
 
+  it("resubscribes a pending signup, since the link proves inbox access", async () => {
+    const { subscriber } = await subscribe(db(), {
+      email: "pending-again@example.com",
+      source: "form",
+    });
+
+    expect(await resubscribeSubscriber(db(), subscriber.id)).toBe(true);
+    expect(
+      await findSubscriberByEmail(db(), "pending-again@example.com")
+    ).toMatchObject({
+      status: "active",
+      unsubscribedAt: null,
+    });
+    expect(await resubscribeSubscriber(db(), subscriber.id)).toBe(false);
+  });
+
   it("clears the unsubscribe date when someone signs up again and confirms", async () => {
     const { subscriber } = await subscribe(db(), {
       email: "again@example.com",

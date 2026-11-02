@@ -192,7 +192,12 @@ export const unsubscribeSubscriber = async (
   return existing;
 };
 
-/** Undo an unsubscribe from the link in an email (which proves inbox access). */
+/**
+ * Undo an unsubscribe from the link in an email. The link proves inbox
+ * access, as a confirmation link does, so it also activates a pending signup:
+ * someone who unsubscribed and signed up again, or whose old issue's
+ * unsubscribe link turned a pending signup into an unsubscribe.
+ */
 export const resubscribeSubscriber = async (
   db: Database,
   id: string
@@ -200,7 +205,12 @@ export const resubscribeSubscriber = async (
   const [updated] = await db
     .update(subscribers)
     .set({ status: "active", unsubscribedAt: null })
-    .where(and(eq(subscribers.id, id), eq(subscribers.status, "unsubscribed")))
+    .where(
+      and(
+        eq(subscribers.id, id),
+        inArray(subscribers.status, ["unsubscribed", "pending"])
+      )
+    )
     .returning({ id: subscribers.id });
 
   return updated !== undefined;

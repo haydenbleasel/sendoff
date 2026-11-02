@@ -5,8 +5,8 @@ import type { DnsRecord } from "./dns";
 // Cloudflare API calls setup makes. With the person's optional API token:
 // DNS records and a Turnstile widget. With Wrangler's own login, whose OAuth
 // scopes cover reading zones and editing Pages but not DNS or Turnstile:
-// finding the hostname's zone and adding a Pages custom domain. Workers, D1,
-// queues and secrets go through Wrangler itself.
+// finding the hostname's and sender's domain's zones, and adding a Pages
+// custom domain. Workers, D1, queues and secrets go through Wrangler itself.
 
 const API = "https://api.cloudflare.com/client/v4";
 const MIN_ZONE_LABELS = 2;
@@ -80,6 +80,89 @@ export const clashes = (
   const kind = exclusiveTxtKind(wanted);
 
   return kind !== null && existing.some((value) => value.startsWith(kind));
+};
+
+/** Asks a yes-or-no question; setup passes clack's `confirm`. */
+export type Confirm = (message: string) => Promise<boolean>;
+
+/** A zone `findZone` found, null if none, or "unknown" when it couldn't look. */
+export type ZoneLookup = z.output<typeof zoneSchema> | null | "unknown";
+
+/**
+ * Whether `domain`'s DNS is an active zone in `accountId`. It looks with
+ * `api` (Wrangler's login), and only asks with `confirm` when it can't tell:
+ * with no API, or when the lookup fails. `zone` is what the lookup found.
+ */
+export const zoneOnCloudflare = async ({
+  accountId,
+  api,
+  confirm,
+  domain,
+}: {
+  accountId: string;
+  api: CloudflareApi | null;
+  confirm: Confirm;
+  domain: string;
+}): Promise<{ active: boolean; zone: ZoneLookup }> => {
+  const zone: ZoneLookup = api
+    ? await api.findZone(domain, accountId).catch(() => "unknown" as const)
+    : "unknown";
+
+  return {
+    active:
+      zone === "unknown"
+        ? await confirm(`Is ${domain}'s DNS on Cloudflare, in this account?`)
+        : zone?.status === "active",
+    zone,
+  };
+};
+
+/**
+ * Whether the API token can add SES's records to the sender's domain
+ * (`domain`), because it's an active zone in `accountId`.
+ *
+ * Off Pages, setup assumes so: it asks for DNS permissions, and says so if
+ * the token can't see the zone when it adds them. Behind Pages, the sender's
+ * domain can still be on Cloudflare: when the hostname is on another domain,
+ * like news.other.com sending from example.com, or when the DNS moved to
+ * Cloudflare after Pages was set up. A hostname on the sender's domain shares
+ * its DNS, so when `hostnameChecked` (this run found the hostname's DNS isn't
+ * on Cloudflare, rather than keeping Pages from an earlier run), it doesn't
+ * ask again.
+ */
+export const senderZoneOnCloudflare = async ({
+  accountId,
+  api,
+  confirm,
+  domain,
+  hostname,
+  hostnameChecked,
+  usePages,
+}: {
+  accountId: string;
+  api: CloudflareApi | null;
+  confirm: Confirm;
+  domain: string;
+  hostname: string;
+  hostnameChecked: boolean;
+  usePages: boolean;
+}): Promise<boolean> => {
+  if (!usePages) {
+    return true;
+  }
+
+  const sharesDns =
+    hostnameChecked && (hostname === domain || hostname.endsWith(`.${domain}`));
+
+  const { active } = await zoneOnCloudflare({
+    accountId,
+    api,
+    // Already answered: the hostname's DNS, which is the domain's, isn't on Cloudflare.
+    confirm: sharesDns ? () => Promise.resolve(false) : confirm,
+    domain,
+  });
+
+  return active;
 };
 
 export const createCloudflareApi = (

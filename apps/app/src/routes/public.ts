@@ -374,8 +374,11 @@ publicRoutes.post("/resubscribe/:token", async (c) => {
 
   const resubscribed = await resubscribeSubscriber(db, subscriber.id);
 
-  // Bounced or complained: it only undoes an unsubscribe.
-  if (!resubscribed && subscriber.status !== "active") {
+  // Name the ways back on the list, so anything else (bounced, complained, a
+  // status that changed since it was read, or a new one) can't claim it.
+  const backOnList = resubscribed || subscriber.status === "active";
+
+  if (!backOnList) {
     return c.html(
       messagePage({
         body: `${settings.name} can't send to ${subscriber.email} any more, because emails to it bounced or were marked as spam.`,
