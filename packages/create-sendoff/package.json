@@ -33,7 +33,7 @@
   "scripts": {
     "build": "bun build src/index.ts --target node --outdir dist --splitting",
     "prepack": "bun run build",
-    "types": "tsc --noEmit",
+    "types": "bun check --no-script",
     "test": "bun test"
   },
   "devDependencies": {

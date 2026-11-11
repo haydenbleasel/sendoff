@@ -13,7 +13,7 @@ Bun + Turborepo monorepo:
 Commands (from the repo root):
 
 - `bun run dev` / `bun run build`: run or build every app; filter with `--filter web`
-- `bun run types`: typecheck with `tsc` from `typescript@7` (the native Go compiler)
+- `bun run types`: typecheck with `bun check` (Bun's built-in checker, 1.4.3+), not tsc. It reports what `tsc` from the TypeScript 7 version bundled with Bun reports (`bun -p process.versions.typescript`), so upgrading Bun can change the checker version
 - `bun run test`: run tests (`apps/app` runs Vitest inside workerd via `@cloudflare/vitest-plugin`; `packages/create-sendoff` runs `bun test` with a 100% coverage threshold)
 - `bun run check` / `bun run fix`: lint and format with Ultracite (oxlint + oxfmt); the husky pre-commit hook runs `fix` on staged files
 
