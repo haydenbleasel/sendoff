@@ -5,8 +5,8 @@ import type { DnsRecord } from "./dns";
 // Cloudflare API calls setup makes. With the person's optional API token:
 // DNS records and a Turnstile widget. With Wrangler's own login, whose OAuth
 // scopes cover reading zones and editing Pages but not DNS or Turnstile:
-// finding the hostname's zone and adding a Pages custom domain. Workers, D1,
-// queues and secrets go through Wrangler itself.
+// finding the hostname's and sender's domain's zones, and adding a Pages
+// custom domain. Workers, D1, queues and secrets go through Wrangler itself.
 
 const API = "https://api.cloudflare.com/client/v4";
 const MIN_ZONE_LABELS = 2;
@@ -80,6 +80,105 @@ export const clashes = (
   const kind = exclusiveTxtKind(wanted);
 
   return kind !== null && existing.some((value) => value.startsWith(kind));
+};
+
+/** Asks a yes-or-no question; setup passes clack's `confirm`. */
+export type Confirm = (message: string) => Promise<boolean>;
+
+/** A zone `findZone` found, null if none, or "unknown" when it couldn't look. */
+export type ZoneLookup = z.output<typeof zoneSchema> | null | "unknown";
+
+/**
+ * Whether `domain`'s DNS is an active zone in `accountId`. It looks with
+ * `api` (Wrangler's login), and only asks with `confirm` when it can't tell:
+ * with no API, or when the lookup fails. `zone` is what the lookup found.
+ */
+export const zoneOnCloudflare = async ({
+  accountId,
+  api,
+  confirm,
+  domain,
+}: {
+  accountId: string;
+  api: CloudflareApi | null;
+  confirm: Confirm;
+  domain: string;
+}): Promise<{ active: boolean; zone: ZoneLookup }> => {
+  const zone: ZoneLookup = api
+    ? await api.findZone(domain, accountId).catch(() => "unknown" as const)
+    : "unknown";
+
+  return {
+    active:
+      zone === "unknown"
+        ? await confirm(`Is ${domain}'s DNS on Cloudflare, in this account?`)
+        : zone?.status === "active",
+    zone,
+  };
+};
+
+/** Whether `name` is `zone` itself or a name under it. */
+const inZone = (name: string, zone: string): boolean =>
+  name === zone || name.endsWith(`.${zone}`);
+
+/**
+ * The zone the API token can add SES's records to: the sender's domain's
+ * (`domain`), when that's an active zone in `accountId`, or null when it
+ * isn't. When the person says it is, without a lookup, it's `domain`.
+ *
+ * This run's lookup of the hostname's zone (`hostnameZone`) also answers for
+ * the sender's domain when the hostname is on that domain and what it found
+ * covers it: findZone walks up through the domain to reach the zone. Anything
+ * else gets its own lookup: a hostname on another domain (news.other.com
+ * sending from example.com), one delegated to a zone of its own, or one this
+ * run didn't look up because it kept Pages from an earlier run. It asks only
+ * when it can't tell, since the person's answer about the hostname is about
+ * another name.
+ */
+export const senderZone = async ({
+  accountId,
+  api,
+  confirm,
+  domain,
+  hostname,
+  hostnameZone,
+}: {
+  accountId: string;
+  api: CloudflareApi | null;
+  confirm: Confirm;
+  domain: string;
+  hostname: string;
+  /** Undefined when this run didn't look the hostname up. */
+  hostnameZone: ZoneLookup | undefined;
+}): Promise<string | null> => {
+  // The hostname's lookup, when it walked through `domain` on the way up.
+  const walked =
+    hostnameZone === undefined ||
+    hostnameZone === "unknown" ||
+    !inZone(hostname, domain)
+      ? undefined
+      : hostnameZone;
+
+  if (walked === null) {
+    return null;
+  }
+
+  if (walked && inZone(domain, walked.name)) {
+    return walked.status === "active" ? walked.name : null;
+  }
+
+  const { active, zone } = await zoneOnCloudflare({
+    accountId,
+    api,
+    confirm,
+    domain,
+  });
+
+  if (!active) {
+    return null;
+  }
+
+  return zone === "unknown" || zone === null ? domain : zone.name;
 };
 
 export const createCloudflareApi = (

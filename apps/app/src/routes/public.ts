@@ -372,10 +372,9 @@ publicRoutes.post("/resubscribe/:token", async (c) => {
     return invalidLink(c, settings);
   }
 
-  const resubscribed = await resubscribeSubscriber(db, subscriber.id);
-
-  // Bounced or complained: it only undoes an unsubscribe.
-  if (!resubscribed && subscriber.status !== "active") {
+  // It reads the status again if nothing changed, so a double press doesn't
+  // tell someone already back on the list that their address bounced.
+  if ((await resubscribeSubscriber(db, subscriber.id)) === "undeliverable") {
     return c.html(
       messagePage({
         body: `${settings.name} can't send to ${subscriber.email} any more, because emails to it bounced or were marked as spam.`,

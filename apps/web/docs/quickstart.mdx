@@ -19,7 +19,7 @@ You need:
 
 :::tip[Optional: a Cloudflare API token]
 
-With a token, setup writes the DNS records and creates the Turnstile widget for you. Create one at [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) with **Zone › DNS › Edit** and **Zone › Zone › Read** for your domain, and **Account › Turnstile › Edit**. If your domain's DNS isn't on Cloudflare, only the Turnstile permission matters, because you add the records yourself. It's only used during setup and isn't stored. Without it, setup prints the records to add and asks for Turnstile keys you make in the dashboard.
+With a token, setup writes SES's DNS records and creates the Turnstile widget for you. Create one at [dash.cloudflare.com/profile/api-tokens](https://dash.cloudflare.com/profile/api-tokens) with **Zone › DNS › Edit** and **Zone › Zone › Read** for your sender's domain (`example.com` if you send from `hello@example.com`), and **Account › Turnstile › Edit**. The DNS permissions are for the sender's domain even if Sendoff's hostname is on another one, like `news.other.com`. If your sender's domain's DNS isn't on Cloudflare, only the Turnstile permission matters, because you add the records yourself. It's only used during setup and isn't stored. Without it, setup prints the records to add and asks for Turnstile keys you make in the dashboard.
 
 :::
 

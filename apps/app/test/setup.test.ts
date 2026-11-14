@@ -6,7 +6,17 @@ import {
   topicPolicy,
   xmlValues,
 } from "../scripts/setup/aws";
-import { clashes, createCloudflareApi } from "../scripts/setup/cloudflare";
+import {
+  clashes,
+  createCloudflareApi,
+  senderZone,
+  zoneOnCloudflare,
+} from "../scripts/setup/cloudflare";
+import type {
+  CloudflareApi,
+  Confirm,
+  ZoneLookup,
+} from "../scripts/setup/cloudflare";
 import { mailFromDomainFor, sesDnsRecords } from "../scripts/setup/dns";
 import { deployConfig, instanceSchema } from "../scripts/setup/instance";
 import {
@@ -354,6 +364,213 @@ describe("Cloudflare zones and Pages domains", () => {
       "POST /client/v4/accounts/acct/pages/projects/sendoff-pages/domains",
       "GET /client/v4/accounts/acct/pages/projects/sendoff-pages/domains",
     ]);
+  });
+});
+
+/** An API whose zones are `zones` (name to status), recording the names it's asked for. */
+const zonesApi = (zones: Record<string, string>, looked: string[] = []) =>
+  createCloudflareApi("token", (input, init) => {
+    const name = new URL(new Request(input, init).url).searchParams.get("name");
+    const status = name ? zones[name] : undefined;
+
+    looked.push(name ?? "");
+
+    return Promise.resolve(
+      Response.json({
+        result: name && status ? [{ id: name, name, status }] : [],
+        success: true,
+      })
+    );
+  });
+
+/** An API whose every call fails, like a login without permission to read zones. */
+const failingApi = createCloudflareApi("token", () =>
+  Promise.resolve(
+    Response.json(
+      { errors: [{ message: "Authentication error" }], success: false },
+      { status: 403 }
+    )
+  )
+);
+
+/** A confirm prompt that answers `reply`, recording what it was asked. */
+const asker = (reply: boolean) => {
+  const asked: string[] = [];
+
+  const confirm: Confirm = (message) => {
+    asked.push(message);
+
+    return Promise.resolve(reply);
+  };
+
+  return { asked, confirm };
+};
+
+describe("whether DNS is on Cloudflare", () => {
+  it("trusts a zone lookup, and only asks when there isn't one", async () => {
+    const prompt = asker(true);
+    const api = zonesApi({ "example.com": "active", "other.com": "pending" });
+
+    expect(
+      await zoneOnCloudflare({
+        accountId: "acct",
+        api,
+        confirm: prompt.confirm,
+        domain: "news.example.com",
+      })
+    ).toMatchObject({ active: true, zone: { name: "example.com" } });
+    expect(
+      await zoneOnCloudflare({
+        accountId: "acct",
+        api,
+        confirm: prompt.confirm,
+        domain: "news.other.com",
+      })
+    ).toMatchObject({ active: false, zone: { status: "pending" } });
+    expect(prompt.asked).toStrictEqual([]);
+
+    for (const unknown of [null, failingApi]) {
+      // oxlint-disable-next-line no-await-in-loop -- one question each, in order
+      const answered = await zoneOnCloudflare({
+        accountId: "acct",
+        api: unknown,
+        confirm: prompt.confirm,
+        domain: "news.example.com",
+      });
+
+      expect(answered).toStrictEqual({ active: true, zone: "unknown" });
+    }
+
+    expect(prompt.asked).toStrictEqual([
+      "Is news.example.com's DNS on Cloudflare, in this account?",
+      "Is news.example.com's DNS on Cloudflare, in this account?",
+    ]);
+  });
+
+  it("reuses the hostname's lookup when it covers the sender's domain", async () => {
+    const prompt = asker(true);
+    const looked: string[] = [];
+    const api = zonesApi({}, looked);
+
+    const answers = await Promise.all(
+      [
+        { id: "z", name: "example.com", status: "active" },
+        { id: "z", name: "example.com", status: "pending" },
+        // findZone found no zone for news.example.com or example.com.
+        null,
+      ].map(
+        async (hostnameZone) =>
+          await senderZone({
+            accountId: "acct",
+            api,
+            confirm: prompt.confirm,
+            domain: "example.com",
+            hostname: "news.example.com",
+            hostnameZone,
+          })
+      )
+    );
+
+    expect(answers).toStrictEqual(["example.com", null, null]);
+    expect(looked).toStrictEqual([]);
+    expect(prompt.asked).toStrictEqual([]);
+  });
+
+  it("looks the sender's domain up when the hostname's lookup doesn't cover it", async () => {
+    const prompt = asker(true);
+    const looked: string[] = [];
+    const api = zonesApi({ "example.com": "active" }, looked);
+
+    const cases: { hostname: string; hostnameZone: ZoneLookup | undefined }[] =
+      [
+        // On another domain, behind Pages or not.
+        { hostname: "news.other.com", hostnameZone: null },
+        {
+          hostname: "news.other.com",
+          hostnameZone: { id: "z", name: "other.com", status: "active" },
+        },
+        // Delegated to a zone of its own.
+        {
+          hostname: "news.example.com",
+          hostnameZone: { id: "z", name: "news.example.com", status: "active" },
+        },
+        // Pages kept from an earlier run, so not looked up this time.
+        { hostname: "news.example.com", hostnameZone: undefined },
+      ];
+
+    for (const { hostname, hostnameZone } of cases) {
+      // oxlint-disable-next-line no-await-in-loop -- one lookup each, in order
+      const zone = await senderZone({
+        accountId: "acct",
+        api,
+        confirm: prompt.confirm,
+        domain: "example.com",
+        hostname,
+        hostnameZone,
+      });
+
+      expect(zone).toBe("example.com");
+    }
+
+    expect(looked).toStrictEqual([
+      "example.com",
+      "example.com",
+      "example.com",
+      "example.com",
+    ]);
+    expect(prompt.asked).toStrictEqual([]);
+  });
+
+  it("names the zone a sender on a subdomain is in, and says when there's none", async () => {
+    const prompt = asker(true);
+    const api = zonesApi({ "example.com": "active" });
+
+    const lookup = async (domain: string, hostname: string) =>
+      await senderZone({
+        accountId: "acct",
+        api,
+        confirm: prompt.confirm,
+        domain,
+        hostname,
+        hostnameZone: null,
+      });
+
+    expect(await lookup("mail.example.com", "news.other.com")).toBe(
+      "example.com"
+    );
+    expect(await lookup("elsewhere.com", "news.other.com")).toBeNull();
+    expect(prompt.asked).toStrictEqual([]);
+  });
+
+  it("asks when it can't tell, without reusing an answer about the hostname", async () => {
+    const cases: {
+      api: CloudflareApi | null;
+      reply: boolean;
+      zone: string | null;
+    }[] = [
+      { api: failingApi, reply: true, zone: "example.com" },
+      { api: null, reply: false, zone: null },
+    ];
+
+    for (const { api, reply, zone } of cases) {
+      const prompt = asker(reply);
+
+      // oxlint-disable-next-line no-await-in-loop -- one question each, in order
+      const answered = await senderZone({
+        accountId: "acct",
+        api,
+        confirm: prompt.confirm,
+        domain: "example.com",
+        hostname: "news.example.com",
+        // The hostname's lookup failed too, so the person answered for it.
+        hostnameZone: "unknown",
+      });
+
+      expect(answered).toBe(zone);
+      expect(prompt.asked).toStrictEqual([
+        "Is example.com's DNS on Cloudflare, in this account?",
+      ]);
+    }
   });
 });
 
