@@ -112,12 +112,34 @@ const cancelSetup = (): never => {
   process.exit(EXIT_CANCELLED);
 };
 
-/** clack's spinner handles Ctrl+C itself; without onCancel, setup would carry on. */
-const progressSpinner = () =>
-  spinner({
+const exitCancelled = (code: number) => {
+  if (code === 0) {
+    process.exitCode = EXIT_CANCELLED;
+  }
+};
+
+/**
+ * clack's spinner handles Ctrl+C itself. For the key press it prints the
+ * cancel message and exits with 0, without calling onCancel (that's only for
+ * a signal), so an exit while a spinner is running gets the cancelled code.
+ */
+const progressSpinner = () => {
+  const progress = spinner({
     cancelMessage: CANCELLED,
     onCancel: () => process.exit(EXIT_CANCELLED),
   });
+
+  return {
+    start: (message: string) => {
+      process.on("exit", exitCancelled);
+      progress.start(message);
+    },
+    stop: (message: string) => {
+      process.off("exit", exitCancelled);
+      progress.stop(message);
+    },
+  };
+};
 
 const answer = <T>(value: T): Exclude<T, symbol> => {
   if (isCancel(value)) {
