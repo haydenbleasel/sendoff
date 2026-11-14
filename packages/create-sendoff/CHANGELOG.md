@@ -1,5 +1,15 @@
 # create-sendoff
 
+## 1.0.3
+
+### Patch Changes
+
+- 73b1afb: Pressing Ctrl+C while `bun create sendoff` is checking the AWS CLI, cloning or installing exits with 130 and stops the command it was waiting on. It exited with 0, as if it had worked, and left the clone or install to finish on its own.
+- d798f37: An empty folder name, like an unset `"$DIR"` in a script, means the default `./sendoff` again. It resolved to the folder you were standing in, so Sendoff was cloned straight into it when it was empty.
+- 4cf22b3: Run without a terminal (in CI, or from an agent's shell) while the AWS CLI is missing or logged out, `bun create sendoff` says to log in and exits with 1. It used to ask whether to continue, get no answer, and die with Node's "unsettled top-level await" warning and exit code 13.
+- eea5e58: After `bun create sendoff .`, the closing message says Sendoff lives in this folder. It said "Sendoff lives in .. Keep that folder", which reads as the folder above.
+- c1ea4a6: `bun create sendoff` needs Node.js 22 or newer, since Node 20 has reached end of life. On older Node it says so and stops, as it did before for versions older than 20.12.
+
 ## 1.0.2
 
 ### Patch Changes
