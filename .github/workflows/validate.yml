@@ -20,9 +20,9 @@ concurrency:
 jobs:
   # create-sendoff is the CLI `bun create sendoff` runs, with Node unless
   # Bun is asked to. Build it, then start the built file on every runtime its
-  # engines field allows: each supported Node line's latest release, the
-  # lowest version allowed, and Bun. That catches a dependency a runtime
-  # can't load, which the tests (always on Bun) wouldn't.
+  # engines field allows: the lowest version allowed, each newer Node line's
+  # latest release, and Bun. That catches a dependency a runtime can't load,
+  # which the tests (always on Bun) wouldn't.
   build:
     name: build (${{ matrix.runtime }})
     runs-on: ubuntu-24.04
@@ -30,13 +30,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runtime: [node-20-floor, node-22, node-24, node-26, bun]
+        runtime: [node-22, node-24, node-26, bun]
         include:
-          # The lowest version packages/create-sendoff/package.json allows.
-          - runtime: node-20-floor
-            node-version: 20.12.0
+          # The lowest version packages/create-sendoff/package.json allows,
+          # which stands for the whole 22 line.
           - runtime: node-22
-            node-version: 22.x
+            node-version: 22.0.0
           - runtime: node-24
             node-version: 24.x
           - runtime: node-26
