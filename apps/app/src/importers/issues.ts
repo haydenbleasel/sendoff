@@ -48,6 +48,18 @@ export const parseSentAt = (value: string): Date | null => {
   }
 
   const { date = "", time = "", zone = "Z" } = match.groups;
+
+  // The engine rolls a day that doesn't exist over into the next month
+  // (February 30 becomes March 2) instead of rejecting it.
+  const day = new Date(`${date}T00:00:00Z`);
+
+  if (
+    Number.isNaN(day.getTime()) ||
+    day.toISOString().slice(0, date.length) !== date
+  ) {
+    return null;
+  }
+
   const parts = ZONE_PARTS.exec(zone)?.groups;
 
   const offset = parts

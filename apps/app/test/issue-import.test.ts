@@ -56,6 +56,15 @@ describe("parseSentAt", () => {
     expect(parseSentAt("2025-13-45T09:00:00Z")).toBeNull();
   });
 
+  it("rejects a day the month doesn't have", () => {
+    expect(parseSentAt("2025-02-30T09:00:00Z")).toBeNull();
+    expect(parseSentAt("2025-04-31 09:00")).toBeNull();
+    expect(parseSentAt("2023-02-29T09:00:00Z")).toBeNull();
+    expect(parseSentAt("2024-02-29T23:30:00-08:00")?.toISOString()).toBe(
+      "2024-03-01T07:30:00.000Z"
+    );
+  });
+
   it("only accepts send dates in the past", () => {
     expect(
       importedIssueSchema.safeParse({
