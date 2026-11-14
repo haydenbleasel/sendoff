@@ -27,6 +27,7 @@ interface Options {
   confirm?: boolean | typeof CANCELLED;
   handOff?: number;
   installed?: string[];
+  interactive?: boolean;
   login?: AwsLogin;
   /** Results by command name; anything else succeeds. */
   results?: Record<string, Partial<RunResult>>;
@@ -51,9 +52,14 @@ const harness = (options: Options = {}) => {
       return Promise.resolve(options.handOff ?? 0);
     },
     installed: (command) => installed.includes(command),
+    interactive: options.interactive ?? true,
     prompts: {
       cancel: (message) => events.push(`cancel: ${message}`),
-      confirm: () => Promise.resolve(options.confirm ?? true),
+      confirm: () => {
+        events.push("asked to confirm");
+
+        return Promise.resolve(options.confirm ?? true);
+      },
       intro: (message) => events.push(`intro: ${message}`),
       isCancel: (value: unknown): value is symbol => value === CANCELLED,
       log: {
@@ -144,6 +150,20 @@ describe("before cloning", () => {
     expect(neither.events).toContain(
       "cancel: Sendoff needs Git (https://git-scm.com/downloads) and Bun (https://bun.sh). Install them, then run this again."
     );
+  });
+
+  it("stops without asking when there's no terminal to answer in", async () => {
+    const run = harness({
+      interactive: false,
+      login: { status: "logged-out" },
+    });
+
+    expect(await main(run.deps)).toBe(1);
+    expect(run.events).not.toContain("asked to confirm");
+    expect(run.events).toContain(
+      "cancel: Log in to the AWS CLI, then run this again."
+    );
+    expect(run.runs).toHaveLength(0);
   });
 
   it("stops without the AWS CLI unless the person carries on", async () => {

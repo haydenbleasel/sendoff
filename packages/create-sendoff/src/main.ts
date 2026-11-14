@@ -20,6 +20,8 @@ export interface Deps {
   cwd: string;
   handOff: typeof handOff;
   installed: typeof installed;
+  /** Whether there's a terminal to answer prompts in. */
+  interactive: boolean;
   prompts: {
     cancel: typeof cancel;
     confirm: (options: {
@@ -70,7 +72,11 @@ const missingTools = (deps: Deps): string | undefined => {
  * Setup is much easier with the AWS CLI logged in, so check before cloning
  * and give people the chance to log in first. Returns whether to carry on.
  */
-const checkAws = async ({ awsLogin, prompts }: Deps): Promise<boolean> => {
+const checkAws = async ({
+  awsLogin,
+  interactive,
+  prompts,
+}: Deps): Promise<boolean> => {
   const check = prompts.spinner();
 
   check.start("Checking your AWS CLI login");
@@ -93,10 +99,14 @@ const checkAws = async ({ awsLogin, prompts }: Deps): Promise<boolean> => {
     `The AWS CLI isn't ${login.status === "missing" ? "installed" : "logged in"}. Setup uses its login to create the SES resources and a send-only key for the Worker; without it, you create an IAM user and keys by hand. ${fix}.`
   );
 
-  const proceed = await prompts.confirm({
-    initialValue: false,
-    message: "Continue without the AWS CLI?",
-  });
+  // Without a terminal (CI, an agent's shell) nobody can answer, and a
+  // prompt that never settles makes Node quit with an error of its own.
+  const proceed = interactive
+    ? await prompts.confirm({
+        initialValue: false,
+        message: "Continue without the AWS CLI?",
+      })
+    : false;
 
   if (prompts.isCancel(proceed) || !proceed) {
     prompts.cancel("Log in to the AWS CLI, then run this again.");

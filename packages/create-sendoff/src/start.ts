@@ -35,6 +35,7 @@ process.exitCode = await main({
   cwd: process.cwd(),
   handOff,
   installed,
+  interactive: process.stdin.isTTY === true,
   prompts: { cancel, confirm, intro, isCancel, log, outro, spinner },
   run,
   stderr: (text) => process.stderr.write(text),
