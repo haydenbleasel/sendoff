@@ -910,12 +910,22 @@ const configureDns = async ({
   }
 
   const outcomes = [];
+  const refused: DnsRecord[] = [];
+  const reasons = new Set<string>();
 
   for (const record of records) {
-    // oxlint-disable-next-line no-await-in-loop -- a handful of records, in order
-    const outcome = await cloudflare.ensureDnsRecord(zone.id, record);
+    try {
+      // oxlint-disable-next-line no-await-in-loop -- a handful of records, in order
+      const outcome = await cloudflare.ensureDnsRecord(zone.id, record);
 
-    outcomes.push({ outcome, record });
+      outcomes.push({ outcome, record });
+    } catch (error) {
+      // Cloudflare turns a record down when the token can't edit DNS, or when
+      // the name already has a record of another type (a CNAME left by
+      // another email provider, say). The rest still go in.
+      refused.push(record);
+      reasons.add(error instanceof Error ? error.message : String(error));
+    }
   }
 
   const conflicts = outcomes.flatMap((item) =>
@@ -930,6 +940,13 @@ const configureDns = async ({
     note(
       formatRecords(conflicts),
       "These clash with existing records. Fix them by hand"
+    );
+  }
+
+  if (refused.length > 0) {
+    note(
+      `${formatRecords(refused)}\n\nCloudflare said: ${[...reasons].join("; ")}`,
+      "Cloudflare wouldn't add these. Add them by hand"
     );
   }
 
