@@ -1,6 +1,8 @@
 import { env, exports } from "cloudflare:workers";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 
+import { issues } from "../src/db/schema";
 import { createDraft, editDraft } from "../src/issues";
 import { saveSettings } from "../src/settings";
 import { createToken } from "../src/tokens";
@@ -58,6 +60,28 @@ describe("preview", () => {
     const afterSettings = await version();
 
     expect(new Set([initial, afterEdit, afterSettings]).size).toBe(3);
+  });
+
+  it("changes state when the issue starts sending", async () => {
+    const draft = await createDraft(db(), { body: "Hello", subject: "Going" });
+    const path = await previewPath(draft.id);
+
+    const version = async () => {
+      const response = await get(`${path}/state`);
+      const { version: value } = await response.json<{ version: string }>();
+
+      return value;
+    };
+
+    const asDraft = await version();
+
+    // As confirm_send leaves it: sending, at the same version.
+    await db()
+      .update(issues)
+      .set({ status: "sending" })
+      .where(eq(issues.id, draft.id));
+
+    expect(await version()).not.toBe(asDraft);
   });
 
   it("renders HTML that opens links in a new tab, or the problems", async () => {

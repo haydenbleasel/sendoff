@@ -60,7 +60,9 @@ previewRoutes.get("/preview/:token", async (c) => {
   );
 });
 
-// Cheap change detection: the issue's version plus when settings last changed.
+// Cheap change detection: the issue's version and status, plus when settings
+// last changed. Sending doesn't bump the version, so the status is what moves
+// the page's badge from Draft to Sending to Sent.
 previewRoutes.get("/preview/:token/state", async (c) => {
   const issue = await loadIssue(c);
 
@@ -71,7 +73,7 @@ previewRoutes.get("/preview/:token/state", async (c) => {
   const record = await getSettingsRecord(createDb(c.env.DB));
 
   return c.json({
-    version: `${issue.version}:${record?.updatedAt.getTime() ?? 0}`,
+    version: `${issue.version}:${issue.status}:${record?.updatedAt.getTime() ?? 0}`,
   });
 });
 
