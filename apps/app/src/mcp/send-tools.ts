@@ -26,12 +26,18 @@ const issueRef = z.string().min(1).describe("The issue's id or slug.");
 
 const number = (value: number) => value.toLocaleString("en-US");
 
-const duration = (recipients: number, rate: number): string => {
+/** Roughly how long a send takes at SES's rate, for prepare_send's summary. */
+export const duration = (recipients: number, rate: number): string => {
   const seconds = Math.ceil(recipients / Math.max(rate, 1));
 
-  return seconds < SECONDS_PER_MINUTE
-    ? `under a minute`
-    : `about ${Math.ceil(seconds / SECONDS_PER_MINUTE)} minutes`;
+  if (seconds < SECONDS_PER_MINUTE) {
+    return "under a minute";
+  }
+
+  // Rounded, not rounded up: 6,000 at 14 a second is about 7 minutes, not 8.
+  const minutes = Math.round(seconds / SECONDS_PER_MINUTE);
+
+  return `about ${minutes} minute${minutes === 1 ? "" : "s"}`;
 };
 
 const promotionNote = (promotion: PromotionResult): string => {
