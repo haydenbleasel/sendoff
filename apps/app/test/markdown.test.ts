@@ -74,6 +74,25 @@ describe("parseMarkdown", () => {
     expect(problemsFor("   \n")[0]?.message).toBe("The body is empty.");
   });
 
+  it("rejects tables, which would arrive as rows of pipes", () => {
+    expect(
+      problemsFor("Plans:\n\n| Plan | Price |\n| --- | :-: |\n| Pro | $9 |")
+    ).toStrictEqual([
+      { line: 3, message: expect.stringContaining("Tables aren't supported") },
+    ]);
+    expect(
+      problemsFor("Plan | Price\n--- | ---\nPro | $9")[0]?.message
+    ).toContain("Tables");
+  });
+
+  it("keeps pipes and dashes in prose", () => {
+    expect(problemsFor("Either a | b works\n- and so does this")).toStrictEqual(
+      []
+    );
+    expect(problemsFor("Docs | Blog | Changelog")).toStrictEqual([]);
+    expect(problemsFor("A line\n-- signed")).toStrictEqual([]);
+  });
+
   it("rejects reference-style links", () => {
     expect(
       problemsFor("[a][b]\n\n[b]: https://example.com")[0]?.message

@@ -22,6 +22,11 @@ const IMAGE_PROTOCOL = /^https:/iu;
 const BUTTON_PROTOCOL = /^https?:/iu;
 const FRONTMATTER = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/u;
 
+// A table's second row, like `| --- | :-: |` or `--- | ---`. Tables aren't
+// parsed, so one arrives as a paragraph of pipes and dashes.
+const TABLE_DELIMITER_ROW = /^[\s|:-]*-[\s|:-]*$/u;
+const LINE_BREAK = /\r?\n/u;
+
 const ALLOWED_TYPES = new Set<Nodes["type"]>([
   "blockquote",
   "break",
@@ -139,6 +144,19 @@ const checkDirective = (node: Nodes, problems: MarkdownProblem[]): void => {
   }
 };
 
+/** Whether a paragraph is a table: a row with pipes, then a row of dashes and pipes. */
+const isTable = (node: Nodes): boolean => {
+  const lines = textContent(node).split(LINE_BREAK);
+
+  return lines.some(
+    (line, index) =>
+      index > 0 &&
+      line.includes("|") &&
+      TABLE_DELIMITER_ROW.test(line) &&
+      lines[index - 1]?.includes("|") === true
+  );
+};
+
 const checkNode = (node: Nodes, problems: MarkdownProblem[]): void => {
   const line = lineOf(node);
   const unsupported = UNSUPPORTED[node.type];
@@ -161,6 +179,16 @@ const checkNode = (node: Nodes, problems: MarkdownProblem[]): void => {
       message:
         "Use #, ## or ### headings. #### and deeper aren't supported in email.",
     });
+  }
+
+  if (node.type === "paragraph" && isTable(node)) {
+    problems.push({
+      line,
+      message:
+        "Tables aren't supported in email. Use a list, or a paragraph for each row.",
+    });
+
+    return;
   }
 
   if (node.type === "link" && !LINK_PROTOCOL.test(node.url)) {
