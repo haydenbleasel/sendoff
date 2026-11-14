@@ -16,6 +16,11 @@ const secrets = {
 
 Object.assign(process.env, secrets);
 
+// Each test runs inside workerd with D1, and CI's Windows runners are far
+// slower at that than a laptop: tests that take 50ms locally have taken over
+// 7s there, past Vitest's 5s default. A hang still fails, just later.
+const TEST_TIMEOUT_MS = 30_000;
+
 export default defineConfig({
   plugins: [
     cloudflareTest(async () => {
@@ -43,5 +48,6 @@ export default defineConfig({
   ],
   test: {
     setupFiles: ["./test/apply-migrations.ts"],
+    testTimeout: TEST_TIMEOUT_MS,
   },
 });
