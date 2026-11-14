@@ -1061,6 +1061,9 @@ const mcpClient = async (publicUrl: string, token: string) => {
 /** How get_settings starts its answer when nothing is configured yet. */
 const SETTINGS_NOT_SET_UP = "Sendoff isn't set up yet";
 
+/** What the public pages say until there are settings. */
+const LIST_NOT_SET_UP = "This list isn't set up yet.";
+
 const currentSenderSchema = z.object({
   from: z.object({ email: z.string() }),
 });
@@ -1117,8 +1120,9 @@ const requestProductionAccess = async (
 
 /**
  * After deploy: wire up SES events, save settings, request production access,
- * run doctor. If setup couldn't read or save the settings, it stops there
- * instead of saying Sendoff is live: its public pages don't work without them.
+ * run doctor. Returns whether it got to check the settings: without an MCP
+ * token it can't, so setup doesn't call Sendoff live. If it couldn't read or
+ * save them, it stops there instead, since the public pages need them.
  */
 const finishSetup = async ({
   aws,
@@ -1134,7 +1138,7 @@ const finishSetup = async ({
   publicUrl: string;
   token: string | undefined;
   topicArn: string;
-}): Promise<void> => {
+}): Promise<boolean> => {
   const webhook = `${publicUrl}/webhooks/ses`;
 
   if ((await aws.subscriptionState(topicArn, webhook)) !== "confirmed") {
@@ -1157,10 +1161,10 @@ const finishSetup = async ({
 
   if (!token) {
     log.warn(
-      "Skipped saving your settings (no MCP token). Your agent can set them with update_settings."
+      `Skipped saving your settings and the preflight checks (no MCP token). If Sendoff has no settings yet, its signup and unsubscribe pages say "${LIST_NOT_SET_UP}" until your agent saves them with update_settings.`
     );
 
-    return;
+    return false;
   }
 
   const client = await mcpClient(publicUrl, token);
@@ -1185,15 +1189,15 @@ const finishSetup = async ({
   });
 
   const current = toolText(currentResult);
-  let unsaved: string | undefined;
+  let problem: string | undefined;
 
   // Setup fills in the first settings only. After that they're the agent's
   // to change, and saving these answers again would undo its edits, such as
   // footer links (update_settings replaces the whole list).
   if (currentResult.isError) {
-    // A tool error here isn't a network blip (those throw): running setup
-    // again would read the same settings and fail the same way.
-    unsaved = `Setup couldn't read Sendoff's settings, so it didn't save yours:\n${current}\nIts signup and unsubscribe pages won't work until it can, and running setup again won't fix that. Ask your agent to look into it with get_settings.`;
+    // The MCP server makes any error in get_settings a tool error, a passing
+    // D1 failure included, so this doesn't say whether settings exist.
+    problem = `Sendoff is deployed to ${publicUrl}, but setup couldn't read its settings, so it didn't save yours:\n${current}\nIf Sendoff has none yet, its signup and unsubscribe pages say "${LIST_NOT_SET_UP}" until they're saved. Run \`bun run setup\` again to retry, or ask your agent to check them with get_settings.`;
   } else if (current.startsWith(SETTINGS_NOT_SET_UP)) {
     const saved = await client.callTool({
       arguments: settings,
@@ -1201,7 +1205,7 @@ const finishSetup = async ({
     });
 
     if (saved.isError) {
-      unsaved = `Setup couldn't save your settings:\n${toolText(saved)}\nUntil they're saved, Sendoff's signup and unsubscribe pages say "This list isn't set up yet." Ask your agent to save them with update_settings.`;
+      problem = `Sendoff is deployed to ${publicUrl}, but it isn't live yet: setup couldn't save your settings:\n${toolText(saved)}\nUntil they're saved, its signup and unsubscribe pages say "${LIST_NOT_SET_UP}" Run \`bun run setup\` again, or ask your agent to save them with update_settings.`;
     } else {
       log.success("Saved your settings.");
     }
@@ -1218,18 +1222,26 @@ const finishSetup = async ({
     );
   }
 
-  note(
-    toolText(await client.callTool({ arguments: {}, name: "doctor" })),
-    "Preflight checks"
-  );
+  const doctor = async () =>
+    toolText(await client.callTool({ arguments: {}, name: "doctor" }));
+
+  // Deployed, but its public pages may not work without settings: don't call
+  // it live. Still show what else doctor finds, without letting a failure
+  // there hide why.
+  if (problem) {
+    const checks = await doctor().catch(() => null);
+
+    if (checks !== null) {
+      note(checks, "Preflight checks");
+    }
+
+    return fail(problem);
+  }
+
+  note(await doctor(), "Preflight checks");
   await client.close();
 
-  // Deployed, but its public pages don't work without settings: don't call it live.
-  if (unsaved) {
-    fail(
-      `Sendoff is deployed to ${publicUrl}, but it isn't live yet. ${unsaved}`
-    );
-  }
+  return true;
 };
 
 /**
@@ -1370,6 +1382,12 @@ const lazyCloudflare = (
 
   return { cloudflareApi, dnsOnCloudflare };
 };
+
+/** Setup's last line: Sendoff is only live once setup has checked its settings. */
+const finished = (publicUrl: string, checked: boolean): string =>
+  checked
+    ? `Sendoff is live at ${publicUrl}. Ask your agent to draft your first issue.`
+    : `Sendoff is deployed to ${publicUrl}. Ask your agent to run doctor, which checks its settings, then draft your first issue.`;
 
 // --- Main ---------------------------------------------------------------------------
 
@@ -1540,8 +1558,10 @@ const main = async () => {
     await attachPagesDomain(cloudflareLogin, accountId, hostname);
   }
 
+  let checked = false;
+
   try {
-    await finishSetup({
+    checked = await finishSetup({
       aws,
       domain,
       newsletter,
@@ -1555,9 +1575,7 @@ const main = async () => {
     );
   }
 
-  outro(
-    `Sendoff is live at ${publicUrl}. Ask your agent to draft your first issue.`
-  );
+  outro(finished(publicUrl, checked));
 };
 
 await main();
