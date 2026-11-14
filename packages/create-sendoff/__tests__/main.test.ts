@@ -194,6 +194,14 @@ describe("before cloning", () => {
 });
 
 describe("cloning and setup", () => {
+  it("names the folder you're in when that's where Sendoff goes", async () => {
+    const run = harness({ argv: ["."] });
+
+    expect(await main(run.deps)).toBe(0);
+    expect(run.output.stdout).toContain("Sendoff lives in this folder.");
+    expect(run.output.stdout).toContain("Run setup again   bun run setup");
+  });
+
   it("clones, installs and hands off to setup", async () => {
     const run = harness();
     const dir = path.join(cwd, "sendoff");

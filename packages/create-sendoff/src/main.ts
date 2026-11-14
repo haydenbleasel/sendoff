@@ -142,10 +142,11 @@ const task = async (
   return false;
 };
 
+// "." before a full stop would read as the folder above this one.
 const finished = (cwd: string, dir: string, shown: string) =>
   [
     "",
-    `Sendoff lives in ${shown}. Keep that folder: apps/app/.sendoff holds your`,
+    `Sendoff lives in ${shown === "." ? "this folder" : shown}. Keep that folder: apps/app/.sendoff holds your`,
     "instance's config, and updates deploy from it.",
     "",
     `  Run setup again   ${bunRunIn(cwd, dir, "setup")}`,
