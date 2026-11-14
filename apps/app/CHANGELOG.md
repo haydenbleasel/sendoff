@@ -1,5 +1,16 @@
 # app
 
+## 1.0.1
+
+### Patch Changes
+
+- 220aa64: Confirming a signup now takes a press of **Confirm subscription** on the page the email's link opens. Before, opening the link was enough, so a mail filter that opens every link in an email (like Microsoft Safe Links) could confirm a signup the address's owner never made.
+- b1cbbc0: Updates Hono to 4.13.16, a security release. Only one of its fixes reached Sendoff: a request for a page that doesn't exist, with an encoded line break in its path, got its "404 Not Found" reply without the security headers and `no-store` caching that every other page gets. Sendoff doesn't use the features the other fixes cover.
+- 8a1df5a: Emails keep their spacing in Outlook for Windows: the margin above the masthead, below the footer and either side of the text. Outlook only applies padding to table cells, and the layout had put it on a table, so Outlook dropped it.
+- 777f0cf: Quotes and code blocks keep their spacing in Outlook for Windows: a quote's text no longer sits right against its bar, and code no longer touches the edges of its grey box.
+- da31e47: `send_status` counts bounces, complaints and unsubscribes in people, as `issue_stats` does, so the two report the same numbers. Someone whose mailbox was full and then bounced for good counts once, and addresses on SES's suppression list, which SES never tried, aren't counted as bounces.
+- ecafb7f: When setup gives the Worker a new AWS key, it lists any old keys left on the `sendoff` IAM user, with when each was last used, so you can delete the stale one. If both of the user's two allowed keys are taken, setup stops and says which they are, instead of failing at "create access key". It never deletes them itself, since another Sendoff instance in the same AWS account could be using one.
+
 ## 1.0.0
 
 ### Major Changes

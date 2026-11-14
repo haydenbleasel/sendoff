@@ -1,5 +1,12 @@
 # create-sendoff
 
+## 1.0.2
+
+### Patch Changes
+
+- a751ef1: The commands `bun create sendoff` prints at the end work in any shell, Windows PowerShell and `cmd` included: they use `bun run --cwd <folder> …` instead of `cd … && …`. Shipping an update now points at `bun run update`, which moves your folder to the latest release, instead of `git pull`, which can be ahead of it.
+- 9eca4fe: On a Node.js older than 20.12, `bun create sendoff` says which version it needs instead of crashing with an error about a missing `styleText` export.
+
 ## 1.0.1
 
 ### Patch Changes

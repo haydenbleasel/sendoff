@@ -1,6 +1,6 @@
 {
   "name": "create-sendoff",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Deploy Sendoff, which emails your list (newsletters, launches, announcements) from your agent, into your own Cloudflare and AWS accounts.",
   "keywords": [
     "broadcast",
@@ -33,7 +33,7 @@
   "scripts": {
     "build": "bun build src/index.ts --target node --outdir dist --splitting",
     "prepack": "bun run build",
-    "types": "tsc --noEmit",
+    "types": "bun check --no-script",
     "test": "bun test"
   },
   "devDependencies": {
