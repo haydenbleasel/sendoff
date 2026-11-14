@@ -40,7 +40,9 @@ export const parseCommand = (args: string[]): Command => {
   }
 
   return {
-    folder: positionals[0] ?? DEFAULT_FOLDER,
+    // An empty folder (an unset "$DIR" in a script) would resolve to the
+    // folder you're standing in.
+    folder: positionals[0] || DEFAULT_FOLDER,
     kind: "create",
     repo: values.repo ?? DEFAULT_REPO,
   };

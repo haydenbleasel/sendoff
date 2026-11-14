@@ -12,6 +12,10 @@ describe("parseCommand", () => {
     });
   });
 
+  it("uses the default folder for an empty one", () => {
+    expect(parseCommand([""])).toMatchObject({ folder: DEFAULT_FOLDER });
+  });
+
   it("takes a folder and a fork", () => {
     expect(
       parseCommand(["my-news", "--repo", "https://github.com/me/sendoff.git"])
