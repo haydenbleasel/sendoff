@@ -20,7 +20,10 @@ const MAX_HEADING_DEPTH = 3;
 const LINK_PROTOCOL = /^(?:https?:|mailto:)/iu;
 const IMAGE_PROTOCOL = /^https:/iu;
 const BUTTON_PROTOCOL = /^https?:/iu;
-const FRONTMATTER = /^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/u;
+
+// Frontmatter opens with a `key:` line. A body that opens with a divider and
+// has another further down isn't frontmatter.
+const FRONTMATTER = /^---\r?\n[\w-]+[ \t]*:[\s\S]*?\r?\n---(?:\r?\n|$)/u;
 
 // A table's second row, like `| --- | :-: |` or `--- | ---`. Tables aren't
 // parsed, so one arrives as a paragraph of pipes and dashes.

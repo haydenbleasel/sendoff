@@ -93,6 +93,11 @@ describe("parseMarkdown", () => {
     expect(problemsFor("A line\n-- signed")).toStrictEqual([]);
   });
 
+  it("accepts a body that opens with a divider and has another", () => {
+    expect(problemsFor("---\n\nHello\n\n---\n\nBye")).toStrictEqual([]);
+    expect(problemsFor("---\nHello\n\n---")).toStrictEqual([]);
+  });
+
   it("rejects reference-style links", () => {
     expect(
       problemsFor("[a][b]\n\n[b]: https://example.com")[0]?.message
