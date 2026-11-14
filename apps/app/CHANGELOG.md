@@ -1,5 +1,21 @@
 # app
 
+## 1.0.2
+
+### Patch Changes
+
+- bc44484: An issue that opens with a `---` divider and has another one further down renders, instead of being rejected for having frontmatter. Only a block that opens with a `key:` line counts as frontmatter now.
+- fb9b7e9: A Markdown table in an issue is reported as a problem, with its line, like the rest of the Markdown Sendoff doesn't support. Before, it rendered as rows of pipes and dashes in the email, and nothing said so.
+- d812da7: An open preview updates its status badge when the issue starts sending, finishes or is cancelled. Before, it kept saying Draft until the page was reloaded, because sending doesn't change the issue's version, which was all the page watched.
+- 6548929: Importing a past issue with a send date that doesn't exist, like February 30, is refused with the usual "isn't a past send date" message. Before, it was imported under a different day (March 2), and a corrected copy imported later sat beside it instead of replacing it.
+- ae52425: Pressing **Resubscribe** for a signup that isn't confirmed yet confirms it and puts the person back on the list, instead of saying emails to the address bounced or were marked as spam. Unsubscribing the signup and then resubscribing already did this, and the link comes from an email sent to that inbox, as a confirmation link does. Pressing **Resubscribe** twice no longer tells someone the first press put back on the list that their address bounced. Only bounced and complained addresses see **Can't resubscribe**.
+- 7604fcd: `prepare_send` rounds its time estimate to the nearest minute instead of rounding up twice, so 6,000 subscribers at 14 emails a second is "about 7 minutes" (it takes just over 7), not 8. A send of about a minute says "about 1 minute", not "about 1 minutes".
+- 3a8d776: When Cloudflare turns down one of SES's DNS records, setup lists it to add by hand with Cloudflare's reason, and carries on with the rest. It used to crash with a stack trace, on every rerun too. That happens when the API token can read the zone but not edit its DNS, or when the name already has a record of another type, like a CNAME another email provider left at `bounce.<your domain>`.
+- ae52425: Setup adds SES's DNS records with the API token whenever the sender's domain is on Cloudflare, even if Sendoff's hostname is behind a Pages project, instead of listing them to add by hand. It works out the sender's domain from the hostname's zone lookup when that covers it, and looks it up otherwise, so a hostname on Cloudflare with the sender's domain elsewhere isn't asked for DNS permissions it can't use. The token prompt names the zone its DNS permissions are for (`example.com` for a sender on `mail.example.com`). Setup only adds records to an active zone in this account, and says why when it lists them by hand instead. It only checks the sender's domain while SES's records still need adding, so a finished instance isn't asked about it, and the token prompt for a new Turnstile widget asks for Turnstile alone.
+- ae52425: If setup can't read or save the settings at the end, it runs the preflight checks and then stops with the reason, instead of saying Sendoff is live while its signup and unsubscribe pages may not work. Before, a read error was reported as keeping settings that may not exist. If you keep your MCP token without pasting it, setup can't check the settings, so it says Sendoff is deployed rather than live and points you to `doctor`.
+- e0ee708: Pressing Ctrl+C while setup is working on a step (checking AWS, creating resources, deploying) exits with the cancelled code, 130, as it already did at a prompt. It exited with 0, so `bun create sendoff` reported a cancelled setup as finished.
+- f4d7c8a: `bun run update` gets past a `bun.lock` change that's been staged (after `git add -A`, say). It only discarded an unstaged one, so the staged change stayed and the update stopped with "Moving to … failed" whenever the release changed the lockfile too.
+
 ## 1.0.1
 
 ### Patch Changes
