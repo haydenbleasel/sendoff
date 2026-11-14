@@ -100,8 +100,21 @@ describe("confirm, unsubscribe and resubscribe", () => {
 
     expect(recorded.map((event) => event.type)).toStrictEqual(["unsubscribe"]);
 
-    expect(await resubscribeSubscriber(db(), subscriber.id)).toBe(true);
-    expect(await statusOf("lifecycle@example.com")).toBe("active");
+    const { confirmedAt } =
+      (await findSubscriberByEmail(db(), "lifecycle@example.com")) ?? {};
+
+    expect(await resubscribeSubscriber(db(), subscriber.id)).toBe(
+      "resubscribed"
+    );
+    // Undoing an unsubscribe keeps when it was first confirmed.
+    expect(
+      await findSubscriberByEmail(db(), "lifecycle@example.com")
+    ).toMatchObject({ confirmedAt, status: "active" });
+
+    // A second press finds it already back on the list.
+    expect(await resubscribeSubscriber(db(), subscriber.id)).toBe(
+      "already_active"
+    );
   });
 
   it("resubscribes a pending signup, since the link proves inbox access", async () => {
@@ -110,14 +123,21 @@ describe("confirm, unsubscribe and resubscribe", () => {
       source: "form",
     });
 
-    expect(await resubscribeSubscriber(db(), subscriber.id)).toBe(true);
+    const now = new Date("2026-01-02T03:04:05Z");
+
+    expect(await resubscribeSubscriber(db(), subscriber.id, now)).toBe(
+      "resubscribed"
+    );
     expect(
       await findSubscriberByEmail(db(), "pending-again@example.com")
     ).toMatchObject({
+      confirmedAt: now,
       status: "active",
       unsubscribedAt: null,
     });
-    expect(await resubscribeSubscriber(db(), subscriber.id)).toBe(false);
+    expect(await resubscribeSubscriber(db(), subscriber.id)).toBe(
+      "already_active"
+    );
   });
 
   it("clears the unsubscribe date when someone signs up again and confirms", async () => {
@@ -145,7 +165,9 @@ describe("confirm, unsubscribe and resubscribe", () => {
     const result = await unsubscribeSubscriber(db(), subscriber?.id ?? "");
 
     expect(result?.status).toBe("bounced");
-    expect(await resubscribeSubscriber(db(), subscriber?.id ?? "")).toBe(false);
+    expect(await resubscribeSubscriber(db(), subscriber?.id ?? "")).toBe(
+      "undeliverable"
+    );
   });
 });
 

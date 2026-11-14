@@ -55,7 +55,7 @@ One Worker serves everything:
 | `POST /confirm/:token` | Marks a `pending` subscriber `active`. An old link can't undo an unsubscribe. |
 | `GET /unsubscribe/:token` | Asks for confirmation only. Link scanners load URLs in emails, so a GET must never unsubscribe. |
 | `POST /unsubscribe/:token` | Unsubscribes: the page's button, and RFC 8058 one-click POSTs from mail providers. `?issue=` attributes it to an issue. |
-| `POST /resubscribe/:token` | Undoes an unsubscribe from the same link. It also activates a pending signup, since the link proves inbox access as a confirmation link does. |
+| `POST /resubscribe/:token` | Undoes an unsubscribe from the same link. It also confirms a pending signup (setting `confirmedAt`), since the link proves inbox access as a confirmation link does. Bounced and complained addresses stay off the list. |
 | `POST /webhooks/ses` | SNS endpoint for SES events. Verifies the SNS signature and handles `SubscriptionConfirmation`. |
 | `GET /click/:issueId/:token/:signature?url=` | Tracked link: records the click in the background (`waitUntil`) and redirects (302) to `url`. The signature is an HMAC of the issue id and `url`, so it never redirects anywhere the issue didn't link. A bad or test `:token` still redirects but isn't counted; HEAD requests aren't counted. Served before the page security headers. |
 | `GET /open/:issueId/:token` | Open image (a 1×1 GIF, `no-store`), recorded in the background. Served before the page security headers, since `Cross-Origin-Resource-Policy` would block it in webmail. |

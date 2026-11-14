@@ -192,19 +192,31 @@ export const unsubscribeSubscriber = async (
   return existing;
 };
 
+export type ResubscribeOutcome =
+  | "resubscribed"
+  | "already_active"
+  | "undeliverable";
+
 /**
  * Undo an unsubscribe from the link in an email. The link proves inbox
- * access, as a confirmation link does, so it also activates a pending signup:
+ * access, as a confirmation link does, so it also confirms a pending signup:
  * someone who unsubscribed and signed up again, or whose old issue's
- * unsubscribe link turned a pending signup into an unsubscribe.
+ * unsubscribe link turned a pending signup into an unsubscribe. Bounced and
+ * complained addresses stay off the list.
  */
 export const resubscribeSubscriber = async (
   db: Database,
-  id: string
-): Promise<boolean> => {
+  id: string,
+  now: Date = new Date()
+): Promise<ResubscribeOutcome> => {
   const [updated] = await db
     .update(subscribers)
-    .set({ status: "active", unsubscribedAt: null })
+    .set({
+      // Confirming a pending signup records when, as confirmSubscriber does.
+      confirmedAt: sql`case when ${subscribers.status} = 'pending' then ${now.getTime()} else ${subscribers.confirmedAt} end`,
+      status: "active",
+      unsubscribedAt: null,
+    })
     .where(
       and(
         eq(subscribers.id, id),
@@ -213,7 +225,15 @@ export const resubscribeSubscriber = async (
     )
     .returning({ id: subscribers.id });
 
-  return updated !== undefined;
+  if (updated) {
+    return "resubscribed";
+  }
+
+  // Read it again: the status may have changed since the caller read it, as
+  // when a second press of Resubscribe finds the first already went through.
+  const existing = await findSubscriberById(db, id);
+
+  return existing?.status === "active" ? "already_active" : "undeliverable";
 };
 
 export type ImportStatus = Exclude<SubscriberStatus, "pending">;
