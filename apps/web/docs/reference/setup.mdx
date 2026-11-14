@@ -21,12 +21,11 @@ sidebar:
     default `news.` plus your sender's domain) and the SES region. Setup checks
     whether the hostname's DNS is on Cloudflare in this account, and asks if it
     can't tell. If it isn't, Sendoff reaches it through a small Pages project;
-    see [Domains outside Cloudflare](#domains-outside-cloudflare). Behind Pages,
-    setup checks your sender's domain the same way before it asks for the API
-    token or adds SES's DNS records, since the token can still add those records
-    if that domain is on Cloudflare. It doesn't ask about the sender's domain
-    when the hostname is on it and setup has just found the hostname isn't on
-    Cloudflare.
+    see [Domains outside Cloudflare](#domains-outside-cloudflare). If SES's DNS
+    records still need adding, setup checks your sender's domain the same way
+    before it asks for the API token, since the token adds those records to that
+    domain's zone, which can be on Cloudflare when the hostname isn't, or the
+    other way round.
   </Step>
   <Step title="AWS access">
     If the AWS CLI is logged in, setup uses that login (including short-lived
@@ -38,11 +37,8 @@ sidebar:
   </Step>
   <Step title="Cloudflare resources">
     A D1 database (`sendoff`), a KV namespace for OAuth grants
-    (`sendoff-oauth`), a queue (`sendoff-send`), a Pages project
-    (`sendoff-pages`) if your DNS isn't on Cloudflare, and a Turnstile widget
-    for your hostname. The [Cloudflare API
-    token](/docs/quickstart#before-you-start) is only asked for here, and only
-    if the Turnstile widget or DNS records still need creating.
+    (`sendoff-oauth`), a queue (`sendoff-send`), and a Pages project
+    (`sendoff-pages`) if your DNS isn't on Cloudflare.
   </Step>
   <Step title="SES and SNS">
     Your domain as an SES identity with Easy DKIM, a custom MAIL FROM domain
@@ -51,16 +47,23 @@ sidebar:
     bounces, complaints, rejections and deliveries, and SES's account-level
     suppression list.
   </Step>
+  <Step title="Turnstile">
+    A Turnstile widget for your hostname. The [Cloudflare API
+    token](/docs/quickstart#before-you-start) is asked for here (or in the DNS
+    step, if the widget already exists), and only if the widget or DNS records
+    still need creating. Its prompt asks for DNS permissions only if SES's
+    records still need adding and your sender's domain is on Cloudflare.
+  </Step>
   <Step title="DNS">
     Three DKIM `CNAME` records, an `MX` and SPF `TXT` record for the MAIL FROM
     domain, and a DMARC record if your domain doesn't have one. Records that
     clash with existing ones are reported, not changed. Skipped once SES has
     verified the domain and it has DMARC. The API token adds them to your
-    sender's domain's zone. Without a token, or if that domain isn't on
-    Cloudflare, setup lists them for you to add at your DNS provider, and if the
-    token can't see the zone, setup says so and lists them too. If your hostname
-    is behind Pages, there's also a `CNAME` from it to the Pages project, which
-    setup always lists for you to add.
+    sender's domain's zone. Without a token, or if that domain isn't an active
+    zone in this Cloudflare account, setup lists them for you to add at your DNS
+    provider, and if the token can't see the zone, setup says so and lists them
+    too. If your hostname is behind Pages, there's also a `CNAME` from it to the
+    Pages project, which setup always lists for you to add.
   </Step>
   <Step title="Deploy">
     Generates `.sendoff/wrangler.jsonc`, applies the database migrations, and

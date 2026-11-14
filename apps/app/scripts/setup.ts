@@ -47,10 +47,10 @@ import {
 } from "./setup/aws-cli";
 import {
   createCloudflareApi,
-  senderZoneOnCloudflare,
+  senderZone,
   zoneOnCloudflare,
 } from "./setup/cloudflare";
-import type { CloudflareApi, Confirm } from "./setup/cloudflare";
+import type { CloudflareApi, Confirm, ZoneLookup } from "./setup/cloudflare";
 import { deploy } from "./setup/deploy";
 import type { Secrets } from "./setup/deploy";
 import { formatRecords, mailFromDomainFor, sesDnsRecords } from "./setup/dns";
@@ -477,20 +477,27 @@ const workerSecretNames = (): Set<string> => {
 };
 
 /**
- * `dnsOnCloudflare` is false when the sender's domain's DNS is elsewhere, so
- * the token is only for Turnstile. Otherwise its DNS permissions are for that
- * domain (`domain`), which can differ from Sendoff's hostname.
+ * `zone` is the sender's domain's zone when the token should add SES's
+ * records to it, and its DNS permissions are for that zone, which can differ
+ * from Sendoff's hostname's. Null when there are no records to add or that
+ * domain isn't on Cloudflare, so the token is only for Turnstile.
  */
 const cloudflareToken = async (
-  dnsOnCloudflare: boolean,
+  zone: string | null,
   domain: string
 ): Promise<CloudflareApi | null> => {
+  // Token permissions name zones, so a sender on mail.example.com needs example.com.
+  const which =
+    zone === domain
+      ? "your sender's domain"
+      : `the zone your sender's domain, ${domain}, is in`;
+
   note(
-    (dnsOnCloudflare
+    (zone
       ? [
-          `With an API token, setup adds SES's DNS records to ${domain} and creates the Turnstile widget for the signup page.`,
+          `With an API token, setup adds SES's DNS records to ${zone} and creates the Turnstile widget for the signup page.`,
           "Create one at https://dash.cloudflare.com/profile/api-tokens with:",
-          `  Zone > DNS > Edit, Zone > Zone > Read (for ${domain}, your sender's domain)`,
+          `  Zone > DNS > Edit, Zone > Zone > Read (for ${zone}, ${which})`,
           "  Account > Turnstile > Edit",
           "It's only used now and isn't stored. Leave it empty to do those steps by hand.",
         ]
@@ -541,22 +548,25 @@ const wranglerApi = (): CloudflareApi | null => {
 /**
  * Whether the hostname's DNS is an active zone in this account, which a
  * Workers Custom Domain needs. If not, a Pages project serves it instead.
+ * `zone` is what the lookup found, which can answer for the sender's domain.
  */
 const hostnameOnCloudflare = async (
   api: CloudflareApi | null,
   accountId: string,
   hostname: string
-): Promise<boolean> => {
-  const { active: onCloudflare, zone } = await zoneOnCloudflare({
+): Promise<{ active: boolean; zone: ZoneLookup }> => {
+  const lookup = await zoneOnCloudflare({
     accountId,
     api,
     confirm: askYesNo,
     domain: hostname,
   });
 
-  if (onCloudflare) {
-    return true;
+  if (lookup.active) {
+    return lookup;
   }
+
+  const { zone } = lookup;
 
   const pending =
     zone !== "unknown" && zone && zone.status !== "active"
@@ -566,12 +576,12 @@ const hostnameOnCloudflare = async (
   note(
     [
       `${hostname}'s DNS isn't on Cloudflare${pending}, so the Worker can't serve it directly.`,
-      `Setup puts a small Cloudflare Pages project in front of it instead, and you'll add one CNAME record for ${hostname} with the others.`,
+      `Setup puts a small Cloudflare Pages project in front of it instead, and you'll add one CNAME record for ${hostname} at your DNS provider.`,
     ].join("\n"),
     "Hostname"
   );
 
-  return false;
+  return lookup;
 };
 
 const pagesProjectsSchema = z.array(
@@ -799,22 +809,38 @@ const addRecordsByHand = async (records: DnsRecord[]): Promise<void> => {
 };
 
 /**
- * The zone the API token adds `domain`'s records to. When it can't find one,
- * it says why, since setup then lists the records to add by hand.
+ * The zone the API token adds `domain`'s records to: an active one in
+ * `accountId`, since records in a zone that isn't serving DNS do nothing.
+ * When it can't find one, it says why, since setup then lists the records to
+ * add by hand. `zone` is the zone setup expects, to name in the warning.
  */
-const tokenZone = async (cloudflare: CloudflareApi, domain: string) => {
-  const permissions = `If ${domain} is on Cloudflare, give the token Zone > DNS > Edit and Zone > Zone > Read for it, so setup can add them next time.`;
+const tokenZone = async ({
+  accountId,
+  cloudflare,
+  domain,
+  zone,
+}: {
+  accountId: string;
+  cloudflare: CloudflareApi;
+  domain: string;
+  zone: string;
+}) => {
+  const permissions = `Give the token Zone > DNS > Edit and Zone > Zone > Read for ${zone}, so setup can add them next time.`;
 
   try {
-    const zone = await cloudflare.findZone(domain);
+    const found = await cloudflare.findZone(domain, accountId);
 
-    if (!zone) {
-      log.warn(
-        `Your Cloudflare API token can't see a zone for ${domain}, so setup lists its records to add by hand. ${permissions}`
-      );
+    if (found?.status === "active") {
+      return found;
     }
 
-    return zone;
+    log.warn(
+      found
+        ? `${found.name} is on Cloudflare but isn't active yet, so setup lists ${domain}'s records to add where its DNS is now.`
+        : `Your Cloudflare API token can't see a zone for ${domain} in this account, so setup lists its records to add by hand. ${permissions}`
+    );
+
+    return null;
   } catch (error) {
     log.warn(
       `Couldn't look up ${domain}'s zone with your Cloudflare API token (${error instanceof Error ? error.message : String(error)}), so setup lists its records to add by hand. ${permissions}`
@@ -830,19 +856,29 @@ const tokenZone = async (cloudflare: CloudflareApi, domain: string) => {
  * on DNS that isn't Cloudflare's) are always listed.
  */
 const configureDns = async ({
+  accountId,
   byHand,
   cloudflare,
   domain,
   records,
+  senderZoneName,
 }: {
+  accountId: string;
   byHand: DnsRecord[];
   cloudflare: CloudflareApi | null;
   domain: string;
   records: DnsRecord[];
+  /** The zone setup expects `domain` in, from Wrangler's login or the person. */
+  senderZoneName: string;
 }) => {
   const zone =
     cloudflare && records.length > 0
-      ? await tokenZone(cloudflare, domain)
+      ? await tokenZone({
+          accountId,
+          cloudflare,
+          domain,
+          zone: senderZoneName,
+        })
       : null;
 
   if (!(cloudflare && zone)) {
@@ -1248,7 +1284,7 @@ const finishSetup = async ({
  * Where Sendoff lives, and whether a Pages project has to front it. Once a
  * hostname is behind Pages it stays there: if its DNS moves to Cloudflare
  * later, the CNAME comes along, and a Custom Domain can't share it. Then
- * `hostnameChecked` is false: this run didn't look at the hostname's DNS.
+ * `hostnameZone` is undefined: this run didn't look the hostname up.
  */
 const chooseHostname = async ({
   accountId,
@@ -1262,7 +1298,7 @@ const chooseHostname = async ({
   draft: InstanceDraft;
 }): Promise<{
   hostname: string;
-  hostnameChecked: boolean;
+  hostnameZone: ZoneLookup | undefined;
   usePages: boolean;
 }> => {
   const hostnameAnswer = await ask(
@@ -1279,47 +1315,72 @@ const chooseHostname = async ({
   const hostname = hostnameAnswer.toLowerCase();
 
   if (draft.pagesProject !== undefined && draft.hostname === hostname) {
-    return { hostname, hostnameChecked: false, usePages: true };
+    return { hostname, hostnameZone: undefined, usePages: true };
   }
 
-  return {
-    hostname,
-    hostnameChecked: true,
-    usePages: !(await hostnameOnCloudflare(api, accountId, hostname)),
-  };
+  const { active, zone } = await hostnameOnCloudflare(api, accountId, hostname);
+
+  return { hostname, hostnameZone: zone, usePages: !active };
 };
 
 /**
- * SES's records, plus the hostname's CNAME when it's behind Pages (`pagesDev`).
- * `dnsOnCloudflare` says whether the sender's domain's DNS is on Cloudflare;
- * it's only called when SES's records still need adding.
+ * What the DNS step has left: SES's records (`sesDone` once SES has verified
+ * them and the domain has DMARC) and, behind Pages (`pagesDev`), the
+ * hostname's CNAME.
  */
-const configureAllDns = async ({
-  cloudflareApi,
-  dnsOnCloudflare,
+const dnsProgress = async ({
   domain,
   hostname,
   pagesDev,
-  region,
   ses,
 }: {
-  cloudflareApi: () => Promise<CloudflareApi | null>;
-  dnsOnCloudflare: () => Promise<boolean>;
   domain: string;
   hostname: string;
   pagesDev: string | undefined;
-  region: string;
   ses: Awaited<ReturnType<typeof configureSes>>;
-}): Promise<void> => {
+}) => {
   const dmarc = await hasDmarc(domain).catch(() => false);
-
-  const sesDone =
-    ses.identity.verified && ses.identity.mailFromStatus === "SUCCESS" && dmarc;
 
   const cnameDone =
     pagesDev === undefined ||
     (await hasCname(hostname, pagesDev).catch(() => false));
 
+  return {
+    cnameDone,
+    dmarc,
+    sesDone:
+      ses.identity.verified &&
+      ses.identity.mailFromStatus === "SUCCESS" &&
+      dmarc,
+  };
+};
+
+/**
+ * SES's records, plus the hostname's CNAME when it's behind Pages (`pagesDev`).
+ * `senderDnsZone` is the sender's domain's zone when the API token can add
+ * SES's records to it, and null when they're done or must be added by hand.
+ */
+const configureAllDns = async ({
+  accountId,
+  cloudflareApi,
+  domain,
+  hostname,
+  pagesDev,
+  progress: { cnameDone, dmarc, sesDone },
+  region,
+  senderDnsZone,
+  ses,
+}: {
+  accountId: string;
+  cloudflareApi: () => Promise<CloudflareApi | null>;
+  domain: string;
+  hostname: string;
+  pagesDev: string | undefined;
+  progress: Awaited<ReturnType<typeof dnsProgress>>;
+  region: string;
+  senderDnsZone: () => Promise<string | null>;
+  ses: Awaited<ReturnType<typeof configureSes>>;
+}): Promise<void> => {
   if (sesDone) {
     log.success(`DNS: SES has verified ${domain}, and it has DMARC.`);
   }
@@ -1332,14 +1393,15 @@ const configureAllDns = async ({
     return;
   }
 
-  // SES's records go in the sender's domain's zone. The token can add them when
-  // that's on Cloudflare, even if the hostname's DNS (behind Pages) isn't.
-  const useToken = !sesDone && (await dnsOnCloudflare());
+  // SES's records go in the sender's domain's zone, which can be on
+  // Cloudflare even when the hostname's DNS (behind Pages) isn't.
+  const zone = await senderDnsZone();
 
   await configureDns({
+    accountId,
     byHand:
       pagesDev && !cnameDone ? [pagesCnameRecord(hostname, pagesDev)] : [],
-    cloudflare: useToken ? await cloudflareApi() : null,
+    cloudflare: zone ? await cloudflareApi() : null,
     domain,
     records: sesDone
       ? []
@@ -1350,29 +1412,36 @@ const configureAllDns = async ({
           mailFromDomain: ses.mailFromDomain,
           region,
         }),
+    senderZoneName: zone ?? domain,
   });
 };
 
 /**
- * Whether the sender's domain is on Cloudflare (so the API token can add
- * SES's records to it), and the token itself, each worked out at most once
- * and only when a step needs them: a finished instance is asked neither. The
- * token's prompt depends on the first, for which DNS permissions to ask for.
+ * The sender's domain's zone, when the API token should add SES's records to
+ * it, and the token itself, each worked out at most once and only when a step
+ * needs them. With SES's records in place (`sesRecords` false), it doesn't
+ * look at the sender's domain, so the token is asked for only if Turnstile
+ * needs it, and for Turnstile alone; a finished instance is asked neither.
  */
-const lazyCloudflare = (
-  sender: Omit<Parameters<typeof senderZoneOnCloudflare>[0], "confirm">
-) => {
-  let senderDns: Promise<boolean> | undefined;
+const lazyCloudflare = ({
+  sesRecords,
+  ...sender
+}: Omit<Parameters<typeof senderZone>[0], "confirm"> & {
+  sesRecords: boolean;
+}) => {
+  let zone: Promise<string | null> | undefined;
   let cloudflare: Promise<CloudflareApi | null> | undefined;
 
-  const dnsOnCloudflare = async (): Promise<boolean> => {
-    senderDns ??= senderZoneOnCloudflare({ ...sender, confirm: askYesNo });
+  const senderDnsZone = async (): Promise<string | null> => {
+    zone ??= sesRecords
+      ? senderZone({ ...sender, confirm: askYesNo })
+      : Promise.resolve(null);
 
-    return await senderDns;
+    return await zone;
   };
 
   const askForToken = async (): Promise<CloudflareApi | null> =>
-    await cloudflareToken(await dnsOnCloudflare(), sender.domain);
+    await cloudflareToken(await senderDnsZone(), sender.domain);
 
   const cloudflareApi = async (): Promise<CloudflareApi | null> => {
     cloudflare ??= askForToken();
@@ -1380,7 +1449,7 @@ const lazyCloudflare = (
     return await cloudflare;
   };
 
-  return { cloudflareApi, dnsOnCloudflare };
+  return { cloudflareApi, senderDnsZone };
 };
 
 /** Setup's last line: Sendoff is only live once setup has checked its settings. */
@@ -1416,7 +1485,7 @@ const main = async () => {
 
   const cloudflareLogin = wranglerApi();
 
-  const { hostname, hostnameChecked, usePages } = await chooseHostname({
+  const { hostname, hostnameZone, usePages } = await chooseHostname({
     accountId,
     api: cloudflareLogin,
     domain,
@@ -1455,17 +1524,6 @@ const main = async () => {
     .catch((error: Error) => fail(`AWS access didn't work: ${error.message}`));
   progress.stop("AWS access works");
 
-  // Only check the sender's domain, or ask for a Cloudflare API token, if a
-  // step below needs it.
-  const { cloudflareApi, dnsOnCloudflare } = lazyCloudflare({
-    accountId,
-    api: cloudflareLogin,
-    domain,
-    hostname,
-    hostnameChecked,
-    usePages,
-  });
-
   const resources = usePages
     ? "database, KV namespace, queue and Pages project"
     : "database, KV namespace and queue";
@@ -1485,6 +1543,29 @@ const main = async () => {
   });
   progress.stop(`The ${resources} are ready`);
 
+  // Before Turnstile, so the token prompt knows whether SES's records need it.
+  progress.start("Setting up SES and SNS");
+  const ses = await configureSes(aws, domain, region);
+  save({
+    sesConfigurationSet: CONFIGURATION_SET,
+    sesEventsTopicArn: ses.topicArn,
+    sesRegion: region,
+  });
+  progress.stop("SES identity, configuration set and event topic ready");
+
+  const dns = await dnsProgress({ domain, hostname, pagesDev, ses });
+
+  // Only check the sender's domain, or ask for a Cloudflare API token, if a
+  // step below needs it.
+  const { cloudflareApi, senderDnsZone } = lazyCloudflare({
+    accountId,
+    api: cloudflareLogin,
+    domain,
+    hostname,
+    hostnameZone,
+    sesRecords: !dns.sesDone,
+  });
+
   const secrets: Secrets = {};
 
   if (draft.turnstileSiteKey && existingSecrets.has("TURNSTILE_SECRET_KEY")) {
@@ -1501,22 +1582,15 @@ const main = async () => {
     secrets.TURNSTILE_SECRET_KEY = turnstile.secret;
   }
 
-  progress.start("Setting up SES and SNS");
-  const ses = await configureSes(aws, domain, region);
-  save({
-    sesConfigurationSet: CONFIGURATION_SET,
-    sesEventsTopicArn: ses.topicArn,
-    sesRegion: region,
-  });
-  progress.stop("SES identity, configuration set and event topic ready");
-
   await configureAllDns({
+    accountId,
     cloudflareApi,
-    dnsOnCloudflare,
     domain,
     hostname,
     pagesDev,
+    progress: dns,
     region,
+    senderDnsZone,
     ses,
   });
 

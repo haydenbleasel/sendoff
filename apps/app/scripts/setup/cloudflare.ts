@@ -117,52 +117,68 @@ export const zoneOnCloudflare = async ({
   };
 };
 
+/** Whether `name` is `zone` itself or a name under it. */
+const inZone = (name: string, zone: string): boolean =>
+  name === zone || name.endsWith(`.${zone}`);
+
 /**
- * Whether the API token can add SES's records to the sender's domain
- * (`domain`), because it's an active zone in `accountId`.
+ * The zone the API token can add SES's records to: the sender's domain's
+ * (`domain`), when that's an active zone in `accountId`, or null when it
+ * isn't. When the person says it is, without a lookup, it's `domain`.
  *
- * Off Pages, setup assumes so: it asks for DNS permissions, and says so if
- * the token can't see the zone when it adds them. Behind Pages, the sender's
- * domain can still be on Cloudflare: when the hostname is on another domain,
- * like news.other.com sending from example.com, or when the DNS moved to
- * Cloudflare after Pages was set up. A hostname on the sender's domain shares
- * its DNS, so when `hostnameChecked` (this run found the hostname's DNS isn't
- * on Cloudflare, rather than keeping Pages from an earlier run), it doesn't
- * ask again.
+ * This run's lookup of the hostname's zone (`hostnameZone`) also answers for
+ * the sender's domain when the hostname is on that domain and what it found
+ * covers it: findZone walks up through the domain to reach the zone. Anything
+ * else gets its own lookup: a hostname on another domain (news.other.com
+ * sending from example.com), one delegated to a zone of its own, or one this
+ * run didn't look up because it kept Pages from an earlier run. It asks only
+ * when it can't tell, since the person's answer about the hostname is about
+ * another name.
  */
-export const senderZoneOnCloudflare = async ({
+export const senderZone = async ({
   accountId,
   api,
   confirm,
   domain,
   hostname,
-  hostnameChecked,
-  usePages,
+  hostnameZone,
 }: {
   accountId: string;
   api: CloudflareApi | null;
   confirm: Confirm;
   domain: string;
   hostname: string;
-  hostnameChecked: boolean;
-  usePages: boolean;
-}): Promise<boolean> => {
-  if (!usePages) {
-    return true;
+  /** Undefined when this run didn't look the hostname up. */
+  hostnameZone: ZoneLookup | undefined;
+}): Promise<string | null> => {
+  // The hostname's lookup, when it walked through `domain` on the way up.
+  const walked =
+    hostnameZone === undefined ||
+    hostnameZone === "unknown" ||
+    !inZone(hostname, domain)
+      ? undefined
+      : hostnameZone;
+
+  if (walked === null) {
+    return null;
   }
 
-  const sharesDns =
-    hostnameChecked && (hostname === domain || hostname.endsWith(`.${domain}`));
+  if (walked && inZone(domain, walked.name)) {
+    return walked.status === "active" ? walked.name : null;
+  }
 
-  const { active } = await zoneOnCloudflare({
+  const { active, zone } = await zoneOnCloudflare({
     accountId,
     api,
-    // Already answered: the hostname's DNS, which is the domain's, isn't on Cloudflare.
-    confirm: sharesDns ? () => Promise.resolve(false) : confirm,
+    confirm,
     domain,
   });
 
-  return active;
+  if (!active) {
+    return null;
+  }
+
+  return zone === "unknown" || zone === null ? domain : zone.name;
 };
 
 export const createCloudflareApi = (
