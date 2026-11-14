@@ -73,8 +73,10 @@ const main = async () => {
 
   // `bun install` rewrites the lockfile (with another Bun version, say), so
   // it isn't a change of the person's own. The install below remakes it.
+  // From HEAD, not the index: a staged lockfile would survive a plain
+  // checkout and then block the merge.
   if (changed.includes(LOCKFILE)) {
-    git(["checkout", "--", LOCKFILE]);
+    git(["checkout", "HEAD", "--", LOCKFILE]);
   }
 
   const fetched = git(["fetch", "--tags", "--quiet"]);
