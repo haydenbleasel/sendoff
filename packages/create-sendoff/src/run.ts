@@ -43,6 +43,15 @@ export const run = async (
     output.push(chunk.toString());
   });
 
+  // The spinner shown meanwhile exits the process itself on Ctrl+C, and in
+  // its raw mode the key press never reaches the child as a signal, so stop
+  // the child on the way out.
+  const stop = () => {
+    child.kill();
+  };
+
+  process.once("exit", stop);
+
   try {
     // Rejects with the spawn error, such as ENOENT when it isn't installed.
     await once(child, "close");
@@ -53,6 +62,8 @@ export const run = async (
     const message = error instanceof Error ? error.message : String(error);
 
     return { missing, ok: false, output: message, stdout: "" };
+  } finally {
+    process.off("exit", stop);
   }
 
   return {

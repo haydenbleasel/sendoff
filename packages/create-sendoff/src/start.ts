@@ -16,6 +16,19 @@ import { awsLogin } from "./aws";
 import { main } from "./main";
 import { handOff, installed, run } from "./run";
 
+// The shell's code for Ctrl+C.
+const EXIT_CANCELLED = 130;
+
+let finished = false;
+
+// clack's spinner exits with 0 itself when Ctrl+C is pressed while it spins,
+// which would report a cancelled run as a success.
+process.once("exit", (code) => {
+  if (!finished && code === 0) {
+    process.exitCode = EXIT_CANCELLED;
+  }
+});
+
 process.exitCode = await main({
   argv: process.argv.slice(2),
   awsLogin,
@@ -27,3 +40,5 @@ process.exitCode = await main({
   stderr: (text) => process.stderr.write(text),
   stdout: (text) => process.stdout.write(text),
 });
+
+finished = true;

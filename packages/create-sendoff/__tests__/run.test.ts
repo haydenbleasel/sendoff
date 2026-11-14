@@ -74,6 +74,27 @@ describe("run", () => {
   });
 });
 
+describe("run, when the process exits", () => {
+  it("stops the command, and stops watching once it has finished", async () => {
+    const before = process.listeners("exit");
+    const running = run(BUN, ["-e", "setTimeout(() => {}, 60_000)"]);
+
+    const added = process
+      .listeners("exit")
+      .filter((listener) => !before.includes(listener));
+
+    expect(added).toHaveLength(1);
+
+    // What the spinner's own exit on Ctrl+C sets off.
+    for (const listener of added) {
+      listener(0);
+    }
+
+    expect(await running).toMatchObject({ missing: false, ok: false });
+    expect(process.listeners("exit")).toStrictEqual(before);
+  });
+});
+
 describe("handOff", () => {
   it("resolves with the command's exit code", async () => {
     expect(await handOff(BUN, ["-e", "process.exit(3)"], dir)).toBe(3);
