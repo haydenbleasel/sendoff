@@ -21,9 +21,12 @@ const LINK_PROTOCOL = /^(?:https?:|mailto:)/iu;
 const IMAGE_PROTOCOL = /^https:/iu;
 const BUTTON_PROTOCOL = /^https?:/iu;
 
-// Frontmatter opens with a `key:` line. A body that opens with a divider and
-// has another further down isn't frontmatter.
-const FRONTMATTER = /^---\r?\n[\w-]+[ \t]*:[\s\S]*?\r?\n---(?:\r?\n|$)/u;
+// Frontmatter opens with a `key:` line, and has no blank line before its
+// closing fence. A body that opens with a divider and has another further
+// down, past a blank line, isn't frontmatter. Blank lines (or a byte order
+// mark) may come first.
+const FRONTMATTER =
+  /^\s*---[ \t]*\r?\n["']?[\w-]+["']?[ \t]*:.*\r?\n(?:[ \t]*\S.*\r?\n)*?---[ \t]*(?:\r?\n|$)/u;
 
 // A table's second row, like `| --- | :-: |` or `--- | ---`. Tables aren't
 // parsed, so one arrives as a paragraph of pipes and dashes.

@@ -96,6 +96,17 @@ describe("parseMarkdown", () => {
     expect(problemsFor("---\nsubject: Hi\n---\n\nBody")[0]?.message).toContain(
       "frontmatter"
     );
+
+    // After a blank line, with trailing spaces, several keys, or a quoted one.
+    for (const body of [
+      "\n---\ntitle: Hi\n---\n\nBody",
+      "\uFEFF---\ntitle: Hi\n---\n\nBody",
+      "--- \ntitle: Hi\ndate: 2026-01-01\n---  \nBody",
+      '---\r\n"title": Hi\r\n---\r\n\r\nBody',
+    ]) {
+      expect(problemsFor(body)[0]?.message).toContain("frontmatter");
+    }
+
     expect(problemsFor("   \n")[0]?.message).toBe("The body is empty.");
   });
 
@@ -121,6 +132,10 @@ describe("parseMarkdown", () => {
   it("accepts a body that opens with a divider and has another", () => {
     expect(problemsFor("---\n\nHello\n\n---\n\nBye")).toStrictEqual([]);
     expect(problemsFor("---\nHello\n\n---")).toStrictEqual([]);
+    // A first line with a colon, when the next divider is past a blank line.
+    expect(
+      problemsFor("---\nNote: a short one\n\nHello\n\n---\n\nBye")
+    ).toStrictEqual([]);
   });
 
   it("rejects reference-style links", () => {
