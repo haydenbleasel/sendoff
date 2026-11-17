@@ -1,5 +1,11 @@
 # create-sendoff
 
+## 1.0.4
+
+### Patch Changes
+
+- c77006c: The README no longer says your domain has to be on Cloudflare. Its DNS can be anywhere: setup lists the records to add.
+
 ## 1.0.3
 
 ### Patch Changes
