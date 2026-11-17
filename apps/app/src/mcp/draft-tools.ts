@@ -212,9 +212,15 @@ export const registerDraftTools = (
       }),
       title: "Set draft subject, preheader or slug",
     },
-    async ({ issue: ref, ...meta }) =>
+    async ({ issue: ref, preheader, ...meta }) =>
       await run(async () => {
-        const issue = await setDraftMeta(db, ref, meta);
+        const issue = await setDraftMeta(db, ref, {
+          ...meta,
+          // Some clients can't send null and send the string "null" instead,
+          // which would show as the preview text in every inbox.
+          preheader: preheader?.trim() === "null" ? null : preheader,
+        });
+
         const { summary, url } = await describeDraft(issue, "Updated");
 
         return result(summary, presentIssue(issue, { previewUrl: url }));

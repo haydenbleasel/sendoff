@@ -192,6 +192,14 @@ describe("tools", () => {
 
     const listed = await call("list_issues", { status: "draft" });
     expect(listed.text).toContain("issue-one");
+
+    // A client that can't send null sends the string instead.
+    const cleared = await call("set_draft_meta", {
+      issue: "issue-one",
+      preheader: "null",
+    });
+
+    expect(dataOf(cleared.text).preheader).toBeNull();
   });
 
   it("reports Markdown problems and failed edits as tool errors the agent can fix", async () => {
