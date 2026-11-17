@@ -104,6 +104,14 @@ describe("htmlToText", () => {
     ).toBe("Hi\n\nBye");
   });
 
+  it("keeps a link's address whichever quotes its href is in", () => {
+    expect(
+      htmlToText(
+        "<p><a class='button' href='https://example.com/a?b=1&amp;c=2'>Read it</a></p>"
+      )
+    ).toBe("Read it (https://example.com/a?b=1&c=2)");
+  });
+
   it("keeps escaped markup as the text a reader saw", () => {
     expect(htmlToText("<p>Use &lt;script&gt; tags</p>")).toBe(
       "Use <script> tags"

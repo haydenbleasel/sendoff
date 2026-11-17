@@ -131,8 +131,9 @@ export type ImportedIssueInput = z.output<typeof importedIssueSchema>;
 const HIDDEN =
   /<!--[\s\S]*?-->|<(?<tag>head|style|script|title|noscript)\b[^>]*>[\s\S]*?<\/\k<tag>\s*>/giu;
 
+// The href may be in either kind of quotes.
 const LINK =
-  /<a\b[^>]*?\shref="(?<href>https?:[^"]*)"[^>]*>(?<label>[\s\S]*?)<\/a\s*>/giu;
+  /<a\b[^>]*?\shref=(?:"(?<double>https?:[^"]*)"|'(?<single>https?:[^']*)')[^>]*>(?<label>[\s\S]*?)<\/a\s*>/giu;
 
 const LINE_BREAK = /<br\b[^>]*>/giu;
 const LIST_ITEM = /<li\b[^>]*>/giu;
@@ -216,7 +217,13 @@ const removeAll = (value: string, pattern: RegExp): string => {
   return current;
 };
 
-const linkText = (_link: string, href: string, label: string): string => {
+const linkText = (
+  _link: string,
+  double: string | undefined,
+  single: string | undefined,
+  label: string
+): string => {
+  const href = double ?? single ?? "";
   const words = removeAll(label, TAG).trim();
 
   return words && words !== href ? `${label} (${href})` : href;
