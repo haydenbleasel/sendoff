@@ -351,6 +351,12 @@ describe("renaming an imported issue", () => {
     });
     expect(renamed.updatedAt.toISOString()).toBe(SENT_AT);
 
+    // Nothing to change leaves it as it is, rather than failing.
+    expect(await setDraftMeta(db(), issue.id, {})).toMatchObject({
+      slug: "spring-2025",
+      version: issue.version,
+    });
+
     await expect(
       setDraftMeta(db(), issue.id, { subject: "Renamed" })
     ).rejects.toThrow("only its slug can change");

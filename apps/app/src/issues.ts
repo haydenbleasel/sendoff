@@ -411,6 +411,11 @@ export const setDraftMeta = async (
   }
 
   if (imported) {
+    // Nothing to change: an update with no columns to set would throw.
+    if (changes.slug === undefined) {
+      return issue;
+    }
+
     // No version bump or updated_at change: it sits at its send date.
     const [renamed] = await db
       .update(issues)
