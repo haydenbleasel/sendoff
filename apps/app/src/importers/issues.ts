@@ -71,6 +71,8 @@ export const parseSentAt = (value: string): Date | null => {
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
+// The optional fields take null as well as being left out: a provider's API
+// (and jq, reading it) gives null for an issue with no preheader or text.
 export const importedIssueSchema = z.object({
   html: z
     .string()
@@ -81,7 +83,7 @@ export const importedIssueSchema = z.object({
     .string()
     .trim()
     .max(MAX_SUBJECT)
-    .optional()
+    .nullish()
     .describe("The preview text, if it had one."),
   sentAt: z
     .string()
@@ -109,13 +111,13 @@ export const importedIssueSchema = z.object({
     }),
   slug: z
     .string()
-    .optional()
+    .nullish()
     .describe("Its web address slug. Defaults to one made from the subject."),
   subject: z.string().trim().min(1).max(MAX_SUBJECT),
   text: z
     .string()
     .max(MAX_ISSUE_TEXT)
-    .optional()
+    .nullish()
     .describe(
       "The plain-text version. If it's missing, one is made from the HTML."
     ),
@@ -279,7 +281,7 @@ const chooseSlug = async (
   input: ImportedIssueInput,
   existing: Issue | undefined
 ): Promise<string> => {
-  if (input.slug === undefined) {
+  if (input.slug === undefined || input.slug === null) {
     return (
       existing?.slug ??
       (await uniqueSlug(

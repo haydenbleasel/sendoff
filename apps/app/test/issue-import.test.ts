@@ -260,7 +260,7 @@ const post = async (
   );
 };
 
-const issuesBody = (...items: Record<string, string>[]) =>
+const issuesBody = (...items: Record<string, string | null>[]) =>
   JSON.stringify({ issues: items });
 
 describe("POST /api/v1/issues/import", () => {
@@ -289,10 +289,14 @@ describe("POST /api/v1/issues/import", () => {
           slug: "taken",
           subject: "Summer",
         },
+        // A provider's API gives null for what an issue didn't have.
         {
           html: "<p>Autumn</p>",
+          preheader: null,
           sentAt: "2025-09-01T09:00:00Z",
+          slug: null,
           subject: "Autumn",
+          text: null,
         }
       ),
       ["issues:import"]
@@ -318,6 +322,7 @@ describe("POST /api/v1/issues/import", () => {
       slug: "spring-update",
     });
     expect(results[1]?.error).toContain("taken");
+    expect(results[2]).toMatchObject({ slug: "autumn" });
   });
 
   it("rejects a body it can't read", async () => {
