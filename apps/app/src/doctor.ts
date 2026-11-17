@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createSes } from "./config";
 import type { Config } from "./config";
 import type { Database } from "./db/client";
+import { findSenderIdentity } from "./ses";
 import type { SesAccount, SesClient } from "./ses";
 import { getSettings } from "./settings";
 import type { Settings } from "./settings";
@@ -190,11 +191,9 @@ const senderChecks = async (
   email: string
 ): Promise<Check[]> => {
   const domain = email.split("@").at(-1) ?? "";
+  const found = await findSenderIdentity(ses, email);
 
-  const identity =
-    (await ses.getEmailIdentity(domain)) ?? (await ses.getEmailIdentity(email));
-
-  if (!identity) {
+  if (!found) {
     return [
       check(
         "fail",
@@ -204,17 +203,19 @@ const senderChecks = async (
     ];
   }
 
+  const { identity, name } = found;
+
   const checks = [
     identity.verifiedForSending
       ? check(
           "pass",
           "Sender identity",
-          `${domain} is verified (DKIM ${identity.dkimStatus ?? "unknown"})`
+          `${name} is verified (DKIM ${identity.dkimStatus ?? "unknown"})`
         )
       : check(
           "fail",
           "Sender identity",
-          `${domain} isn't verified yet (DKIM ${identity.dkimStatus ?? "unknown"}). Check its DNS records.`
+          `${name} isn't verified yet (DKIM ${identity.dkimStatus ?? "unknown"}). Check its DNS records.`
         ),
   ];
 

@@ -5,6 +5,7 @@ import { createSes } from "../config";
 import type { Config } from "../config";
 import type { Database } from "../db/client";
 import type { JsonObject } from "../json";
+import { findSenderIdentity } from "../ses";
 import { getSettings, saveSettings } from "../settings";
 import type { Settings, SettingsDraft } from "../settings";
 import { result, run } from "./results";
@@ -135,22 +136,18 @@ const senderWarnings = async (
   const domain = email.split("@").at(-1) ?? "";
 
   try {
-    const ses = createSes(config);
+    const found = await findSenderIdentity(createSes(config), email);
 
-    const identity =
-      (await ses.getEmailIdentity(domain)) ??
-      (await ses.getEmailIdentity(email));
-
-    if (!identity) {
+    if (!found) {
       return [
         `${domain} isn't set up in SES (${config.sesRegion}) yet. Sending will be blocked until it's verified.`,
       ];
     }
 
-    return identity.verifiedForSending
+    return found.identity.verifiedForSending
       ? []
       : [
-          `${domain} is in SES but not verified yet (DKIM: ${identity.dkimStatus ?? "unknown"}).`,
+          `${found.name} is in SES but not verified yet (DKIM: ${found.identity.dkimStatus ?? "unknown"}).`,
         ];
   } catch (error) {
     return [

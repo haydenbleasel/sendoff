@@ -274,3 +274,34 @@ export const createSesClient = (
 };
 
 export type SesClient = ReturnType<typeof createSesClient>;
+
+// example.com: the shortest name that can be a domain identity.
+const MIN_DOMAIN_LABELS = 2;
+
+/**
+ * The SES identity a sender uses: its domain or the address itself, or else
+ * a parent domain, since verifying a domain covers its subdomains.
+ */
+export const findSenderIdentity = async (
+  ses: Pick<SesClient, "getEmailIdentity">,
+  email: string
+): Promise<{ identity: SesIdentity; name: string } | null> => {
+  const domain = email.split("@").at(-1) ?? "";
+  const labels = domain.split(".");
+
+  const parents = labels
+    .map((_, index) => labels.slice(index + 1))
+    .filter((rest) => rest.length >= MIN_DOMAIN_LABELS)
+    .map((rest) => rest.join("."));
+
+  for (const name of [domain, email, ...parents]) {
+    // oxlint-disable-next-line no-await-in-loop -- checked from the most specific identity up
+    const identity = await ses.getEmailIdentity(name);
+
+    if (identity) {
+      return { identity, name };
+    }
+  }
+
+  return null;
+};

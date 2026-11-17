@@ -103,6 +103,22 @@ describe("runDoctor", () => {
     expect(report.status("DMARC")).toBe("pass");
   });
 
+  it("passes a sender on a subdomain of the verified domain, as SES does", async () => {
+    await saveSettings(db(), {
+      ...testSettings,
+      from: { email: "hello@news.example.com", name: "Tester" },
+    });
+
+    const report = await statuses({
+      ...HEALTHY_SES,
+      identityName: "example.com",
+    });
+
+    await saveSettings(db(), testSettings);
+    expect(report.status("Sender identity")).toBe("pass");
+    expect(report.ok).toBe(true);
+  });
+
   it("warns when bounces and complaints aren't wired up, and fails if the configuration set is gone", async () => {
     const unwired = await statuses({ ...HEALTHY_SES, eventDestinations: [] });
     network?.restore();

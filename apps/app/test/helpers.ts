@@ -82,6 +82,8 @@ export interface NetworkOptions {
   eventDestinations?: JsonObject[] | null;
   /** Whether the sender's domain is a verified SES identity (default: not set up). */
   identity?: "missing" | "pending" | "verified";
+  /** The only identity SES has (default: whichever it's asked for). */
+  identityName?: string;
   /** Return a response to fail a specific send; undefined sends normally. */
   onSend?: (email: SentEmail) => Response | undefined;
 }
@@ -101,7 +103,11 @@ const accountResponse = (overrides: JsonObject = {}) =>
     ...overrides,
   });
 
-const identityResponse = (identity: NetworkOptions["identity"]) => {
+const identityResponse = (options: NetworkOptions, pathname: string) => {
+  const name = decodeURIComponent(pathname.split("/").at(-1) ?? "");
+  const known = (options.identityName ?? name) === name;
+  const identity = known ? options.identity : "missing";
+
   if (identity === undefined || identity === "missing") {
     return sesError("NotFoundException", 404, "Identity not found");
   }
@@ -156,7 +162,7 @@ export const mockNetwork = (options: NetworkOptions = {}) => {
       }
 
       if (pathname.startsWith("/v2/email/identities/")) {
-        return identityResponse(options.identity);
+        return identityResponse(options, pathname);
       }
 
       if (pathname.endsWith("/event-destinations")) {
