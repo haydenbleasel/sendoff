@@ -184,9 +184,17 @@ const layout = () => {
   $("email").style.colorScheme = state.scheme;
 };
 
+// The body's height, not the document's: a document is never shorter than
+// its frame, so it couldn't shrink again after a longer draft or narrower view.
 const fit = () => {
-  const doc = $("email").contentDocument;
-  if (doc && doc.documentElement) $("email").style.height = doc.documentElement.scrollHeight + "px";
+  const email = $("email");
+  const doc = email.contentDocument;
+  // Hidden behind the plain text, there's nothing to measure yet.
+  if (email.hidden || !doc || !doc.body) return;
+  // An imported issue's HTML may keep the browser's margin around its body.
+  const style = doc.defaultView.getComputedStyle(doc.body);
+  const margins = parseFloat(style.marginTop) + parseFloat(style.marginBottom);
+  email.style.height = Math.ceil(doc.body.scrollHeight + margins) + "px";
 };
 
 const render = async () => {
@@ -254,6 +262,8 @@ for (const button of document.querySelectorAll("[data-group]")) {
 $("inbox").open = window.matchMedia("(min-width: 64rem)").matches;
 
 $("email").addEventListener("load", fit);
+// The click's own fit measured the width the frame is animating away from.
+$("frame").addEventListener("transitionend", fit);
 window.addEventListener("resize", fit);
 document.addEventListener("visibilitychange", poll);
 setLive("connecting");
