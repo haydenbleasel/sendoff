@@ -19,12 +19,6 @@ export const CONFIRMATION_COOLDOWN_MS = 10 * 60 * 1000;
 const IMPORT_BATCH_SIZE = 500;
 const MAX_REPORTED_INVALID = 20;
 
-const SUPPRESSED: ReadonlySet<SubscriberStatus> = new Set([
-  "unsubscribed",
-  "bounced",
-  "complained",
-]);
-
 const emailSchema = z.email();
 
 export const normalizeEmail = (email: string): string =>
@@ -246,6 +240,10 @@ export const IMPORT_SEVERITY: readonly ImportStatus[] = [
   "complained",
 ];
 
+/** Pending counts as active: it's a signup that isn't suppressed. */
+const severityOf = (status: SubscriberStatus): number =>
+  status === "pending" ? 0 : IMPORT_SEVERITY.indexOf(status);
+
 export interface ImportRow {
   email: string;
   name?: string | undefined;
@@ -282,8 +280,7 @@ const dedupe = (rows: ImportRow[]) => {
     // resubscribe link can undo.
     const keepPrevious =
       previous !== undefined &&
-      IMPORT_SEVERITY.indexOf(previous.status) >
-        IMPORT_SEVERITY.indexOf(row.status);
+      severityOf(previous.status) > severityOf(row.status);
 
     if (!keepPrevious) {
       byEmail.set(email, { ...row, email });
@@ -295,8 +292,9 @@ const dedupe = (rows: ImportRow[]) => {
 
 /**
  * Import subscribers from another provider. Imported active subscribers are
- * treated as already confirmed. Imports can suppress an existing subscriber
- * but never reactivate a suppressed one.
+ * treated as already confirmed. Imports can suppress an existing subscriber,
+ * or make a suppression more serious (an unsubscribe the source lists as a
+ * complaint), but never reactivate a suppressed one.
  */
 export const importSubscribers = async (
   db: Database,
@@ -334,7 +332,7 @@ export const importSubscribers = async (
         status: row.status,
         unsubscribedAt: row.status === "unsubscribed" ? now : null,
       });
-    } else if (SUPPRESSED.has(row.status) && !SUPPRESSED.has(match.status)) {
+    } else if (severityOf(row.status) > severityOf(match.status)) {
       toSuppress.set(row.status, [
         ...(toSuppress.get(row.status) ?? []),
         match.id,
@@ -359,7 +357,10 @@ export const importSubscribers = async (
           .where(
             and(
               eq(subscribers.id, id),
-              inArray(subscribers.status, ["active", "pending"])
+              inArray(subscribers.status, [
+                "pending",
+                ...IMPORT_SEVERITY.slice(0, severityOf(status)),
+              ])
             )
           )
       )

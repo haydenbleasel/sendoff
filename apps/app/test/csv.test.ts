@@ -241,4 +241,22 @@ describe("importCsv", () => {
     expect(await statusOf("gone@example.com")).toBe("unsubscribed");
     expect(await statusOf("twice@example.com")).toBe("unsubscribed");
   });
+
+  it("makes a suppression more serious, but never less", async () => {
+    await importSubscribers(db(), [
+      { email: "left@example.com", status: "unsubscribed" },
+      { email: "spam@example.com", status: "complained" },
+    ]);
+
+    // A complaints file from the old provider, imported after the main list.
+    const report = await importCsv(
+      db(),
+      "email,status\nleft@example.com,complained\nspam@example.com,unsubscribed"
+    );
+
+    expect(report).toMatchObject({ suppressed: 1, unchanged: 1 });
+    // A resubscribe link can't bring back someone who complained.
+    expect(await statusOf("left@example.com")).toBe("complained");
+    expect(await statusOf("spam@example.com")).toBe("complained");
+  });
 });
