@@ -402,7 +402,17 @@ const awsAccess = async (
 
       try {
         ensureRuntimeUser();
-        const keys = runtimeKeyIds();
+        const listed = runtimeKeyIds();
+
+        // A key from a run that stopped before its deploy: the secret never
+        // reached the Worker, and can't be recovered.
+        const abandoned = draft.pendingAwsAccessKeyId;
+
+        if (abandoned && listed.includes(abandoned)) {
+          deleteRuntimeKey(abandoned);
+        }
+
+        const keys = listed.filter((key) => key !== abandoned);
 
         const known =
           draft.awsAccessKeyId !== undefined &&
@@ -463,6 +473,10 @@ const awsAccess = async (
     },
   };
 };
+
+/** The sendoff user's key this run made for the Worker, if it made one. */
+const createdKeyId = (access: AwsAccess): string | undefined =>
+  access.runtime ? access.runtimeKeyId : undefined;
 
 const workerSecretsSchema = z.array(z.object({ name: z.string() }));
 
@@ -1550,9 +1564,13 @@ const main = async () => {
   const existingSecrets = workerSecretNames();
   const access = await awsAccess(region, draft, existingSecrets);
 
-  if (access.runtimeKeyId) {
-    save({ awsAccessKeyId: access.runtimeKeyId });
-  }
+  // A new key isn't recorded as the Worker's until a deploy has given it the
+  // secret. Recorded now, a run that stopped before deploying would leave the
+  // next one to find the Worker's old AWS secrets, take them for this key's,
+  // and never upload it.
+  const newRuntimeKeyId = createdKeyId(access);
+
+  save({ pendingAwsAccessKeyId: newRuntimeKeyId });
 
   const aws = createAwsSetup(access.provisioning);
   const progress = progressSpinner();
@@ -1659,6 +1677,11 @@ const main = async () => {
   }
 
   progress.stop(`Deployed to ${publicUrl}`);
+
+  save({
+    awsAccessKeyId: newRuntimeKeyId ?? draft.awsAccessKeyId,
+    pendingAwsAccessKeyId: undefined,
+  });
 
   warnAboutOldKeys(access);
 

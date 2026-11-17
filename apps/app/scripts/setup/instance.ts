@@ -33,6 +33,11 @@ export const instanceSchema = z.object({
    * Custom Domain.
    */
   pagesProject: z.string().optional(),
+  /**
+   * A key setup made for the Worker that no deploy has given it yet. If setup
+   * stops first, its secret is lost, so the next run deletes it.
+   */
+  pendingAwsAccessKeyId: z.string().optional(),
   publicUrl: z.url(),
   queueName: z.string().default("sendoff-send"),
   sesConfigurationSet: z.string().default("sendoff"),
