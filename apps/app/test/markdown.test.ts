@@ -57,6 +57,31 @@ describe("parseMarkdown", () => {
     expect(messages[1]).toContain("Buttons need an http(s) link");
   });
 
+  it("rejects a directive written so that it would be sent as plain text", () => {
+    for (const body of [
+      "::button[Go](https://example.com)",
+      '::button[Go] {href="https://example.com"}',
+      '::button[Go]{href="https://example.com"} today',
+      ":::callout Heads up\nBody\n:::",
+      "::: callout[Heads up]\nBody\n:::",
+    ]) {
+      expect(problemsFor(body)[0]?.message).toContain("sent as plain text");
+    }
+
+    // A closing fence with nothing open, on the line it's on.
+    expect(problemsFor("Hello\nthere\n:::")).toStrictEqual([
+      { line: 3, message: expect.stringContaining("sent as plain text") },
+    ]);
+  });
+
+  it("keeps colons in prose, and directives shown in code", () => {
+    expect(
+      problemsFor(
+        'Type `::button[Go]{href="https://example.com"}` to add one.\n\n```\n:::callout\n:::\n```\n\nRatio 2::1, and std::button too.'
+      )
+    ).toStrictEqual([]);
+  });
+
   it("keeps accidental text directives as literal text", () => {
     const result = parseMarkdown("Meet at 10:30, see note:here.");
 

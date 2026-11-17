@@ -30,6 +30,11 @@ const FRONTMATTER = /^---\r?\n[\w-]+[ \t]*:[\s\S]*?\r?\n---(?:\r?\n|$)/u;
 const TABLE_DELIMITER_ROW = /^[\s|:-]*-[\s|:-]*$/u;
 const LINE_BREAK = /\r?\n/u;
 
+// A line that set out to be a directive but didn't parse as one, like
+// `::button[Go](https://…)` or `:::callout Title`, or a stray `:::` fence. It
+// arrives as a paragraph, and would be sent as that literal text.
+const BROKEN_DIRECTIVE = /^\s*(?::{2,}\s*(?:button|callout)|:{3,}\s*$)/iu;
+
 const ALLOWED_TYPES = new Set<Nodes["type"]>([
   "blockquote",
   "break",
@@ -160,6 +165,12 @@ const isTable = (node: Nodes): boolean => {
   );
 };
 
+/** Where in a paragraph a line is a directive that didn't parse, if any is. */
+const brokenDirectiveLine = (node: Nodes): number =>
+  textContent(node)
+    .split(LINE_BREAK)
+    .findIndex((line) => BROKEN_DIRECTIVE.test(line));
+
 const checkNode = (node: Nodes, problems: MarkdownProblem[]): void => {
   const line = lineOf(node);
   const unsupported = UNSUPPORTED[node.type];
@@ -189,6 +200,18 @@ const checkNode = (node: Nodes, problems: MarkdownProblem[]): void => {
       line,
       message:
         "Tables aren't supported in email. Use a list, or a paragraph for each row.",
+    });
+
+    return;
+  }
+
+  const broken = node.type === "paragraph" ? brokenDirectiveLine(node) : -1;
+
+  if (broken !== -1) {
+    problems.push({
+      line: line + broken,
+      message:
+        'This directive isn\'t written the way Sendoff reads it, so it would be sent as plain text. Put a button on its own line as ::button[Label]{href="https://…"}, and open a callout with :::callout[Optional title] on its own line, closing it with ::: on another.',
     });
 
     return;
