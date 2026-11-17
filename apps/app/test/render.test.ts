@@ -148,6 +148,26 @@ describe("dark mode", () => {
   });
 });
 
+describe("with a postal address on several lines", () => {
+  it("keeps the lines in the HTML, as the plain text does", async () => {
+    const address = "Acme Inc\n1 Test Lane\nSydney NSW 2000";
+
+    const result = await renderIssue(sampleIssue, {
+      ...sampleSettings,
+      address,
+    });
+
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(result.html).toMatch(
+        /white-space:pre-line[^>]*>Acme Inc\n1 Test Lane\nSydney NSW 2000</u
+      );
+      expect(result.text).toContain(address);
+    }
+  });
+});
+
 describe("without a postal address", () => {
   it("leaves the address out of the footer", async () => {
     const { address, ...settings } = sampleSettings;

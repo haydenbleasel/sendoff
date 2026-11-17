@@ -56,7 +56,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .error { margin: -4px 0 12px; color: var(--error); font-size: 14px; }
 .turnstile { min-height: 65px; margin: 0 0 12px; }
 .honeypot { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
-footer { max-width: 440px; margin: 0 auto; padding: 0 24px 40px; color: var(--muted); font-size: 13px; }
+footer { max-width: 440px; margin: 0 auto; padding: 0 24px 40px; color: var(--muted); font-size: 13px; white-space: pre-line; }
 `;
 
 const Masthead = ({ settings }: { settings: Settings }) => {

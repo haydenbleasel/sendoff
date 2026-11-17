@@ -100,7 +100,11 @@ const FooterRule = () => (
 
 const Address = ({ settings }: { settings: Settings }) =>
   settings.address ? (
-    <Text className={darkClass.muted} style={{ ...footerText, margin: 0 }}>
+    // An address may be saved on several lines; keep them.
+    <Text
+      className={darkClass.muted}
+      style={{ ...footerText, margin: 0, whiteSpace: "pre-line" }}
+    >
       {settings.address}
     </Text>
   ) : null;
