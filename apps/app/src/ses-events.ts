@@ -28,6 +28,8 @@ export const sesEventSchema = z.object({
     .object({
       complainedRecipients: z.array(recipientSchema),
       complaintFeedbackType: z.string().optional(),
+      // "OnAccountSuppressionList", or null for a real complaint.
+      complaintSubType: z.string().nullish(),
     })
     .optional(),
   delivery: z.object({ timestamp: z.string().optional() }).optional(),
@@ -112,7 +114,10 @@ const classify = (event: SesEvent): Classified => {
     event.complaint.complaintFeedbackType !== "not-spam"
   ) {
     return {
-      detail: { feedbackType: event.complaint.complaintFeedbackType ?? "" },
+      detail: {
+        complaintSubType: event.complaint.complaintSubType ?? "",
+        feedbackType: event.complaint.complaintFeedbackType ?? "",
+      },
       emails: event.complaint.complainedRecipients.map((r) => r.emailAddress),
       suppress: "complained",
       type: "complaint",

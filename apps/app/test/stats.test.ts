@@ -186,6 +186,10 @@ describe("issueReport", () => {
       bounceSubType: "OnAccountSuppressionList",
       bounceType: "Permanent",
     });
+    // Listed there for an old complaint: nobody complained about this issue.
+    await issue.event("complaint", 9, MINUTE, {
+      complaintSubType: "OnAccountSuppressionList",
+    });
     await issue.event("bounce", 8, MINUTE, {
       bounceSubType: "General",
       bounceType: "Permanent",

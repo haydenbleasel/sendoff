@@ -6,7 +6,6 @@ import {
   inArray,
   isNull,
   lt,
-  ne,
   notInArray,
   or,
   sql,
@@ -965,7 +964,7 @@ export const sendStatus = async (
       .groupBy(sends.status),
     // People, like issue_stats: one person's soft then hard bounce, or a
     // repeat unsubscribe, counts once, and addresses on SES's suppression
-    // list (which SES never tried) aren't bounces.
+    // list (which SES never tried) aren't bounces or complaints.
     db
       .select({
         type: events.type,
@@ -977,12 +976,9 @@ export const sendStatus = async (
       .where(
         and(
           eq(events.issueId, issue.id),
-          or(
-            ne(events.type, "bounce"),
-            notInArray(
-              sql`coalesce(json_extract(${events.detail}, '$.bounceSubType'), '')`,
-              [...SUPPRESSED_SUBTYPES]
-            )
+          notInArray(
+            sql`coalesce(json_extract(${events.detail}, '$.bounceSubType'), json_extract(${events.detail}, '$.complaintSubType'), '')`,
+            [...SUPPRESSED_SUBTYPES]
           )
         )
       )

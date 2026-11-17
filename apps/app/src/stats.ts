@@ -108,10 +108,16 @@ const bounceDetailSchema = z.object({
   bounceType: z.string(),
 });
 
+const complaintDetailSchema = z.object({
+  complaintSubType: z.string().optional(),
+});
+
 /**
  * SES reports a send to an address on its account-level or global
- * suppression list as a bounce with one of these subtypes, but it never
- * tried to deliver it, and it doesn't count toward SES's bounce rate.
+ * suppression list as a bounce with one of these subtypes (or, for an
+ * address listed for complaining, as a complaint with the first), but it
+ * never tried to deliver it, and it doesn't count toward SES's bounce or
+ * complaint rate.
  */
 export const SUPPRESSED_SUBTYPES = new Set([
   "OnAccountSuppressionList",
@@ -332,6 +338,11 @@ const tallyEvents = (rows: EventRow[]) => {
           people.hardBounce.add(person);
         }
       }
+    } else if (row.type === "complaint") {
+      const complaint = complaintDetailSchema.safeParse(row.detail).data;
+      const listed = SUPPRESSED_SUBTYPES.has(complaint?.complaintSubType ?? "");
+
+      people[listed ? "suppressed" : "complaint"].add(person);
     } else if (row.type !== "open") {
       people[row.type].add(person);
     }

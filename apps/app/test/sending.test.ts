@@ -540,7 +540,7 @@ describe("sending", () => {
 
     const event = (
       subscriberId: string | undefined,
-      type: "bounce" | "unsubscribe",
+      type: "bounce" | "complaint" | "unsubscribe",
       detail: Record<string, string> = {}
     ) => ({
       at: new Date(),
@@ -561,6 +561,11 @@ describe("sending", () => {
         event(suppressed?.id, "bounce", {
           bounceSubType: "OnAccountSuppressionList",
           bounceType: "Permanent",
+        }),
+        // Or listed there for an old complaint.
+        event(suppressed?.id, "complaint", {
+          complaintSubType: "OnAccountSuppressionList",
+          feedbackType: "",
         }),
         event(leaver?.id, "unsubscribe"),
         event(leaver?.id, "unsubscribe"),

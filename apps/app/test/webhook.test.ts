@@ -270,6 +270,8 @@ describe("POST /webhooks/ses", () => {
       await sesNotification({
         complaint: {
           complainedRecipients: [{ emailAddress: "angry@example.com" }],
+          // What SES sends for a complaint that isn't from its suppression list.
+          complaintSubType: null,
         },
         eventType: "Complaint",
         mail: mail("angry@example.com"),
