@@ -97,7 +97,10 @@ const REGIONS = [
 ];
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/u;
-const HOSTNAME = /^(?:[a-z\d](?:[a-z\d-]*[a-z\d])?\.)+[a-z]{2,}$/u;
+
+// The last label is letters, or punycode for a domain like example.рф.
+const HOSTNAME =
+  /^(?:[a-z\d](?:[a-z\d-]*[a-z\d])?\.)+(?:[a-z]{2,}|xn--[a-z\d-]*[a-z\d])$/u;
 
 // --- Prompt helpers -------------------------------------------------------------
 
