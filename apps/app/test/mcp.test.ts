@@ -14,7 +14,8 @@ import {
 } from "vitest";
 
 import type { JsonValue } from "../src/json";
-import { BASE_URL, mockNetwork, statusOf } from "./helpers";
+import { subscribe } from "../src/subscribers";
+import { BASE_URL, db, mockNetwork, statusOf } from "./helpers";
 
 let client: Client;
 let network: ReturnType<typeof mockNetwork>;
@@ -286,6 +287,24 @@ describe("tools", () => {
     const search = await call("search_subscribers", { query: "csv-" });
     expect(dataOf(search.text).subscribers).toHaveLength(2);
     expect(dataOf(search.text).counts).toMatchObject({ active: 2, pending: 1 });
+  });
+
+  it("doesn't re-add someone who unsubscribed because the signup form was sent their address", async () => {
+    await call("import_subscribers", {
+      subscribers: [{ email: "left@example.com", status: "unsubscribed" }],
+    });
+
+    // Anyone can do this, and it leaves the address pending.
+    await subscribe(db(), { email: "left@example.com", source: "form" });
+
+    const added = await call("add_subscriber", {
+      email: "left@example.com",
+      skipConfirmation: true,
+    });
+
+    expect(added.text).toContain("they have to confirm themselves");
+    expect(await statusOf("left@example.com")).toBe("pending");
+    expect(network.sent.map((email) => email.to)).toContain("left@example.com");
   });
 
   it("creates API keys that work with the REST API until revoked", async () => {

@@ -126,7 +126,12 @@ export const registerSubscriberTools = (
           );
         }
 
-        if (skipConfirmation) {
+        // Anyone can type an unsubscribed address into the signup form, which
+        // leaves it pending. Only the person's own confirmation re-adds them.
+        const unsubscribed =
+          existing !== undefined && existing.unsubscribedAt !== null;
+
+        if (skipConfirmation && !unsubscribed) {
           await (existing
             ? confirmSubscriber(db, existing.id)
             : importSubscribers(db, [
@@ -160,7 +165,9 @@ export const registerSubscriberTools = (
         await markConfirmationSent(db, subscriber.id);
 
         return result(
-          `Sent a confirmation email to ${normalized}. They'll be active once they confirm.`
+          unsubscribed && skipConfirmation
+            ? `${normalized} unsubscribed before, so they have to confirm themselves. Sent them a confirmation email; they'll be active once they confirm.`
+            : `Sent a confirmation email to ${normalized}. They'll be active once they confirm.`
         );
       })
   );
