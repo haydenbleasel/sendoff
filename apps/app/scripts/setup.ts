@@ -738,12 +738,20 @@ const turnstileKeys = async (
           .catch(() => null)
       : null;
 
-    return (
-      widget ??
-      (await cloudflare.createTurnstileWidget(accountId, "Sendoff signup", [
-        hostname,
-      ]))
-    );
+    try {
+      return (
+        widget ??
+        (await cloudflare.createTurnstileWidget(accountId, "Sendoff signup", [
+          hostname,
+        ]))
+      );
+    } catch (error) {
+      // An API token without Turnstile's permission, say. Ask for the keys
+      // instead, as with no token at all.
+      log.warn(
+        `Couldn't create the Turnstile widget: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
 
   note(
