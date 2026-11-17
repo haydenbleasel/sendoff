@@ -48,6 +48,7 @@ import {
 import {
   createCloudflareApi,
   senderZone,
+  widgetCovers,
   zoneOnCloudflare,
 } from "./setup/cloudflare";
 import type { CloudflareApi, Confirm, ZoneLookup } from "./setup/cloudflare";
@@ -725,6 +726,16 @@ const ensureQueue = () => {
   }
 };
 
+/** Whether an earlier run's widget is on the Worker and made for this hostname. */
+const turnstileReady = (
+  siteKey: string | undefined,
+  secrets: Set<string>,
+  hostnames: { now: string; before: string | undefined }
+): boolean =>
+  siteKey !== undefined &&
+  secrets.has("TURNSTILE_SECRET_KEY") &&
+  (hostnames.before === undefined || hostnames.before === hostnames.now);
+
 const turnstileKeys = async (
   cloudflare: CloudflareApi | null,
   accountId: string,
@@ -732,11 +743,16 @@ const turnstileKeys = async (
   existingSiteKey: string | undefined
 ) => {
   if (cloudflare) {
-    const widget = existingSiteKey
+    const existing = existingSiteKey
       ? await cloudflare
           .getTurnstileWidget(accountId, existingSiteKey)
           .catch(() => null)
       : null;
+
+    // A widget only works on its own hostnames, so one made for a hostname
+    // this instance has since moved from is no use on the new one.
+    const widget =
+      existing && widgetCovers(existing.domains, hostname) ? existing : null;
 
     try {
       return (
@@ -1554,6 +1570,10 @@ const main = async () => {
   });
 
   const publicUrl = `https://${hostname}`;
+
+  // Read before the new hostname is saved over the last run's.
+  const hostnames = { before: draft.hostname, now: hostname };
+
   save({
     hostname,
     pagesProject: usePages ? PAGES_PROJECT : undefined,
@@ -1633,7 +1653,7 @@ const main = async () => {
 
   const secrets: Secrets = {};
 
-  if (draft.turnstileSiteKey && existingSecrets.has("TURNSTILE_SECRET_KEY")) {
+  if (turnstileReady(draft.turnstileSiteKey, existingSecrets, hostnames)) {
     log.success("Turnstile widget: already set up.");
   } else {
     const turnstile = await turnstileKeys(

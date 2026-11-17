@@ -10,6 +10,7 @@ import {
   clashes,
   createCloudflareApi,
   senderZone,
+  widgetCovers,
   zoneOnCloudflare,
 } from "../scripts/setup/cloudflare";
 import type {
@@ -709,5 +710,17 @@ describe("Worker releases", () => {
       "## 1.1.1\n\n- def: A fix."
     );
     expect(releaseNotes(changelog, [1, 2, 0], [1, 2, 0])).toBe("");
+  });
+});
+
+describe("widgetCovers", () => {
+  it("keeps a Turnstile widget only for a hostname it works on", () => {
+    expect(widgetCovers(["news.example.com"], "news.example.com")).toBe(true);
+    expect(widgetCovers(["example.com"], "news.example.com")).toBe(true);
+    // After the instance moved to another hostname.
+    expect(widgetCovers(["news.example.com"], "mail.example.com")).toBe(false);
+    expect(widgetCovers(["example.com"], "notexample.com")).toBe(false);
+    // An answer without the list: nothing says it doesn't.
+    expect(widgetCovers(undefined, "news.example.com")).toBe(true);
   });
 });

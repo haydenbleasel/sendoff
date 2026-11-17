@@ -47,7 +47,22 @@ const dnsRecordSchema = z.object({
   type: z.string(),
 });
 
-const widgetSchema = z.object({ secret: z.string(), sitekey: z.string() });
+const widgetSchema = z.object({
+  /** The hostnames it works on. Each covers its subdomains. */
+  domains: z.array(z.string()).optional(),
+  secret: z.string(),
+  sitekey: z.string(),
+});
+
+/** Whether a Turnstile widget's hostnames include this one. Unknown counts as yes. */
+export const widgetCovers = (
+  domains: string[] | undefined,
+  hostname: string
+): boolean =>
+  domains === undefined ||
+  domains.some(
+    (domain) => hostname === domain || hostname.endsWith(`.${domain}`)
+  );
 
 /** TXT contents come back quoted; compare without the quotes. */
 const unquote = (value: string): string => value.replaceAll('"', "");
