@@ -52,7 +52,7 @@ const promotionNote = (promotion: PromotionResult): string => {
   return `There's no postal address, so it was checked for promotion. ${describePromotion(promotion.check)}`;
 };
 
-const describeStatus = ({
+export const describeStatus = ({
   counts,
   delivered,
   events,
@@ -71,9 +71,12 @@ const describeStatus = ({
     `Since sending: ${number(delivered)} delivered, ${events.bounce} bounced, ${events.complaint} complaints, ${events.unsubscribe} unsubscribed. issue_stats has clicks, opens, rates and how this compares with earlier issues.`,
   ];
 
+  // Only a send still in progress can be resumed, not one cancelled since.
   if (issue.sendError) {
     lines.push(
-      `Stopped: ${issue.sendError}\nFix the cause, then call resume_send.`
+      issue.status === "sending"
+        ? `Stopped: ${issue.sendError}\nFix the cause, then call resume_send.`
+        : `It had stopped on an error before that: ${issue.sendError}`
     );
   }
 

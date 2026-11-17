@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getConfig } from "../src/config";
 import { events, issues, sends, subscribers } from "../src/db/schema";
 import { createDraft, editDraft } from "../src/issues";
+import { describeStatus } from "../src/mcp/send-tools";
 import type { ClassifyPromotion, PromotionAssessment } from "../src/promotion";
 import {
   CHUNK_SIZE,
@@ -335,6 +336,34 @@ describe("sending", () => {
     const resumed = await sendStatus(deps, confirmed.issue.id);
     expect(resumed.counts.sent).toBe(4);
     expect(resumed.issue).toMatchObject({ sendError: null, status: "sent" });
+  });
+
+  it("doesn't offer resume_send for a stopped send that was then cancelled", async () => {
+    await addActive(2);
+    useNetwork({
+      onSend: (email) =>
+        email.subject.startsWith("[Test]")
+          ? undefined
+          : sesError("SendingPausedException", 400, "Sending is paused"),
+    });
+
+    const confirmed = await startSend();
+
+    await processSendChunk(
+      deps,
+      messages.shift() ?? { issueId: "", maxSendRate: 1 }
+    );
+
+    const stopped = describeStatus(await sendStatus(deps, confirmed.issue.id));
+    expect(stopped).toContain("Fix the cause, then call resume_send.");
+
+    const cancelled = describeStatus(
+      await cancelSend(deps, confirmed.issue.id)
+    );
+
+    expect(cancelled).toContain("is cancelled.");
+    expect(cancelled).toContain("Sending is paused");
+    expect(cancelled).not.toContain("resume_send");
   });
 
   it.each([
