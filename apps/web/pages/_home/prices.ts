@@ -185,12 +185,14 @@ const money = (n: number): string => {
 interface Bill {
   lines: ReceiptLine[];
   total: number;
+  /** Worked out from a year's emails, not twelve of the rounded monthly total. */
+  yearly: number;
 }
 
 const receipt = (bill: Bill): Receipt => ({
   lines: bill.lines,
   total: money(bill.total),
-  yearly: money(cents(bill.total * 12)),
+  yearly: money(bill.yearly),
 });
 
 /** The other service's bill: its cheapest plan that holds every subscriber. */
@@ -223,6 +225,7 @@ const providerBill = (input: PricingInput, provider: Provider): Bill => {
       },
     ],
     total: tier.price,
+    yearly: tier.price * 12,
   };
 };
 
@@ -246,6 +249,10 @@ const sendoffBill = (input: PricingInput, p: Prices): Bill => {
       },
     ],
     total: cents(p.cloudflare.workersPaid + ses),
+    yearly: cents(
+      p.cloudflare.workersPaid * 12 +
+        ((input.subscribers * input.issues * 12) / 1000) * p.ses.perThousand
+    ),
   };
 };
 
@@ -258,7 +265,7 @@ export const estimate = (
   const provider = p.providers[from];
   const other = providerBill(input, provider);
   const sendoff = sendoffBill(input, p);
-  const gap = money(Math.round(Math.abs(other.total - sendoff.total) * 12));
+  const gap = money(Math.round(Math.abs(other.yearly - sendoff.yearly)));
   let difference = "The same price at this size.";
 
   if (sendoff.total < other.total) {
