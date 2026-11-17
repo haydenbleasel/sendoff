@@ -150,11 +150,12 @@ const accountChecks = (
     );
   }
 
-  // A negative quota means unlimited.
+  // A negative quota means unlimited. More can have gone out than the quota
+  // allows, when AWS has lowered it since: that leaves none, not fewer.
   const remaining =
     account.max24HourSend < 0
       ? Number.POSITIVE_INFINITY
-      : account.max24HourSend - account.sentLast24Hours;
+      : Math.max(0, account.max24HourSend - account.sentLast24Hours);
 
   checks.push(
     remaining >= recipients.count
@@ -166,7 +167,7 @@ const accountChecks = (
       : check(
           "fail",
           "Sending quota",
-          `Only ${remaining.toLocaleString("en-US")} emails left in today's SES quota, but there are ${recipients.count.toLocaleString("en-US")} ${recipients.label}. Ask AWS to raise the quota, or wait for it to reset.`
+          `${remaining === 0 ? "No" : `Only ${remaining.toLocaleString("en-US")}`} emails left in today's SES quota, but there are ${recipients.count.toLocaleString("en-US")} ${recipients.label}. Ask AWS to raise the quota, or wait for it to reset.`
         ),
     REQUIRED_EVENTS.every((reason) =>
       account.suppressedReasons.includes(reason)

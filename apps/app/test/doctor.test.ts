@@ -76,6 +76,20 @@ describe("runDoctor", () => {
     expect(quota.status("Sending quota")).toBe("fail");
   });
 
+  it("says none of the quota is left when AWS has lowered it below what's gone out", async () => {
+    network = mockNetwork({
+      ...HEALTHY_SES,
+      account: {
+        SendQuota: { Max24HourSend: 200, MaxSendRate: 1, SentLast24Hours: 320 },
+      },
+    });
+
+    const report = await runDoctor({ config: getConfig(env), db: db() });
+    const quota = report.checks.find((check) => check.name === "Sending quota");
+
+    expect(quota?.detail).toContain("No emails left in today's SES quota");
+  });
+
   it("blocks unverified senders and missing DMARC", async () => {
     const missing = await statuses({ ...HEALTHY_SES, identity: "missing" });
     network?.restore();
