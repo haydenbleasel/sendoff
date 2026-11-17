@@ -1221,13 +1221,23 @@ const requestProductionAccess = async (
     })
   );
 
-  if (go) {
+  if (!go) {
+    return;
+  }
+
+  // AWS can refuse, as when it has already turned a request down. That
+  // mustn't stop setup before it saves the settings the public pages need.
+  try {
     await aws.requestProductionAccess({
       contactEmail: newsletter.replyTo ?? newsletter.fromEmail,
       useCase,
       websiteUrl: newsletter.website,
     });
     log.success("Requested SES production access.");
+  } catch (error) {
+    log.warn(
+      `AWS didn't take the request: ${error instanceof Error ? error.message : String(error)}\nAsk for production access in the SES console (Account dashboard), or reply to AWS's email about an earlier request.`
+    );
   }
 };
 
