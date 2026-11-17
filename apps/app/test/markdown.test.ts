@@ -48,6 +48,17 @@ describe("parseMarkdown", () => {
     expect(messages[3]).toContain("https://");
   });
 
+  it("rejects a link with nothing to press, but not a linked image", () => {
+    expect(problemsFor("See [](https://example.com).")[0]?.message).toContain(
+      "A link needs text"
+    );
+    expect(
+      problemsFor(
+        "[![A chart](https://example.com/a.png)](https://example.com)"
+      )
+    ).toStrictEqual([]);
+  });
+
   it("rejects unknown directives and buttons without a link", () => {
     const messages = problemsFor("::video[x]\n\n::button[Go]").map(
       (p) => p.message

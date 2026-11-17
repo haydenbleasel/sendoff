@@ -227,6 +227,19 @@ const checkNode = (node: Nodes, problems: MarkdownProblem[]): void => {
     });
   }
 
+  // An image inside counts: a linked image has something to press.
+  const emptyLink =
+    node.type === "link" &&
+    textContent(node).trim() === "" &&
+    !node.children.some((child) => child.type === "image");
+
+  if (emptyLink) {
+    problems.push({
+      line,
+      message: `A link needs text to press: [text](${node.url}). With none, it's invisible in the email.`,
+    });
+  }
+
   if (node.type === "image") {
     if (!IMAGE_PROTOCOL.test(node.url)) {
       problems.push({
