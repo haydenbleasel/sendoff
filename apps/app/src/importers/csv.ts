@@ -443,6 +443,21 @@ export const readSubscriberCsv = (
 
   const data = headerless ? parsed : rest;
 
+  // Without headers there's no telling a name from a status, and a row that
+  // says "unsubscribed" mustn't be imported as active.
+  const unnamedColumns =
+    headerless &&
+    !status &&
+    data.some((cells) =>
+      cells.some((cell, index) => index !== columns.email && cell.trim() !== "")
+    );
+
+  if (unnamedColumns) {
+    throw new IssueError(
+      "The file has no header row, but more than one column. Add a first row naming them (like email,name,status), so nobody who unsubscribed is imported as active."
+    );
+  }
+
   if (data.length > MAX_CSV_ROWS) {
     throw new IssueError(
       `The file has ${data.length} rows. Import at most ${MAX_CSV_ROWS} at a time: split it and import each part.`

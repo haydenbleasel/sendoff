@@ -150,6 +150,24 @@ describe("readSubscriberCsv", () => {
     ]);
   });
 
+  it("asks for a header row when a headerless file has other columns", () => {
+    // Read without headers, the second row would be imported as active.
+    expect(() =>
+      readSubscriberCsv("a@example.com,active\nb@example.com,unsubscribed\n")
+    ).toThrow("The file has no header row, but more than one column.");
+
+    // Empty extra cells are still just a list of addresses.
+    expect(statuses("a@example.com,\nb@example.com,")).toStrictEqual([
+      ["a@example.com", "active"],
+      ["b@example.com", "active"],
+    ]);
+
+    // A file-wide status says what every row is, so nothing can go in active.
+    expect(
+      statuses("a@example.com,2024-01-01", { status: "unsubscribed" })
+    ).toStrictEqual([["a@example.com", "unsubscribed"]]);
+  });
+
   it("finds an unusual email header and marks a whole file with status", () => {
     expect(
       statuses("Name,E-Mail-Adresse\nA,a@example.com", { status: "bounced" })
