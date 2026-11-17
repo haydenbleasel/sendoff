@@ -76,7 +76,9 @@ trackingRoutes.get("/click/:issueId/:token/:signature", async (c) => {
 
   c.header("Cache-Control", NO_STORE);
 
-  return c.redirect(url, HTTP_FOUND);
+  // Serialized, so the header is ASCII. Given a non-Latin character, Hono
+  // would encode the whole address again, turning its %20 into %2520.
+  return c.redirect(new URL(url).href, HTTP_FOUND);
 });
 
 trackingRoutes.get("/open/:issueId/:token", (c) => {

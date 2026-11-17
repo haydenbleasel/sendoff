@@ -177,6 +177,14 @@ describe("tracking routes", () => {
     expect(reader?.lastEngagedAt).toBeInstanceOf(Date);
   });
 
+  it("leaves a link's escapes alone when it also has characters to encode", async () => {
+    const response = await click("https://example.com/日本/café?q=a%20b&u=%2F");
+
+    expect(response.headers.get("location")).toBe(
+      "https://example.com/%E6%97%A5%E6%9C%AC/caf%C3%A9?q=a%20b&u=%2F"
+    );
+  });
+
   it("redirects without counting test sends, link checkers or other tokens", async () => {
     const url = "https://example.com/post";
 
